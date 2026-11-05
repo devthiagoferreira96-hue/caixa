@@ -80,7 +80,7 @@ function criarAreaToasts() {
 
 // ---------- Janela (dialog nativo: já cuida do foco e da tecla Esc)
 let contadorDialogos = 0;
-export function dialogo({ titulo, corpo, largura = 'max-w-lg' }) {
+export function dialogo({ titulo, corpo, largura = 'max-w-lg', obrigatorio = false }) {
   const id = `dlg-${++contadorDialogos}`;
   const d = document.createElement('dialog');
   d.className = `m-auto w-[calc(100%-1.5rem)] ${largura} max-h-[90dvh] overflow-y-auto rounded-2xl bg-white p-0 text-stone-900 shadow-2xl dark:bg-stone-900 dark:text-stone-100`;
@@ -88,13 +88,15 @@ export function dialogo({ titulo, corpo, largura = 'max-w-lg' }) {
   d.innerHTML = `
     <div class="flex items-center justify-between gap-3 px-5 pt-4">
       <h2 id="${id}" class="text-lg font-bold">${esc(titulo)}</h2>
-      <button type="button" data-fechar class="btn-icone -mr-2" aria-label="Fechar janela">${icone('x')}</button>
+      ${obrigatorio ? '' : `<button type="button" data-fechar class="btn-icone -mr-2" aria-label="Fechar janela">${icone('x')}</button>`}
     </div>
     <div class="px-5 pt-2 pb-5">${corpo}</div>`;
   document.body.append(d);
   d.addEventListener('click', (e) => {
-    if (e.target === d || e.target.closest('[data-fechar]')) d.close();
+    if ((!obrigatorio && e.target === d) || e.target.closest('[data-fechar]')) d.close();
   });
+  // janela obrigatória: não fecha com Esc nem clicando fora
+  if (obrigatorio) d.addEventListener('cancel', (e) => e.preventDefault());
   d.addEventListener('close', () => setTimeout(() => d.remove(), 0));
   d.showModal();
   return d;
