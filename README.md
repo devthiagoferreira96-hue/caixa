@@ -4,36 +4,32 @@ Sistema web para controlar os gastos da família: entradas e saídas do caixa, c
 
 Funciona no computador e no celular. No celular, dá para instalar na tela inicial como se fosse um app.
 
-**Tecnologias:** JavaScript (ES Modules, sem framework), [Tailwind CSS 4](https://tailwindcss.com), [Supabase](https://supabase.com) (banco PostgreSQL + login) e [Vite](https://vite.dev).
+**Tecnologias:** JavaScript puro (ES Modules), [Tailwind CSS 4](https://tailwindcss.com) e [Supabase](https://supabase.com) (banco PostgreSQL + login). **Não precisa de Node, npm nem build**: Tailwind e Supabase são carregados direto de um CDN.
 
 ---
 
 ## 1. Rodar no seu computador (modo demonstração)
 
-Precisa do [Node.js](https://nodejs.org) 20 ou mais novo.
+Como o sistema usa módulos JavaScript (`import`), o navegador não abre o `index.html` com dois cliques: ele precisa ser servido por um servidor local. Qualquer um destes serve:
 
-```bash
-npm install
-npm run dev
-```
+- **VS Code:** instale a extensão **Live Server**, clique com o botão direito no `index.html` e escolha **Open with Live Server**.
+- **Python:** na pasta do projeto, rode `python -m http.server 5500` e abra http://localhost:5500
 
-Abra o endereço que aparecer no terminal (normalmente http://localhost:5173).
-
-Sem o arquivo `.env`, o sistema abre em **modo demonstração**: ele usa dados de exemplo guardados na memória, e nada fica salvo. Assim dá para testar tudo antes de configurar o banco.
+Enquanto `src/config.js` estiver vazio, o sistema abre em **modo demonstração**: ele usa dados de exemplo guardados na memória, e nada fica salvo.
 
 ## 2. Criar o banco no Supabase
 
 1. Crie uma conta em [supabase.com](https://supabase.com) e um projeto novo (o plano gratuito basta).
 2. Abra **SQL Editor > New query**, cole todo o conteúdo de [`supabase/schema.sql`](supabase/schema.sql) e clique em **Run**.
 3. Em **Project Settings > API**, copie a **Project URL** e a chave **anon public**.
-4. Na pasta do projeto, copie `.env.example` para `.env` e cole os dois valores:
+4. Cole os dois valores em [`src/config.js`](src/config.js):
 
-```env
-VITE_SUPABASE_URL=https://xxxxxxxx.supabase.co
-VITE_SUPABASE_ANON_KEY=eyJhbGciOi...
+```js
+export const SUPABASE_URL = 'https://xxxxxxxx.supabase.co';
+export const SUPABASE_ANON_KEY = 'eyJhbGciOi...';
 ```
 
-5. Rode `npm run dev` de novo. Agora o sistema pede login.
+5. Recarregue a página. Agora o sistema pede login.
 
 > **Confirmação de e-mail:** por padrão, o Supabase manda um e-mail de confirmação no cadastro. Para uso só da família, você pode desligar em **Authentication > Sign In / Providers > Email > Confirm email**.
 
@@ -45,23 +41,24 @@ VITE_SUPABASE_ANON_KEY=eyJhbGciOi...
 
 ## 3. Publicar na internet (GitHub Pages, gratuito)
 
-1. No GitHub, abra o repositório e vá em **Settings > Pages > Build and deployment > Source** e escolha **GitHub Actions**.
-2. Vá em **Settings > Secrets and variables > Actions > New repository secret** e crie os secrets `VITE_SUPABASE_URL` e `VITE_SUPABASE_ANON_KEY`.
-3. Envie o código para a branch `main`. O workflow `.github/workflows/deploy.yml` gera e publica o site sozinho, e o endereço aparece na aba **Actions**. Será algo como `https://devthiagoferreira96-hue.github.io/caixa/`.
+1. Envie o projeto para o GitHub, com o `src/config.js` já preenchido.
+2. No repositório, vá em **Settings > Pages > Build and deployment**, escolha **Source: Deploy from a branch**, depois **Branch: main** e pasta **/ (root)**, e salve.
+3. Em 1 ou 2 minutos o site fica disponível em `https://devthiagoferreira96-hue.github.io/caixa/`.
 4. No Supabase, em **Authentication > URL Configuration**, coloque esse endereço em **Site URL** (assim os links de e-mail apontam para o lugar certo).
 
-> A chave *anon* pode ficar pública: quem protege os dados são as regras de segurança (RLS) do `schema.sql`. Cada família só enxerga os próprios dados. **Nunca** coloque a chave `service_role` no projeto.
+> A chave *anon* pode ficar no código e no GitHub: quem protege os dados são as regras de segurança (RLS) do `schema.sql`. Cada família só enxerga os próprios dados. **Nunca** coloque a chave `service_role` no projeto.
 
 ---
 
 ## Como o código está organizado
 
 ```
-index.html                 página única (o JavaScript monta as telas)
+index.html                 página única + tema do Tailwind (cores, botões, campos)
+manifest.webmanifest       permite instalar na tela do celular
 src/
+  config.js                URL e chave do Supabase  <- preencha aqui
   main.js                  início: verifica login e família
   router.js                troca de tela pelo endereço (#inicio, #extrato…)
-  style.css                Tailwind + componentes (botões, campos, cartões)
   lib/
     supabase.js            conexão (ou modo demonstração)
     api.js                 TODAS as consultas ao banco ficam aqui
@@ -102,3 +99,7 @@ supabase/schema.sql        tabelas, segurança e funções do banco
 - Importar o histórico da planilha (exportar como CSV e criar uma tela de importação).
 - Uma área própria para as despesas da Fazenda, da Empresa e de Serviços.
 - Lembretes de contas vencendo (Supabase Edge Functions + e-mail).
+
+## Sobre o Tailwind pelo CDN
+
+O script `@tailwindcss/browser` lê as classes usadas na página e gera o CSS no próprio navegador. Isso deixa o projeto simples, sem instalar nada, e é ótimo para um sistema de uso da família. Se um dia o sistema crescer, dá para voltar a usar um build (Vite ou o CLI do Tailwind) para gerar um CSS menor e mais rápido, sem mudar nada no código das telas.

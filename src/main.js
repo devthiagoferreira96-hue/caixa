@@ -1,5 +1,4 @@
 // Ponto de partida do sistema: verifica o login, a família e abre as telas
-import './style.css';
 import { supabase } from './lib/supabase.js';
 import { store } from './lib/store.js';
 import { minhaFamilia, carregarCadastros } from './lib/api.js';

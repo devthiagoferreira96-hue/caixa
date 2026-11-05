@@ -47,6 +47,8 @@ async function desenhar(silencioso) {
   const minhaVersao = ++versao;
   const tela = telaAtual;
   el.setAttribute('aria-busy', 'true');
+  // cada tela registra os próprios eventos; limpa os da tela anterior
+  el.onclick = el.onchange = el.onsubmit = el.oninput = null;
   if (!silencioso) el.innerHTML = esqueleto();
   const ctx = {
     atualizar: () => desenhar(true),
