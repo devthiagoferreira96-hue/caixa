@@ -22,6 +22,23 @@ const TOPICOS = [
   ['relatorio', 'Gráficos e relatório', `
     <p>O gráfico do Início mostra as categorias da casa. Em Ajustes > Categorias, a opção <strong>No gráfico</strong> escolhe quais aparecem.</p>
     <p>O <a href="#relatorio" class="font-semibold underline">Relatório</a> mostra todas as categorias, separadas por grupo, os últimos 6 meses e os pagamentos por pessoa.</p>`],
+  ['cadeado', 'Senha e bloqueio', `
+    <p>Sempre que o sistema é aberto, ele pede a sua senha. Se o app ficar mais de 1 minuto em segundo plano, a senha é pedida de novo. Para bloquear na hora, toque no <strong>cadeado</strong>.</p>
+    <p>A senha também protege os dados guardados no aparelho: sem ela, ninguém consegue lê-los. Para trocar, vá em <a href="#ajustes" class="font-semibold underline">Ajustes > Usuário e senha</a>.</p>`],
+  ['repetir', 'Esqueci a senha: código de recuperação', `
+    <p>Ao criar o acesso, o sistema mostra um <strong>código de recuperação</strong> (16 letras e números). Mande para o seu WhatsApp ou anote num papel.</p>
+    <p>Se esquecer a senha, na tela de senha toque em <strong>Esqueci minha senha</strong>, digite o código e crie uma senha nova. <strong>Nenhum dado se perde.</strong> Depois disso o sistema mostra um código novo para guardar (o usado deixa de valer).</p>
+    <p>Perdeu o código? Em <a href="#ajustes" class="font-semibold underline">Ajustes > Usuário e senha</a>, toque em <strong>Novo código de recuperação</strong> (precisa da senha).</p>
+    <p>Sem a senha e sem o código, não há como abrir os dados: só um backup os traz de volta.</p>`],
+  ['baixar', 'Backup: não perca seus dados', `
+    <p>O sistema funciona 100% sem internet e guarda tudo <strong>só neste aparelho</strong>. Se o celular for perdido, trocado ou formatado, os dados vão junto, a não ser que você tenha um backup.</p>
+    <p>Em <a href="#ajustes" class="font-semibold underline">Ajustes > Backup dos dados</a>, toque em <strong>Fazer backup agora</strong>. No celular, escolha onde guardar (Drive, e-mail ou WhatsApp). O Início lembra você quando passar de 30 dias sem backup.</p>
+    <p>Para trazer os dados de volta (no mesmo ou em outro aparelho), use <strong>Restaurar um backup</strong>.</p>`],
+  ['alerta', 'Gasto lançado duas vezes', `
+    <p>Se você for lançar um gasto com o <strong>mesmo valor, no mesmo dia</strong> e com a mesma categoria ou descrição parecida de algo que já está lançado, o sistema pergunta antes: <em>"Você já lançou um gasto semelhante a este. Deseja continuar mesmo assim?"</em></p>
+    <p><strong>Não lançar</strong> cancela sem mudar nada. <strong>Lançar mesmo assim</strong> salva normalmente.</p>`],
+  ['check', 'Desfazer', `
+    <p>Depois de lançar, editar, marcar como pago, excluir, pagar fatura, restaurar backup ou mudar algo em Ajustes, aparece um aviso embaixo da tela com o botão <strong>Desfazer</strong>. Ele volta tudo como estava, inclusive as parcelas de uma compra excluída.</p>`],
   ['celular', 'Colocar na tela do celular', `
     <p><strong>Android (Chrome):</strong> abra o sistema, toque nos três pontinhos ⋮ e em <strong>Adicionar à tela inicial</strong>.</p>
     <p><strong>iPhone (Safari):</strong> toque no botão de compartilhar e em <strong>Adicionar à Tela de Início</strong>.</p>

@@ -26,3 +26,16 @@ async function transacao(modo, fn) {
 export const ler = (chave) => transacao('readonly', (s) => s.get(chave));
 export const gravar = (chave, valor) => transacao('readwrite', (s) => s.put(valor, chave));
 export const apagar = (chave) => transacao('readwrite', (s) => s.delete(chave));
+
+/** Grava várias chaves de uma vez: ou grava todas, ou nenhuma (se o aparelho desligar no meio) */
+export async function gravarJuntos(pares) {
+  const db = await abrir();
+  return new Promise((resolver, rejeitar) => {
+    const tx = db.transaction('chaves', 'readwrite');
+    const loja = tx.objectStore('chaves');
+    for (const [chave, valor] of Object.entries(pares)) loja.put(valor, chave);
+    tx.oncomplete = () => resolver();
+    tx.onerror = () => rejeitar(tx.error);
+    tx.onabort = () => rejeitar(tx.error);
+  });
+}

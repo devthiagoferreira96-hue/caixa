@@ -2,6 +2,8 @@
 import { local } from '../lib/local-db.js';
 import { dadosIniciais } from '../lib/exemplo.js';
 import { escolherBackup } from '../components/backup.js';
+import { mostrarCodigoRecuperacao } from '../components/recuperacao.js';
+import { codigoValido } from '../lib/cofre.js';
 import { icone, erroNoCampo, limparErros, dialogo, toast } from '../lib/ui.js';
 import { esc } from '../lib/format.js';
 
@@ -55,7 +57,7 @@ export function telaPrimeiroAcesso(aoEntrar, restaurando = null) {
           <span class="block text-sm text-stone-600 dark:text-stone-400">Para conhecer o sistema. Depois dá para apagar tudo em Ajustes.</span></span>
         </label>`}
         <div class="rounded-xl bg-amber-50 p-3 text-sm text-amber-900 dark:bg-amber-900/40 dark:text-amber-100" role="note">
-          <strong>Guarde bem a senha.</strong> Ela protege os dados deste aparelho e não tem como ser recuperada. Se esquecer, só um backup traz os dados de volta.
+          <strong>Guarde bem a senha.</strong> Ela protege os dados deste aparelho. Na próxima tela você recebe um <strong>código de recuperação</strong>: com ele dá para criar uma senha nova se esquecer.
         </div>
         <button type="submit" class="btn-primario">${restaurando ? 'Criar e restaurar' : 'Criar e entrar'}</button>
       </form>
@@ -86,7 +88,8 @@ export function telaPrimeiroAcesso(aoEntrar, restaurando = null) {
     botao.disabled = true;
     botao.textContent = 'Preparando…';
     const tabelas = restaurando ? restaurando.tabelas : dadosIniciais({ comExemplo: form.exemplo?.checked });
-    await local.criarConta(usuario, senha, tabelas);
+    const codigo = await local.criarConta(usuario, senha, tabelas);
+    await mostrarCodigoRecuperacao(codigo, { motivo: 'criado' });
     if (restaurando) toast('Backup restaurado');
     await aoEntrar();
   };
@@ -122,7 +125,11 @@ export function telaSenha(usuario, aoEntrar) {
     if (!form.senha.value) { erro.textContent = 'Digite sua senha.'; erro.classList.remove('hidden'); return form.senha.focus(); }
     botao.disabled = true;
     botao.textContent = 'Abrindo…';
-    if (await local.desbloquear(form.senha.value)) return aoEntrar();
+    const r = await local.desbloquear(form.senha.value);
+    if (r.ok) {
+      if (r.codigoNovo) await mostrarCodigoRecuperacao(r.codigoNovo, { motivo: 'atualizacao' });
+      return aoEntrar();
+    }
     erros++;
     // depois de 5 erros, espera um pouco a cada tentativa (dificulta quem tenta adivinhar)
     const espera = erros >= 5 ? 30 : 0;
@@ -135,23 +142,67 @@ export function telaSenha(usuario, aoEntrar) {
 }
 
 function esqueciSenha(aoEntrar) {
+  let erros = 0;
   const d = dialogo({
     titulo: 'Esqueci minha senha',
     largura: 'max-w-md',
     corpo: `
+      <form class="grid gap-4" novalidate>
+        <p class="text-stone-700 dark:text-stone-300">Digite o <strong>código de recuperação</strong> que você guardou (no WhatsApp ou no papel) e crie uma senha nova. Seus dados continuam todos aqui.</p>
+        <div data-campo><label class="rotulo" for="codigo">Código de recuperação</label>
+          <input id="codigo" name="codigo" class="campo text-center font-mono text-lg tracking-wider uppercase" autocomplete="off" autocapitalize="characters" spellcheck="false" maxlength="24" placeholder="XXXX-XXXX-XXXX-XXXX" aria-describedby="dica-codigo">
+          <p id="dica-codigo" class="dica">16 letras e números. Pode digitar com ou sem os tracinhos.</p></div>
+        ${campoSenha('nova', 'Senha nova', 'new-password', 'Pelo menos 4 caracteres.')}
+        ${campoSenha('repetir', 'Repita a senha nova', 'new-password')}
+        <button type="submit" class="btn-primario">Criar senha nova</button>
+        <button type="button" class="cursor-pointer p-2 text-sm text-stone-600 underline underline-offset-2 dark:text-stone-400" data-sem-codigo>Não tenho o código</button>
+      </form>`,
+  });
+  const f = d.querySelector('form');
+  ligarMostrarSenha(f);
+  f.codigo.focus();
+  f.onsubmit = async (e) => {
+    e.preventDefault();
+    limparErros(f);
+    let ok = true;
+    if (!codigoValido(f.codigo.value)) { erroNoCampo(f, 'codigo', 'Confira o código: são 16 letras e números.'); ok = false; }
+    if (f.nova.value.length < 4) { erroNoCampo(f, 'nova', 'A senha precisa ter pelo menos 4 caracteres.'); ok = false; }
+    else if (f.nova.value !== f.repetir.value) { erroNoCampo(f, 'repetir', 'As duas senhas estão diferentes.'); ok = false; }
+    if (!ok) return f.querySelector('[aria-invalid]').focus();
+    const botao = f.querySelector('[type=submit]');
+    botao.disabled = true;
+    botao.textContent = 'Conferindo…';
+    const codigoNovo = await local.recuperarComCodigo(f.codigo.value, f.nova.value);
+    if (codigoNovo) {
+      d.close();
+      await mostrarCodigoRecuperacao(codigoNovo, { motivo: 'recuperado' });
+      toast('Senha nova criada. Use-a da próxima vez que abrir o sistema.');
+      return aoEntrar();
+    }
+    erros++;
+    const espera = erros >= 5 ? 30 : 0;
+    erroNoCampo(f, 'codigo', espera ? `Código incorreto. Aguarde ${espera} segundos para tentar de novo.` : 'Código incorreto. Confira as letras e números.');
+    setTimeout(() => { botao.disabled = false; botao.textContent = 'Criar senha nova'; }, espera * 1000);
+  };
+  f.querySelector('[data-sem-codigo]').onclick = () => { d.close(); semCodigo(aoEntrar); };
+}
+
+/** Sem senha e sem código: a única saída é apagar e começar de novo (podendo restaurar um backup) */
+function semCodigo(aoEntrar) {
+  const d = dialogo({
+    titulo: 'Sem a senha e sem o código',
+    largura: 'max-w-md',
+    corpo: `
       <div class="grid gap-3 text-stone-700 dark:text-stone-300">
-        <p>Para proteger seus dados, eles ficam <strong>trancados com a senha</strong>. Sem ela, não é possível abrir os dados guardados neste aparelho.</p>
-        <p>O que dá para fazer:</p>
-        <ul class="grid list-disc gap-1 pl-5">
-          <li>Tentar de novo com calma (letras maiúsculas e minúsculas fazem diferença).</li>
-          <li>Começar do zero e, se você tiver um <strong>arquivo de backup</strong>, restaurar os dados dele.</li>
-        </ul>
+        <p>Para proteger seus dados, eles ficam <strong>trancados</strong>. Sem a senha e sem o código de recuperação, não é possível abrir os dados guardados neste aparelho.</p>
+        <p>Se você tiver um <strong>arquivo de backup</strong>, pode apagar este acesso, criar um novo e restaurar os dados dele.</p>
       </div>
       <div class="mt-5 grid gap-2">
-        <button type="button" class="btn-primario" data-fechar>Tentar de novo</button>
+        <button type="button" class="btn-primario" data-voltar>Voltar e tentar o código de novo</button>
         <button type="button" class="btn-neutro text-red-700 dark:text-red-400" data-zerar>Apagar este acesso e começar do zero</button>
       </div>`,
   });
+  d.querySelector('[data-voltar]').onclick = () => { d.close(); esqueciSenha(aoEntrar); };
   d.querySelector('[data-zerar]').onclick = () => {
     d.close();
     const c = dialogo({

@@ -45,10 +45,14 @@ Depois de instalado, o sistema abre e funciona sem internet. Quando você public
 
 ## Senha e segurança
 
-- A senha **nunca é guardada**. A partir dela é gerada uma chave (PBKDF2, 310 mil repetições) que cifra os dados com AES-GCM 256 bits. Sem a senha, os dados guardados no aparelho são ilegíveis.
+- A senha e o código **nunca são guardados**. A partir deles são geradas chaves (PBKDF2, 310 mil repetições), e os dados ficam cifrados com AES-GCM 256 bits. Sem a senha ou o código, os dados guardados no aparelho são ilegíveis.
 - A senha é pedida toda vez que o sistema é aberto, e de novo se o app ficar mais de 1 minuto em segundo plano. O cadeado no menu bloqueia na hora.
 - Depois de 5 senhas erradas seguidas, o sistema espera 30 segundos entre tentativas.
-- **Esqueceu a senha?** Não há como recuperar. Na tela de senha, *Esqueci minha senha* apaga o acesso deste aparelho; depois é só criar um novo e restaurar um backup.
+- **Código de recuperação:** ao criar o acesso, o sistema mostra um código (ex.: `K7QM-2XPA-9TRW-HF4D`) com botões para enviar ao seu WhatsApp, compartilhar ou copiar. Ele aparece só uma vez.
+- **Esqueceu a senha?** Na tela de senha, toque em *Esqueci minha senha*, digite o código e crie uma senha nova. Nenhum dado se perde. Depois de usado, o código é trocado por um novo, que é mostrado na hora.
+- **Perdeu o código?** Em *Ajustes > Usuário e senha > Novo código de recuperação* (pede a senha), o antigo deixa de valer.
+- **Sem a senha e sem o código** não há como abrir os dados: só um backup os traz de volta.
+- **Como funciona por dentro:** os dados são cifrados com uma chave aleatória. Essa chave fica guardada em duas "fechaduras", uma aberta pela senha e outra pelo código. Tudo acontece no aparelho, sem servidor (veja `src/lib/cofre.js`).
 
 ## Backup
 

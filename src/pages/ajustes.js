@@ -8,6 +8,7 @@ import { fazerBackup, restaurarComConfirmacao } from '../components/backup.js';
 import { icone, toast, confirmar, mascaraDinheiro, dialogo, erroNoCampo, limparErros } from '../lib/ui.js';
 import { lerPreferencias, salvarPreferencias } from '../lib/preferencias.js';
 import { abrirTour } from '../components/tour.js';
+import { mostrarCodigoRecuperacao } from '../components/recuperacao.js';
 
 // Definição de cada lista editável: quais campos aparecem e como são lidos
 const LISTAS = {
@@ -66,7 +67,7 @@ export default {
     <p><strong>Backup</strong>: gera um arquivo com todos os dados. Guarde-o fora do aparelho (Drive, e-mail ou WhatsApp). Se trocar de celular ou esquecer a senha, é ele que traz os dados de volta.</p>
     <p><strong>Contas, Cartões, Categorias e Pessoas</strong>: mude qualquer campo e toque em <strong>Salvar</strong> na mesma linha. Para incluir um item novo, use a última linha de cada lista.</p>
     <p><strong>Aparência</strong>: modo escuro e letras maiores.</p>
-    <p><strong>Usuário e senha</strong>: troque seu nome ou sua senha, ou apague tudo deste aparelho.</p>`,
+    <p><strong>Usuário e senha</strong>: troque seu nome ou sua senha, gere um novo código de recuperação ou apague tudo deste aparelho.</p>`,
 
   async render(el, ctx) {
     const pref = lerPreferencias();
@@ -106,6 +107,7 @@ export default {
         </form>
         <div class="mt-4 flex flex-wrap gap-2">
           <button type="button" class="btn-neutro" data-trocar-senha>${icone('cadeado')} Trocar a senha</button>
+          <button type="button" class="btn-neutro" data-novo-codigo>${icone('repetir')} Novo código de recuperação</button>
           <button type="button" class="btn-neutro" data-tour>${icone('ajuda')} Ver a apresentação de novo</button>
         </div>
         <div class="mt-6 rounded-xl border border-red-200 p-4 dark:border-red-900">
@@ -170,6 +172,8 @@ export default {
         abrirTour();
       } else if (e.target.closest('[data-trocar-senha]')) {
         trocarSenha();
+      } else if (e.target.closest('[data-novo-codigo]')) {
+        novoCodigo();
       } else if (e.target.closest('[data-apagar-tudo]')) {
         apagarTudo();
       }
@@ -280,6 +284,37 @@ function trocarSenha() {
       erroNoCampo(f, 'atual', err.message);
       botao.disabled = false;
       botao.textContent = 'Trocar a senha';
+    }
+  };
+}
+
+/** Gera um código de recuperação novo (por exemplo, se perdeu o antigo ou alguém o viu) */
+function novoCodigo() {
+  const d = dialogo({
+    titulo: 'Novo código de recuperação',
+    largura: 'max-w-sm',
+    corpo: `<form class="grid gap-4" novalidate>
+      <p class="text-stone-700 dark:text-stone-300">O código atual vai <strong>parar de funcionar</strong> e você vai receber um novo para guardar.</p>
+      <div data-campo><label class="rotulo" for="senha-codigo">Digite sua senha para confirmar</label>
+      <input id="senha-codigo" name="senha" type="password" class="campo" autocomplete="current-password" maxlength="64"></div>
+      <button type="submit" class="btn-primario">Gerar código novo</button></form>`,
+  });
+  const f = d.querySelector('form');
+  f.senha.focus();
+  f.onsubmit = async (e) => {
+    e.preventDefault();
+    limparErros(f);
+    const botao = f.querySelector('[type=submit]');
+    botao.disabled = true;
+    botao.textContent = 'Gerando…';
+    try {
+      const codigo = await local.novoCodigo(f.senha.value);
+      d.close();
+      await mostrarCodigoRecuperacao(codigo, { motivo: 'novo' });
+    } catch (err) {
+      erroNoCampo(f, 'senha', err.message);
+      botao.disabled = false;
+      botao.textContent = 'Gerar código novo';
     }
   };
 }
