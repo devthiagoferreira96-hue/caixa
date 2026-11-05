@@ -1,10 +1,8 @@
-// Conexão com o Supabase.
-// Sem as variáveis do arquivo .env, o sistema roda em MODO DEMONSTRAÇÃO (dados de exemplo na memória).
-import { createClient } from '@supabase/supabase-js';
+// Conexão com o Supabase (biblioteca carregada direto do CDN, sem npm).
+// Sem os dados em src/config.js, o sistema roda em MODO DEMONSTRAÇÃO (dados de exemplo na memória).
+import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
+import { SUPABASE_URL, SUPABASE_ANON_KEY } from '../config.js';
 import { criarDemo } from './demo-db.js';
 
-const url = import.meta.env.VITE_SUPABASE_URL;
-const chave = import.meta.env.VITE_SUPABASE_ANON_KEY;
-
-export const modoDemo = !url || !chave;
-export const supabase = modoDemo ? criarDemo() : createClient(url, chave);
+export const modoDemo = !SUPABASE_URL || !SUPABASE_ANON_KEY;
+export const supabase = modoDemo ? criarDemo() : createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
