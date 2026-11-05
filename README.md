@@ -59,6 +59,10 @@ Depois de instalado, o sistema abre e funciona sem internet. Quando você public
 - Cada categoria tem um **tipo** (saída, entrada ou os dois). O formulário de lançamento só mostra as categorias do tipo escolhido. Dados de versões anteriores recebem o tipo automaticamente (pelo nome e pelo uso).
 - As categorias dos grupos **Fazenda** e **Empresa** (`GRUPOS_SEPARADOS` em `src/lib/store.js`) ficam fora do *Resumo da casa* e ganham um quadro próprio no Início com vendas, despesas e lucro.
 
+## Importar a planilha do Excel
+
+*Ajustes > Backup, importar e exportar > Importar planilha do Excel*. Lê o `.xlsx` no modelo do `NOVO_CAIXA.xlsx` (uma aba por mês; caixa nas colunas A–J e um bloco por cartão), no próprio aparelho (`src/lib/ler-xlsx.js` + `DecompressionStream`). As colunas são achadas pelo título. Mostra uma prévia (mês/ano de cada aba, cadastros novos, avisos), pula o que já existe e pode ser desfeita. Regras em `src/lib/importar-planilha.js`.
+
 ## Backup
 
 Como os dados ficam só no aparelho, **perder o aparelho é perder os dados**, a não ser que exista um backup.

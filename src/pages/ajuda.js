@@ -49,6 +49,17 @@ const TOPICOS = [
     </ul>
     <p>Escolha o período: o mês aberto na tela, o ano inteiro ou tudo.</p>
     <p><strong>Atenção:</strong> planilha e PDF são só para consultar. Para guardar os dados e poder restaurar depois, use o <strong>Backup completo</strong>.</p>`],
+  ['planilha', 'Importar a planilha do Excel', `
+    <p>Em <a href="#ajustes" class="font-semibold underline">Ajustes > Backup, importar e exportar</a>, toque em <strong>Importar planilha do Excel</strong> e escolha o arquivo (.xlsx) no modelo do caixa.</p>
+    <ul class="list-disc pl-5">
+      <li>Cada aba é um mês. Antes de importar, confira o mês e o ano de cada aba e desmarque as que não quiser.</li>
+      <li>Do caixa: valor negativo vira saída e positivo vira entrada. STATUS "OK" fica como pago.</li>
+      <li>Dos cartões: cada linha é a parcela daquela fatura. Parcelas de uma mesma compra em meses diferentes viram uma compra só, e as parcelas futuras são criadas.</li>
+      <li>Contas, cartões, categorias e pessoas que ainda não existem são criados. Categorias novas vão para o grupo "Outros".</li>
+      <li>Pode importar de novo sem medo: o que já estiver no sistema é pulado.</li>
+      <li>Se algo sair errado, toque em <strong>Desfazer</strong> logo depois de importar.</li>
+    </ul>
+    <p>Arquivo .xls (Excel antigo)? Abra no Excel e use "Salvar como" > .xlsx.</p>`],
   ['alerta', 'Gasto lançado duas vezes', `
     <p>Se você for lançar um gasto com o <strong>mesmo valor, no mesmo dia</strong> e com a mesma categoria ou descrição parecida de algo que já está lançado, o sistema pergunta antes: <em>"Você já lançou um gasto semelhante a este. Deseja continuar mesmo assim?"</em></p>
     <p><strong>Não lançar</strong> cancela sem mudar nada. <strong>Lançar mesmo assim</strong> salva normalmente.</p>`],
