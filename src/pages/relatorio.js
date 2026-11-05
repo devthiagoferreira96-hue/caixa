@@ -97,7 +97,7 @@ export default {
         return ctx.aoTrocarMes();
       }
       const barra = e.target.closest('[data-categoria]');
-      if (barra) abrirDetalheCategoria(Number(barra.dataset.categoria), atual.ls, atual.ps);
+      if (barra) abrirDetalheCategoria(barra.dataset.categoria, atual.ls, atual.ps);
     };
   },
 };

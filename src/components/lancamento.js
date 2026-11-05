@@ -46,7 +46,7 @@ export function itemLancamento(l, { mostrarPrazo = false } = {}) {
 export async function cliqueEmLancamento(e, lista, atualizar) {
   const botaoPagar = e.target.closest('[data-pagar]');
   if (botaoPagar) {
-    const l = lista.find((x) => x.id === Number(botaoPagar.dataset.pagar));
+    const l = lista.find((x) => x.id === botaoPagar.dataset.pagar);
     botaoPagar.disabled = true;
     const pago = !l.pago;
     try {
@@ -64,7 +64,7 @@ export async function cliqueEmLancamento(e, lista, atualizar) {
   }
   const botaoEditar = e.target.closest('[data-editar]');
   if (botaoEditar) {
-    abrirEdicao(lista.find((x) => x.id === Number(botaoEditar.dataset.editar)), atualizar);
+    abrirEdicao(lista.find((x) => x.id === botaoEditar.dataset.editar), atualizar);
     return true;
   }
   return false;

@@ -6,6 +6,7 @@ import { icone, toast, confirmar, mascaraDinheiro } from '../lib/ui.js';
 import { lerPreferencias, salvarPreferencias } from '../lib/preferencias.js';
 import { abrirTour } from '../components/tour.js';
 import { modoDemo } from '../lib/supabase.js';
+import { estado } from '../lib/sync.js';
 
 // Definição de cada lista editável: quais campos aparecem e como são lidos
 const LISTAS = {
@@ -146,7 +147,7 @@ export default {
       const excluir = e.target.closest('[data-excluir]');
       if (excluir) {
         const [tabela, id] = excluir.dataset.excluir.split(':');
-        const item = store[tabela].find((x) => x.id === Number(id));
+        const item = store[tabela].find((x) => x.id === id);
         const extra = tabela === 'cartoes' ? ' Todas as compras deste cartão também serão apagadas (os pagamentos de fatura continuam no extrato).' : '';
         if (!(await confirmar(`“${item.nome}” será excluído.${extra}`, { botao: 'Excluir', perigo: true }))) return;
         try { await excluirItem(tabela, item.id); toast(`${item.nome} excluído`); ctx.atualizar(); } catch (err) { toast(err.message, { tipo: 'erro' }); }
@@ -155,7 +156,10 @@ export default {
       } else if (e.target.closest('[data-tour]')) {
         abrirTour();
       } else if (e.target.closest('[data-sair]')) {
-        if (await confirmar('Você vai precisar do e-mail e da senha para entrar de novo.', { titulo: 'Sair do sistema?', botao: 'Sair' })) auth.sair();
+        const aviso = estado.pendentes
+          ? `Ainda há ${estado.pendentes} ${estado.pendentes === 1 ? 'alteração feita' : 'alterações feitas'} sem internet. ${estado.pendentes === 1 ? 'Ela fica guardada' : 'Elas ficam guardadas'} neste aparelho e ${estado.pendentes === 1 ? 'será enviada' : 'serão enviadas'} quando você entrar de novo com internet.`
+          : 'Você vai precisar do e-mail e da senha para entrar de novo.';
+        if (await confirmar(aviso, { titulo: 'Sair do sistema?', botao: 'Sair' })) auth.sair();
       }
     };
 
@@ -215,7 +219,7 @@ function linha(tabela, def, item) {
 }
 
 function lerLinha(form, def) {
-  const item = form.dataset.id ? { id: Number(form.dataset.id) } : {};
+  const item = form.dataset.id ? { id: form.dataset.id } : {};
   for (const c of def.campos) {
     const campo = form.elements[c.nome];
     if (c.tipo === 'marcar') item[c.nome] = campo.checked;

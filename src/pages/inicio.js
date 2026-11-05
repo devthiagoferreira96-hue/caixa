@@ -113,7 +113,7 @@ export default {
     el.onclick = async (e) => {
       if (await cliqueEmLancamento(e, pendentes, ctx.atualizar)) return;
       const barra = e.target.closest('[data-categoria]');
-      if (barra) abrirDetalheCategoria(Number(barra.dataset.categoria), lancamentos, parcelas);
+      if (barra) abrirDetalheCategoria(barra.dataset.categoria, lancamentos, parcelas);
     };
   },
 };
