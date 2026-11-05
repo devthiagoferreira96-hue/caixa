@@ -32,8 +32,16 @@ const TOPICOS = [
     <p>Sem a senha e sem o código, não há como abrir os dados: só um backup os traz de volta.</p>`],
   ['baixar', 'Backup: não perca seus dados', `
     <p>O sistema funciona 100% sem internet e guarda tudo <strong>só neste aparelho</strong>. Se o celular for perdido, trocado ou formatado, os dados vão junto, a não ser que você tenha um backup.</p>
-    <p>Em <a href="#ajustes" class="font-semibold underline">Ajustes > Backup dos dados</a>, toque em <strong>Fazer backup agora</strong>. No celular, escolha onde guardar (Drive, e-mail ou WhatsApp). O Início lembra você quando passar de 30 dias sem backup.</p>
+    <p>Em <a href="#ajustes" class="font-semibold underline">Ajustes > Backup e exportar</a>, toque em <strong>Backup, Excel ou PDF</strong>, escolha <strong>Backup completo</strong> e toque em <strong>Gerar backup</strong>. No celular, escolha onde guardar (Drive, e-mail ou WhatsApp). O Início lembra você quando passar de 30 dias sem backup.</p>
     <p>Para trazer os dados de volta (no mesmo ou em outro aparelho), use <strong>Restaurar um backup</strong>.</p>`],
+  ['planilha', 'Planilha do Excel e relatório em PDF', `
+    <p>Na mesma tela do backup dá para gerar:</p>
+    <ul class="list-disc pl-5">
+      <li><strong>Planilha do Excel</strong>: abas de Resumo, Lançamentos, Cartões e Gastos por categoria, com filtros e totais. Abre no Excel e no Google Planilhas.</li>
+      <li><strong>Relatório em PDF</strong>: resumo do período, gastos por categoria com barrinhas, saldo das contas e a lista de lançamentos e compras no cartão. Bom para imprimir ou mandar para o contador.</li>
+    </ul>
+    <p>Escolha o período: o mês aberto na tela, o ano inteiro ou tudo.</p>
+    <p><strong>Atenção:</strong> planilha e PDF são só para consultar. Para guardar os dados e poder restaurar depois, use o <strong>Backup completo</strong>.</p>`],
   ['alerta', 'Gasto lançado duas vezes', `
     <p>Se você for lançar um gasto com o <strong>mesmo valor, no mesmo dia</strong> e com a mesma categoria ou descrição parecida de algo que já está lançado, o sistema pergunta antes: <em>"Você já lançou um gasto semelhante a este. Deseja continuar mesmo assim?"</em></p>
     <p><strong>Não lançar</strong> cancela sem mudar nada. <strong>Lançar mesmo assim</strong> salva normalmente.</p>`],

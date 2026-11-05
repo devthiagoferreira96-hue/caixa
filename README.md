@@ -58,7 +58,8 @@ Depois de instalado, o sistema abre e funciona sem internet. Quando você public
 
 Como os dados ficam só no aparelho, **perder o aparelho é perder os dados**, a não ser que exista um backup.
 
-- **Fazer backup:** *Ajustes > Backup dos dados > Fazer backup agora*. No celular, abre o *Compartilhar* (Drive, e-mail ou WhatsApp); no computador, baixa um arquivo `.json`.
+- **Fazer backup:** *Ajustes > Backup e exportar > Backup, Excel ou PDF > Backup completo*. No celular, abre o *Compartilhar* (Drive, e-mail ou WhatsApp); no computador, baixa um arquivo `.json`.
+- **Exportar:** na mesma janela dá para gerar uma **planilha do Excel (.xlsx)** (abas Resumo, Lançamentos, Cartões e Por categoria, com filtros e totais) ou um **relatório em PDF**, do mês aberto, do ano ou de tudo. Os dois arquivos são montados no próprio aparelho, sem internet e sem bibliotecas externas (`src/lib/exportar-*.js`, `zip.js`). Servem para consultar: só o `.json` restaura os dados.
 - **Restaurar:** em *Ajustes > Restaurar um backup* ou, num aparelho novo, em *Já tenho um arquivo de backup* na primeira tela. A restauração tem *Desfazer*.
 - O Início mostra um lembrete quando você ainda não fez backup ou quando o último tem mais de 30 dias.
 - O arquivo de backup **não tem senha**: guarde-o num lugar só seu.
