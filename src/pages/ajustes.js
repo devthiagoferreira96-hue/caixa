@@ -4,7 +4,7 @@ import { store, categoriasPorGrupo } from '../lib/store.js';
 import { salvarItem, excluirItem } from '../lib/api.js';
 import { local } from '../lib/local-db.js';
 import { desfazendo } from '../components/lancamento.js';
-import { fazerBackup, restaurarComConfirmacao } from '../components/backup.js';
+import { abrirOpcoesBackup, restaurarComConfirmacao } from '../components/backup.js';
 import { icone, toast, confirmar, mascaraDinheiro, dialogo, erroNoCampo, limparErros } from '../lib/ui.js';
 import { lerPreferencias, salvarPreferencias } from '../lib/preferencias.js';
 import { abrirTour } from '../components/tour.js';
@@ -64,7 +64,7 @@ export default {
   usaMes: false,
   ajuda: `
     <p>Toque no nome de cada seção para abrir.</p>
-    <p><strong>Backup</strong>: gera um arquivo com todos os dados. Guarde-o fora do aparelho (Drive, e-mail ou WhatsApp). Se trocar de celular ou esquecer a senha, é ele que traz os dados de volta.</p>
+    <p><strong>Backup e exportar</strong>: escolha entre o <strong>backup completo</strong> (guarda tudo e é o único que restaura os dados), uma <strong>planilha do Excel</strong> ou um <strong>relatório em PDF</strong> do mês, do ano ou de tudo.</p>
     <p><strong>Contas, Cartões, Categorias e Pessoas</strong>: mude qualquer campo e toque em <strong>Salvar</strong> na mesma linha. Para incluir um item novo, use a última linha de cada lista.</p>
     <p><strong>Aparência</strong>: modo escuro e letras maiores.</p>
     <p><strong>Usuário e senha</strong>: troque seu nome ou sua senha, gere um novo código de recuperação ou apague tudo deste aparelho.</p>`,
@@ -73,11 +73,11 @@ export default {
     const pref = lerPreferencias();
     el.innerHTML = `
     <div class="mx-auto grid max-w-3xl gap-3 animate-entrar">
-      ${secao('backup', 'Backup dos dados', 'baixar', `
-        <p class="text-sm text-stone-700 dark:text-stone-300">Seus dados ficam <strong>só neste aparelho</strong>. Faça um backup de vez em quando e guarde o arquivo fora dele (Drive, e-mail ou WhatsApp).</p>
+      ${secao('backup', 'Backup e exportar', 'baixar', `
+        <p class="text-sm text-stone-700 dark:text-stone-300">Seus dados ficam <strong>só neste aparelho</strong>. Faça um backup de vez em quando e guarde o arquivo fora dele (Drive, e-mail ou WhatsApp). Aqui também dá para gerar uma <strong>planilha do Excel</strong> ou um <strong>relatório em PDF</strong>.</p>
         <p class="mt-2 text-sm ${!local.ultimoBackup ? 'font-semibold text-amber-800 dark:text-amber-300' : 'text-stone-600 dark:text-stone-400'}">${local.ultimoBackup ? `Último backup: ${dataCompleta(local.ultimoBackup.slice(0, 10))}` : 'Você ainda não fez nenhum backup.'}</p>
         <div class="mt-4 flex flex-col gap-2 sm:flex-row">
-          <button type="button" class="btn-primario" data-backup>${icone('baixar')} Fazer backup agora</button>
+          <button type="button" class="btn-primario" data-backup>${icone('baixar')} Backup, Excel ou PDF</button>
           <button type="button" class="btn-neutro" data-restaurar>${icone('enviar')} Restaurar um backup</button>
         </div>`)}
 
@@ -165,7 +165,7 @@ export default {
           ctx.atualizar();
         } catch (err) { toast(err.message, { tipo: 'erro' }); }
       } else if (e.target.closest('[data-backup]')) {
-        if (await fazerBackup()) ctx.atualizar();
+        if (await abrirOpcoesBackup()) ctx.atualizar();
       } else if (e.target.closest('[data-restaurar]')) {
         await restaurarComConfirmacao(ctx.atualizar);
       } else if (e.target.closest('[data-tour]')) {

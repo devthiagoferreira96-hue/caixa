@@ -109,5 +109,8 @@
   .opcao-modo {
     @apply flex cursor-pointer flex-col items-center gap-1 rounded-xl border-2 border-stone-200 p-3 text-center text-sm font-semibold transition hover:border-brand-300 has-checked:border-brand-600 has-checked:bg-brand-50 has-focus-visible:outline-2 has-focus-visible:outline-brand-500 dark:border-stone-700 dark:has-checked:bg-brand-950;
   }
+  .opcao-lista {
+    @apply flex cursor-pointer items-start gap-3 rounded-xl border-2 border-stone-200 p-3 text-left transition hover:border-brand-300 has-checked:border-brand-600 has-checked:bg-brand-50 has-focus-visible:outline-2 has-focus-visible:outline-brand-500 dark:border-stone-700 dark:has-checked:bg-brand-950;
+  }
   .esqueleto { @apply animate-pulse rounded-xl bg-stone-200 dark:bg-stone-800; }
 }
