@@ -72,7 +72,8 @@ export function dadosDoPeriodo(periodo) {
       const total = c.caixa + c.cartao;
       return {
         categoria: cat?.nome ?? 'Sem categoria',
-        grupo: cat?.no_grafico ? cat.grupo || 'Outros' : 'Casa',
+        grupo: cat ? cat.grupo || 'Outros' : 'Sem categoria',
+        noGrafico: !!cat?.no_grafico,
         caixa: c.caixa,
         cartao: c.cartao,
         total,

@@ -257,14 +257,14 @@ export function gerarPDF(periodo) {
     extra: (i, j, x, y) => {
       if (j !== 1) return;
       const c = d.categorias[i];
-      doc.retangulo(x + 5, y + 5, Math.max((c.total / maior) * 62, 1.5), 7, c.grupo === 'Casa' ? COR.marca : [0.66, 0.64, 0.62]);
+      doc.retangulo(x + 5, y + 5, Math.max((c.total / maior) * 62, 1.5), 7, c.noGrafico ? COR.marca : [0.66, 0.64, 0.62]);
     },
     total: ['Total', '', reais(d.categorias.reduce((s, c) => s + c.caixa, 0)), reais(d.categorias.reduce((s, c) => s + c.cartao, 0)), reais(r.gastos), d.categorias.length ? '100%' : ''],
     vazio: 'Nenhum gasto neste período.',
   });
-  if (d.categorias.some((c) => c.grupo !== 'Casa')) {
+  if (d.categorias.some((c) => !c.noGrafico)) {
     doc.y -= 12;
-    doc.texto(MARGEM, doc.y, 'Barra verde: gastos da casa. Barra cinza: Fazenda, Empresa, Financeiro e Serviços.', { tam: 7.5, c: COR.suave });
+    doc.texto(MARGEM, doc.y, 'Barra verde: categorias que aparecem no gráfico do Início. Barra cinza: as demais (Fazenda, Empresa, Financeiro, Serviços).', { tam: 7.5, c: COR.suave });
   }
 
   // Contas
