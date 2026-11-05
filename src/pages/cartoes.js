@@ -6,6 +6,7 @@ import { vencimentoFatura } from '../lib/faturas.js';
 import { totalDoCartao } from '../lib/calculos.js';
 import { icone, toast, dialogo, confirmar, estadoVazio } from '../lib/ui.js';
 import { opcoesConta } from '../components/form-lancamento.js';
+import { seloAutor, desfazendo } from '../components/lancamento.js';
 
 export default {
   titulo: 'Cartões',
@@ -59,6 +60,7 @@ export default {
                 <p class="truncate text-sm text-stone-600 dark:text-stone-400">${diaMes(p.compra.data_compra)} · ${esc(nomeCategoria(p.compra.categoria_id))}${p.compra.subcategoria ? ` / ${esc(p.compra.subcategoria)}` : ''}</p>
               </div>
               <span class="font-semibold tabular-nums">${brl(p.valor)}</span>
+              ${seloAutor(p.compra.criado_por)}
               <button type="button" class="btn-icone size-9 text-stone-400 hover:text-red-700" data-excluir-compra="${p.compra.id}"
                 aria-label="Excluir a compra ${esc(p.compra.descricao)}" title="Excluir compra">${icone('lixo', 'size-4')}</button>
             </li>`).join('')}</ul>` : ''}
@@ -90,14 +92,18 @@ export default {
           ? `A compra “${compra.descricao}” e as ${compra.qtd_parcelas} parcelas serão excluídas de todas as faturas.`
           : `A compra “${compra.descricao}” será excluída.`;
         if (!(await confirmar(msg, { botao: 'Excluir compra', perigo: true }))) return;
-        try { await excluirCompra(compra.id); toast('Compra excluída'); ctx.atualizar(); } catch (err) { toast(err.message, { tipo: 'erro' }); }
+        try {
+          const desfazer = await excluirCompra(compra.id);
+          toast(`Compra “${compra.descricao}” excluída`, { acao: desfazendo(desfazer, ctx.atualizar) });
+          ctx.atualizar();
+        } catch (err) { toast(err.message, { tipo: 'erro' }); }
         return;
       }
       const desfazer = e.target.closest('[data-desfazer]');
       if (desfazer) {
         if (!(await confirmar('A fatura volta a ficar em aberto e o valor volta para o saldo da conta.', { titulo: 'Desfazer pagamento?', botao: 'Desfazer pagamento' }))) return;
-        await excluirLancamentos([desfazer.dataset.desfazer]);
-        toast('Pagamento desfeito');
+        const voltar = await excluirLancamentos([desfazer.dataset.desfazer]);
+        toast('Pagamento desfeito', { acao: desfazendo(voltar, ctx.atualizar) });
         ctx.atualizar();
         return;
       }
@@ -132,14 +138,14 @@ function pagarFatura(cartao, total, mes, ctx) {
     e.preventDefault();
     form.querySelector('[type=submit]').disabled = true;
     try {
-      await criarLancamentos([{
+      const [pagamento] = await criarLancamentos([{
         tipo: 'saida', valor: Math.round(total * 100) / 100,
         descricao: `Fatura ${cartao.nome} (${nomeMes(store.mes).toLowerCase()})`,
         vencimento: form.data.value || hojeISO(), pago: true, data_pagamento: form.data.value || hojeISO(),
         conta_id: form.conta.value, categoria_id: null, fatura_cartao_id: cartao.id, fatura_mes: mes,
       }]);
       d.close();
-      toast(`Fatura do ${cartao.nome} paga`);
+      toast(`Fatura do ${cartao.nome} paga`, { acao: desfazendo(() => excluirLancamentos([pagamento.id]), ctx.atualizar) });
       ctx.atualizar();
     } catch (err) {
       toast(err.message, { tipo: 'erro' });

@@ -1,7 +1,8 @@
 // Ajustes: família e convite, contas, cartões, categorias, pessoas, aparência e sair
 import { esc, valorParaCampo, lerValor, VALOR_MAXIMO, valorMaximoTexto } from '../lib/format.js';
-import { store, categoriasPorGrupo } from '../lib/store.js';
-import { salvarItem, excluirItem, renomearFamilia, auth } from '../lib/api.js';
+import { store, categoriasPorGrupo, autor } from '../lib/store.js';
+import { salvarItem, excluirItem, renomearFamilia, mudarMeuNome, auth } from '../lib/api.js';
+import { desfazendo, seloAutor } from '../components/lancamento.js';
 import { icone, toast, confirmar, mascaraDinheiro } from '../lib/ui.js';
 import { lerPreferencias, salvarPreferencias } from '../lib/preferencias.js';
 import { abrirTour } from '../components/tour.js';
@@ -76,6 +77,8 @@ export default {
           <input id="a-familia" name="nome" class="campo" value="${esc(store.familia.nome)}" maxlength="60"></div>
           <button class="btn-sec">Salvar</button>
         </form>
+          ${store.membros.length ? `<p class="mt-5 mb-2 text-sm font-semibold">Quem usa o sistema</p>
+          <ul class="grid gap-2">${store.membros.map((m) => `<li class="flex items-center gap-2 text-sm">${seloAutor(m.user_id)}<span>${esc(m.nome || 'Sem nome')}${m.user_id === store.user.id ? ' <span class="text-stone-600 dark:text-stone-400">(você)</span>' : ''}</span></li>`).join('')}</ul>` : ''}
         <div class="mt-5 rounded-xl bg-brand-50 p-4 dark:bg-brand-950">
           <p class="font-semibold">Como colocar outra pessoa no sistema</p>
           <ol class="mt-2 grid list-decimal gap-1 pl-5 text-sm text-stone-700 dark:text-stone-300">
@@ -108,7 +111,13 @@ export default {
         </label>`)}
 
       ${secao('conta', 'Minha conta', 'sair', `
-        <p class="text-sm text-stone-600 dark:text-stone-400">Conectado como <strong>${esc(store.user.email)}</strong>${modoDemo ? ' (demonstração)' : ''}.</p>
+        <form data-meu-nome class="flex flex-col gap-2 sm:flex-row sm:items-end">
+          <div class="flex-1"><label class="rotulo" for="a-meu-nome">Seu nome no sistema</label>
+          <input id="a-meu-nome" name="nome" class="campo" maxlength="40" value="${esc(autor(store.user.id)?.nome || '')}" aria-describedby="dica-meu-nome">
+          <p id="dica-meu-nome" class="dica">É o nome que aparece para a outra pessoa, como em "Thays lançou 2 itens".</p></div>
+          <button class="btn-sec sm:mb-7">Salvar</button>
+        </form>
+        <p class="mt-4 text-sm text-stone-600 dark:text-stone-400">Conectado como <strong>${esc(store.user.email)}</strong>${modoDemo ? ' (demonstração)' : ''}.</p>
         <div class="mt-4 flex flex-wrap gap-2">
           <button type="button" class="btn-neutro" data-tour>${icone('ajuda')} Ver a apresentação de novo</button>
           <button type="button" class="btn-neutro text-red-700 dark:text-red-400" data-sair>${icone('sair')} Sair</button>
@@ -124,17 +133,27 @@ export default {
       const botao = form.querySelector('button[type=submit], button:not([type])');
       botao && (botao.disabled = true);
       try {
+        if (form.dataset.meuNome !== undefined) {
+          const nome = form.nome.value.trim();
+          if (!nome) throw new Error('Escreva seu nome.');
+          const antes = autor(store.user.id)?.nome || '';
+          await mudarMeuNome(nome);
+          toast(`Agora você aparece como ${nome}`, { acao: desfazendo(() => mudarMeuNome(antes), ctx.atualizar) });
+          ctx.atualizar();
+          return;
+        }
         if (form.dataset.familia !== undefined) {
           if (!form.nome.value.trim()) throw new Error('Escreva um nome para a família.');
+          const antes = store.familia.nome;
           store.familia = await renomearFamilia(form.nome.value.trim());
-          toast('Nome da família salvo');
+          toast('Nome da família salvo', { acao: desfazendo(async () => { store.familia = await renomearFamilia(antes); }, ctx.atualizar) });
           return;
         }
         const tabela = form.dataset.tabela;
         const item = lerLinha(form, LISTAS[tabela]);
         if (!item.nome) throw new Error('Preencha o nome.');
-        await salvarItem(tabela, item);
-        toast(item.id ? `${item.nome} atualizado` : `${item.nome} adicionado`);
+        const salvo = await salvarItem(tabela, item);
+        toast(item.id ? `${item.nome} atualizado` : `${item.nome} adicionado`, { acao: desfazendo(salvo.desfazer, ctx.atualizar) });
         ctx.atualizar();
       } catch (err) {
         toast(err.message, { tipo: 'erro' });
@@ -150,7 +169,11 @@ export default {
         const item = store[tabela].find((x) => x.id === id);
         const extra = tabela === 'cartoes' ? ' Todas as compras deste cartão também serão apagadas (os pagamentos de fatura continuam no extrato).' : '';
         if (!(await confirmar(`“${item.nome}” será excluído.${extra}`, { botao: 'Excluir', perigo: true }))) return;
-        try { await excluirItem(tabela, item.id); toast(`${item.nome} excluído`); ctx.atualizar(); } catch (err) { toast(err.message, { tipo: 'erro' }); }
+        try {
+          const desfazer = await excluirItem(tabela, item.id);
+          toast(`${item.nome} excluído`, { acao: desfazendo(desfazer, ctx.atualizar) });
+          ctx.atualizar();
+        } catch (err) { toast(err.message, { tipo: 'erro' }); }
       } else if (e.target.closest('[data-copiar]')) {
         try { await navigator.clipboard.writeText(store.familia.codigo_convite); toast('Código copiado'); } catch { toast('Não deu para copiar. Anote o código mostrado na tela.', { tipo: 'erro' }); }
       } else if (e.target.closest('[data-tour]')) {

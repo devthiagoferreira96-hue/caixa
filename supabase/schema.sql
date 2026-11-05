@@ -23,6 +23,7 @@ create table familias (
 create table membros (
   familia_id uuid references familias(id) on delete cascade,
   user_id uuid references auth.users(id) on delete cascade,
+  nome text check (char_length(nome) <= 40),     -- nome que aparece no sistema ("Thiago", "Thays")
   primary key (familia_id, user_id)
 );
 
@@ -83,8 +84,10 @@ create table lancamentos (
   grupo uuid,                                   -- liga lançamentos repetidos entre si
   fatura_cartao_id uuid references cartoes(id) on delete set null, -- é pagamento de fatura?
   fatura_mes date,
-  criado_por uuid default auth.uid(),
-  criado_em timestamptz default now()
+  criado_por uuid default auth.uid(),            -- quem lançou
+  criado_em timestamptz default now(),
+  alterado_por uuid,                             -- quem alterou por último
+  alterado_em timestamptz
 );
 
 -- ---------- Compras no cartão (colunas Q:AP da planilha)
@@ -99,7 +102,9 @@ create table compras_cartao (
   categoria_id uuid references categorias(id),
   subcategoria text,
   criado_por uuid default auth.uid(),
-  criado_em timestamptz default now()
+  criado_em timestamptz default now(),
+  alterado_por uuid,
+  alterado_em timestamptz
 );
 
 create table parcelas (              -- criadas pelo app a partir da compra
@@ -141,7 +146,9 @@ create policy "ver a propria familia" on familias for select to authenticated us
 create policy "renomear a propria familia" on familias for update to authenticated using (eh_membro(id));
 
 alter table membros enable row level security;
-create policy "ver o proprio vinculo" on membros for select to authenticated using (user_id = auth.uid());
+create policy "ver os membros da familia" on membros for select to authenticated using (eh_membro(familia_id));
+create policy "mudar o proprio nome" on membros for update to authenticated
+  using (user_id = auth.uid()) with check (user_id = auth.uid() and eh_membro(familia_id));
 
 -- ---------- Integridade: um lançamento/compra só pode apontar para conta, categoria,
 -- pessoa, cartão ou compra da MESMA família
@@ -176,6 +183,32 @@ create trigger mesma_familia before insert or update on compras_cartao
 create trigger mesma_familia before insert or update on parcelas
   for each row execute function conferir_mesma_familia();
 
+-- ---------- Autoria: quem lançou e quem alterou por último
+-- O app manda o autor e o horário (para lançamentos feitos sem internet ficarem com a hora certa);
+-- o banco só aceita como autor alguém da própria família.
+create or replace function marcar_autoria() returns trigger
+language plpgsql security definer set search_path = public as $$
+begin
+  if tg_op = 'INSERT' then
+    if new.criado_por is null or not exists (
+      select 1 from membros where familia_id = new.familia_id and user_id = new.criado_por) then
+      new.criado_por := auth.uid();
+    end if;
+    new.criado_em := coalesce(new.criado_em, now());
+  else
+    new.criado_por := old.criado_por;
+    new.criado_em := old.criado_em;
+    new.alterado_por := auth.uid();
+    new.alterado_em := coalesce(new.alterado_em, now());
+  end if;
+  return new;
+end $$;
+
+create trigger autoria before insert or update on lancamentos
+  for each row execute function marcar_autoria();
+create trigger autoria before insert or update on compras_cartao
+  for each row execute function marcar_autoria();
+
 -- ---------- Saldo de cada conta (substitui o bloco SUMIFS "ESPÉCIE / MMP / ...")
 create view saldo_contas with (security_invoker = on) as
 select c.id as conta_id,
@@ -183,6 +216,13 @@ select c.id as conta_id,
 from contas c
 left join lancamentos l on l.conta_id = c.id and l.pago
 group by c.id, c.saldo_inicial;
+
+-- Nome inicial de cada pessoa: a parte do e-mail antes do @ ("thays.ferreira@..." -> "Thays.ferreira").
+-- Cada um pode trocar em Ajustes > Minha conta.
+create or replace function nome_padrao() returns text
+language sql security definer stable set search_path = public as $$
+  select initcap(split_part(coalesce((select email from auth.users where id = auth.uid()), 'Pessoa'), '@', 1));
+$$;
 
 -- ---------- Criar a família (1ª pessoa) já com contas, cartões e categorias da planilha
 create or replace function criar_familia(p_nome text) returns uuid
@@ -195,7 +235,7 @@ begin
   end if;
 
   insert into familias (nome) values (coalesce(nullif(trim(p_nome), ''), 'Nossa família')) returning id into f;
-  insert into membros (familia_id, user_id) values (f, auth.uid());
+  insert into membros (familia_id, user_id, nome) values (f, auth.uid(), nome_padrao());
 
   insert into contas (familia_id, nome)
   select f, unnest(array['Espécie','MMP','Nubank','TMP','M.C.']);
@@ -240,11 +280,11 @@ begin
     insert into tentativas_convite (user_id) values (auth.uid());
     return null;
   end if;
-  insert into membros (familia_id, user_id) values (f, auth.uid()) on conflict do nothing;
+  insert into membros (familia_id, user_id, nome) values (f, auth.uid(), nome_padrao()) on conflict do nothing;
   return f;
 end $$;
 
 -- Só quem fez login pode chamar as funções (no Supabase elas nascem liberadas para todos)
 revoke execute on function criar_familia(text), entrar_familia(text), eh_membro(uuid),
-  gerar_codigo_convite(), conferir_mesma_familia() from public, anon;
+  gerar_codigo_convite(), conferir_mesma_familia(), marcar_autoria(), nome_padrao() from public, anon;
 grant execute on function criar_familia(text), entrar_familia(text), eh_membro(uuid) to authenticated;

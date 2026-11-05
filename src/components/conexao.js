@@ -3,6 +3,7 @@
 import { ouvir, estado, sincronizar } from '../lib/sync.js';
 import { carregarCadastros } from '../lib/api.js';
 import { icone, toast } from '../lib/ui.js';
+import { autor } from '../lib/store.js';
 
 const plural = (n, um, varios) => `${n} ${n === 1 ? um : varios}`;
 
@@ -38,7 +39,7 @@ export function iniciarAvisosDeConexao() {
       toast(`Dados registrados offline sendo armazenados (${plural(info.total, 'alteração', 'alterações')})…`);
     }
     if (evento === 'enviado') {
-      const certos = info.total - info.falhas.length;
+      const certos = info.total - info.falhas.filter((f) => f.op.offline).length;
       if (certos) toast(`Pronto! ${plural(certos, 'alteração feita sem internet foi armazenada', 'alterações feitas sem internet foram armazenadas')}.`);
       if (info.falhas.length) {
         const nomes = info.falhas.map((f) => descrever(f.op)).join(', ');
@@ -48,11 +49,26 @@ export function iniciarAvisosDeConexao() {
     if (evento === 'offline') toast('Você está sem internet. Pode continuar usando: tudo será salvo quando a conexão voltar.');
     if (evento === 'dados') {
       await carregarCadastros();
+      avisarNovosDeOutros(info.novos || []);
       document.dispatchEvent(new CustomEvent('caixa:dados-atualizados'));
     }
   });
   // redesenha a faixa sempre que o layout é montado
   document.addEventListener('caixa:layout', () => desenharFaixa('layout', estado));
+}
+
+/** "Thays lançou 2 itens" (um aviso por pessoa) */
+function avisarNovosDeOutros(novos) {
+  const porPessoa = new Map();
+  novos.forEach((item) => porPessoa.set(item.criado_por, [...(porPessoa.get(item.criado_por) || []), item]));
+  for (const [userId, itens] of porPessoa) {
+    const nome = autor(userId)?.nome || 'Alguém da família';
+    const exemplo = itens.length === 1 ? `: ${itens[0].descricao}` : '';
+    const soCartao = itens.every((i) => i.tabela === 'compras_cartao');
+    toast(`${nome} lançou ${plural(itens.length, 'item', 'itens')}${exemplo}`, {
+      acao: { texto: 'Ver', fn: () => { location.hash = soCartao ? 'cartoes' : 'extrato'; } },
+    });
+  }
 }
 
 function descrever(op) {

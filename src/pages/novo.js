@@ -1,9 +1,11 @@
 // Novo lançamento: saída, entrada ou compra no cartão
 import { brl, esc, hojeISO, lerValor, somarMeses, nomeMes, parseISO, dataCompleta, VALOR_MAXIMO, valorMaximoTexto } from '../lib/format.js';
 import { store, cartoesAtivos, buscar } from '../lib/store.js';
-import { criarLancamentos, excluirLancamentos, criarCompra, excluirCompra, pessoaPorNome } from '../lib/api.js';
+import { criarLancamentos, excluirLancamentos, criarCompra, excluirCompra, pessoaPorNome, procurarParecido } from '../lib/api.js';
+import { autor, nomeCategoria } from '../lib/store.js';
+import { desfazendo } from '../components/lancamento.js';
 import { faturaDe, vencimentoFatura, dividirParcelas } from '../lib/faturas.js';
-import { icone, toast, mascaraDinheiro, erroNoCampo, limparErros } from '../lib/ui.js';
+import { icone, toast, mascaraDinheiro, erroNoCampo, limparErros, dialogo } from '../lib/ui.js';
 import { campoValor, campoDescricao, campoCategoria, camposCaixa, lerCamposCaixa } from '../components/form-lancamento.js';
 
 let ultimoModo = 'saida';
@@ -123,11 +125,11 @@ export default {
         if (modo() === 'cartao') {
           const salvo = await salvarCompra(form, botao);
           if (!salvo) return;
-          toast(salvo.mensagem, { acao: { texto: 'Desfazer', fn: async () => { await excluirCompra(salvo.id); toast('Compra removida'); } } });
+          toast(salvo.mensagem, { acao: desfazendo(() => excluirCompra(salvo.id)) });
         } else {
           const salvo = await salvarCaixa(form, botao, modo());
           if (!salvo) return;
-          toast(salvo.mensagem, { acao: { texto: 'Desfazer', fn: async () => { await excluirLancamentos(salvo.ids); toast('Lançamento removido'); } } });
+          toast(salvo.mensagem, { acao: desfazendo(() => excluirLancamentos(salvo.ids)) });
         }
         // limpa para lançar o próximo, mantendo tipo, conta e cartão escolhidos
         form.valor.value = '';
@@ -150,6 +152,7 @@ export default {
 async function salvarCaixa(form, botao, tipo) {
   const dados = lerCamposCaixa(form, tipo);
   if (!dados) return null;
+  if (!(await podeSalvarMesmoParecido({ tipo, valor: dados.valor, data: dados.vencimento, categoria_id: dados.categoria_id, descricao: dados.descricao }))) return null;
   botao.disabled = true;
   const { pessoaNome, ...base } = dados;
   base.pessoa_id = await pessoaPorNome(pessoaNome);
@@ -181,6 +184,7 @@ async function salvarCompra(form, botao) {
   if (!categoria_id) { erroNoCampo(form, 'categoria_id', 'Escolha uma categoria.'); ok = false; }
   if (!form.data_compra.value) { erroNoCampo(form, 'data_compra', 'Escolha a data da compra.'); ok = false; }
   if (!ok) { form.querySelector('[aria-invalid]').focus(); return null; }
+  if (!(await podeSalvarMesmoParecido({ tipo: 'cartao', valor: total, data: form.data_compra.value, categoria_id, descricao }))) return null;
 
   botao.disabled = true;
   const cartao = buscar('cartoes', form.cartao_id.value);
@@ -190,4 +194,47 @@ async function salvarCompra(form, botao) {
     dividirParcelas(total, n).map((valor, i) => ({ numero: i + 1, valor, fatura_mes: faturaDe(cartao, form.data_compra.value, i) })),
   );
   return { id: compra.id, mensagem: n > 1 ? `${n} parcelas lançadas no ${cartao.nome}` : `Compra lançada no ${cartao.nome}` };
+}
+
+/**
+ * Se a outra pessoa (ou você, há poucos minutos) já lançou algo igual, pergunta antes de salvar.
+ * Retorna true para salvar, false para não salvar.
+ */
+async function podeSalvarMesmoParecido(dados) {
+  const igual = await procurarParecido(dados);
+  if (!igual) return true;
+  const quem = autor(igual.criado_por);
+  const ehOutro = quem && !quem.souEu;
+  const minutos = Math.max(1, Math.round((Date.now() - new Date(igual.criado_em)) / 60000));
+  const horario = new Date(igual.criado_em).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+  const oQue = dados.tipo === 'entrada' ? 'uma entrada semelhante a esta' : 'um gasto semelhante a este';
+  const titulo = ehOutro ? `${quem.nome} lançou ${oQue}` : `Você já lançou ${oQue}`;
+  const onde = igual.origem === 'cartao' ? `no ${esc(buscar('cartoes', igual.cartao_id)?.nome || 'cartão')}` : `em ${esc(buscar('contas', igual.conta_id)?.nome || 'conta')}`;
+  return new Promise((resolver) => {
+    const d = dialogo({
+      titulo: ehOutro ? 'Gasto parecido já lançado' : 'Lançamento repetido?',
+      largura: 'max-w-md',
+      corpo: `
+        <p class="text-stone-700 dark:text-stone-300"><strong>${esc(titulo)}</strong>${ehOutro ? '' : ` há ${minutos} min`}. Deseja continuar mesmo assim?</p>
+        <div class="mt-4 flex items-center gap-3 rounded-xl border border-stone-200 p-3 dark:border-stone-700">
+          <span class="min-w-0 flex-1"><span class="block truncate font-semibold">${esc(igual.descricao)}</span>
+          <span class="block text-sm text-stone-600 dark:text-stone-400">${esc(nomeCategoria(igual.categoria_id))} · ${onde} · ${ehOutro ? `lançado por ${esc(quem.nome)} ` : ''}às ${horario}</span></span>
+          <span class="font-semibold tabular-nums">${brl(igual.valorTotal)}</span>
+        </div>
+        <div class="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+          <button type="button" class="btn-neutro" data-r="sim">Lançar mesmo assim</button>
+          <button type="button" class="btn-primario" data-r="nao">Não lançar</button>
+        </div>`,
+    });
+    let resposta = false;
+    d.addEventListener('click', (e) => {
+      const b = e.target.closest('[data-r]');
+      if (b) { resposta = b.dataset.r === 'sim'; d.close(); }
+    });
+    d.addEventListener('close', () => {
+      if (!resposta) toast('Não foi lançado. Nada mudou.');
+      resolver(resposta);
+    });
+    d.querySelector('[data-r="nao"]').focus();
+  });
 }

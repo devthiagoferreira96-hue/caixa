@@ -7,4 +7,4 @@ drop view if exists saldo_contas;
 drop table if exists parcelas, compras_cartao, lancamentos, pessoas, categorias,
   cartoes, contas, tentativas_convite, membros, familias cascade;
 drop function if exists criar_familia(text), entrar_familia(text), eh_membro(uuid),
-  gerar_codigo_convite(), conferir_mesma_familia() cascade;
+  gerar_codigo_convite(), conferir_mesma_familia(), marcar_autoria(), nome_padrao() cascade;

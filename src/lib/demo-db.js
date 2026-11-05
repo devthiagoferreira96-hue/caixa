@@ -10,16 +10,21 @@ import { somarDias, toISO, hoje } from './format.js';
 import { criarConsultas, tabelasVazias } from './consulta-local.js';
 import * as armazenamento from './armazenamento.js';
 
-const CHAVE = 'demo-servidor';
+const CHAVE = 'demo-servidor-v2';
+const ID_THIAGO = 'usuario-demo';
+const ID_THAYS = 'usuario-thays';
 
 export function criarDemo() {
   const FAMILIA = 'familia-demo';
-  const USUARIO = { id: 'usuario-demo', email: 'demonstracao@caixa.app' };
+  const USUARIO = { id: ID_THIAGO, email: 'demonstracao@caixa.app' };
   const banco = { tabelas: {}, familiaId: FAMILIA, aoMudar: () => armazenamento.gravar(CHAVE, banco.tabelas).catch(() => {}) };
   const novasTabelas = () => ({
     ...tabelasVazias(),
     familias: [{ id: FAMILIA, nome: 'Família Demonstração', codigo_convite: 'DEMO42' }],
-    membros: [{ familia_id: FAMILIA, user_id: USUARIO.id }],
+    membros: [
+      { familia_id: FAMILIA, user_id: ID_THIAGO, nome: 'Thiago' },
+      { familia_id: FAMILIA, user_id: ID_THAYS, nome: 'Thays' },
+    ],
   });
   const consultar = criarConsultas(banco);
   const inserir = (tabela, obj) => {
@@ -45,6 +50,20 @@ export function criarDemo() {
       // responde como a internet: espera um pouco e falha se estiver offline
       q.then = (ok, falha) => pronto.then(espera).then(() => (semRede() ? respostaSemRede : q.executar())).then(ok, falha);
       return q;
+    },
+    // Só no modo demonstração: simula a outra pessoa da família lançando algo no celular dela
+    demo: {
+      async outraPessoaLanca() {
+        await pronto;
+        const t = banco.tabelas;
+        inserir('lancamentos', {
+          tipo: 'saida', valor: 12, descricao: 'Lanche', pago: true,
+          categoria_id: t.categorias.find((c) => c.nome === 'Restaurantes/Padarias')?.id,
+          conta_id: t.contas.find((c) => c.nome === 'Nubank')?.id,
+          vencimento: toISO(hoje()), data_pagamento: toISO(hoje()),
+          criado_por: ID_THAYS, criado_em: new Date().toISOString(),
+        });
+      },
     },
     rpc: async () => (await espera(), semRede() ? respostaSemRede : { data: FAMILIA, error: null }),
     auth: {
@@ -97,10 +116,16 @@ function popular(inserir) {
   const maria = inserir('pessoas', { nome: 'Maria', tipo: 'Prestador' }).id;
   inserir('pessoas', { nome: 'Thays', tipo: 'Família' });
 
+  let vez = 0;
+  const autoria = (data) => ({
+    criado_por: vez++ % 3 === 1 ? ID_THAYS : ID_THIAGO,
+    criado_em: new Date(`${data}T${String(9 + (vez % 10)).padStart(2, '0')}:15:00`).toISOString(),
+  });
   const L = (tipo, valor, descricao, categoria, conta, dias, pago, pessoa_id = null) =>
     inserir('lancamentos', {
       tipo, valor, descricao, categoria_id: cat[categoria], conta_id: contas[conta],
       vencimento: somarDias(dias), pago, data_pagamento: pago ? somarDias(Math.min(dias, 0)) : null, pessoa_id,
+      ...autoria(somarDias(Math.min(dias, 0))),
     });
   L('saida', 180.9, 'Conta de luz', 'Despesas Fixas Casa', 'Nubank', -6, true);
   L('saida', 2400, 'Salário do João', 'Despesas Fazenda', 'MMP', 2, false, joao);
@@ -117,6 +142,7 @@ function popular(inserir) {
     const data_compra = somarDias(dias);
     const compra = inserir('compras_cartao', {
       cartao_id: cartao.id, data_compra, valor_total: total, qtd_parcelas: n, descricao, categoria_id: cat[categoria],
+      ...autoria(data_compra),
     });
     dividirParcelas(total, n).forEach((valor, i) =>
       inserir('parcelas', { compra_id: compra.id, numero: i + 1, valor, fatura_mes: faturaDe(cartao, data_compra, i) }),

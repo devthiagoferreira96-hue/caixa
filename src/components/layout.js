@@ -1,7 +1,8 @@
 // Estrutura fixa da tela: menu lateral (computador), menu de baixo (celular) e cabeçalho
 import { esc, nomeMes, inicioMes } from '../lib/format.js';
 import { store } from '../lib/store.js';
-import { modoDemo } from '../lib/supabase.js';
+import { modoDemo, supabase } from '../lib/supabase.js';
+import { sincronizar } from '../lib/sync.js';
 import { icone } from '../lib/ui.js';
 import { faixaConexao } from './conexao.js';
 
@@ -32,7 +33,8 @@ export function montarLayout() {
 
     <div class="lg:pl-64">
       ${modoDemo ? `<div class="bg-amber-100 px-4 py-2 text-center text-sm text-amber-900 dark:bg-amber-900/50 dark:text-amber-100" role="note">
-        <strong>Modo demonstração:</strong> dados de exemplo, guardados só neste navegador. Configure o Supabase no arquivo <code>.env</code> para usar de verdade.</div>` : ''}
+        <strong>Modo demonstração:</strong> dados de exemplo, guardados só neste navegador. Configure o Supabase no arquivo <code>.env</code> para usar de verdade.
+        <button type="button" data-simular class="ml-1 inline-flex min-h-6 cursor-pointer items-center px-1 py-0.5 font-semibold underline underline-offset-2">Simular a Thays lançando um lanche</button></div>` : ''}
       ${faixaConexao()}
       <header class="sticky top-0 z-20 border-b border-transparent bg-stone-100/90 backdrop-blur dark:bg-stone-950/90">
         <div class="mx-auto flex max-w-6xl flex-wrap items-center gap-x-2 gap-y-1 px-4 py-3 lg:px-8 lg:py-5">
@@ -57,6 +59,12 @@ export function montarLayout() {
     <div id="toasts" class="pointer-events-none fixed inset-x-0 bottom-24 z-[60] flex flex-col items-center gap-2 px-4 lg:bottom-6 lg:pl-64"></div>`;
 
   document.dispatchEvent(new Event('caixa:layout'));
+
+  // Modo demonstração: simula a outra pessoa lançando algo no celular dela
+  document.querySelector('[data-simular]')?.addEventListener('click', async () => {
+    await supabase.demo.outraPessoaLanca();
+    sincronizar();
+  });
 
   // "Pular para o conteúdo" sem trocar a rota (o # é usado pelas telas)
   document.querySelector('[data-pular]').onclick = (e) => {
