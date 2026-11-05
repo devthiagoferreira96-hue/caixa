@@ -30,7 +30,8 @@ create table contas (                -- Espécie, MMP, Nubank, TMP, M.C.
   id bigint generated always as identity primary key,
   familia_id uuid not null references familias(id) on delete cascade,
   nome text not null,
-  saldo_inicial numeric(12,2) not null default 0,   -- saldo que já existia antes de usar o sistema
+  saldo_inicial numeric(12,2) not null default 0    -- saldo que já existia antes de usar o sistema
+    check (saldo_inicial between -99999999.99 and 99999999.99),
   ativa boolean not null default true
 );
 
@@ -63,7 +64,7 @@ create table lancamentos (
   id bigint generated always as identity primary key,
   familia_id uuid not null references familias(id) on delete cascade,
   tipo text not null check (tipo in ('saida','entrada')),
-  valor numeric(12,2) not null check (valor > 0),
+  valor numeric(12,2) not null check (valor > 0 and valor <= 99999999.99),  -- até R$ 99.999.999,99
   descricao text not null,
   vencimento date not null,
   pago boolean not null default false,          -- STATUS "OK"
@@ -85,7 +86,7 @@ create table compras_cartao (
   familia_id uuid not null references familias(id) on delete cascade,
   cartao_id bigint not null references cartoes(id) on delete cascade,
   data_compra date not null,
-  valor_total numeric(12,2) not null check (valor_total > 0),
+  valor_total numeric(12,2) not null check (valor_total > 0 and valor_total <= 99999999.99),
   qtd_parcelas int not null default 1 check (qtd_parcelas between 1 and 48),
   descricao text not null,
   categoria_id bigint references categorias(id),
