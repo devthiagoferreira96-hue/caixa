@@ -57,7 +57,7 @@ export default {
         <div class="grid gap-4">
           ${grupos.length ? grupos.map((g) => `
           <section class="card" aria-labelledby="g-${esc(g.grupo)}">
-            <div class="mb-2 flex items-baseline justify-between gap-2">
+            <div class="mb-2 flex flex-wrap items-baseline justify-between gap-x-2">
               <h2 id="g-${esc(g.grupo)}" class="font-bold">${esc(g.grupo)}</h2>
               <p class="text-sm text-stone-600 dark:text-stone-400"><span class="font-semibold text-stone-900 tabular-nums dark:text-stone-100">${brl(g.total)}</span> · ${porcentagem((g.total / atual.valor) * 100)} do mês</p>
             </div>
@@ -83,7 +83,7 @@ export default {
               const p = buscar('pessoas', id);
               return `<li class="flex items-center justify-between gap-2 border-t border-stone-100 py-2.5 first:border-t-0 dark:border-stone-800">
                 <span><span class="block font-medium">${esc(p?.nome || 'Pessoa removida')}</span><span class="text-sm text-stone-600 dark:text-stone-400">${esc(p?.tipo || '')}</span></span>
-                <span class="font-semibold tabular-nums">${brl(v)}</span></li>`;
+                <span class="shrink-0 font-semibold tabular-nums">${brl(v)}</span></li>`;
             }).join('')}</ul>` : estadoVazio('Ninguém neste mês', 'Preencha o campo "Pessoa" ao lançar pagamentos de funcionários e prestadores.')}
           </section>
         </div>

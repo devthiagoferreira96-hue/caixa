@@ -43,7 +43,11 @@ export function toast(mensagem, { tipo = 'ok', acao } = {}) {
     'pointer-events-auto flex w-full max-w-md items-center gap-3 rounded-xl px-4 py-3 text-sm shadow-lg animate-entrar ' +
     (tipo === 'erro' ? 'bg-red-700 text-white' : 'bg-stone-900 text-white dark:bg-stone-100 dark:text-stone-900');
   el.setAttribute('role', tipo === 'erro' ? 'alert' : 'status');
-  el.innerHTML = `${icone(tipo === 'erro' ? 'alerta' : 'check')}<span class="flex-1">${esc(mensagem)}</span>`;
+  // nomes enormes sem espaço deixariam o aviso com várias linhas: encurta só para exibir
+  let texto = String(mensagem).replace(/\S{31,}/g, (p) => `${p.slice(0, 28)}…`);
+  if (texto.length > 160) texto = `${texto.slice(0, 157)}…`;
+  el.innerHTML = `${icone(tipo === 'erro' ? 'alerta' : 'check')}<span class="min-w-0 flex-1">${esc(texto)}</span>`;
+  if (texto !== String(mensagem)) el.title = mensagem;
   if (acao) {
     const b = document.createElement('button');
     b.type = 'button';

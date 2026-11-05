@@ -1,5 +1,5 @@
 // Gráficos feitos com HTML puro (sem biblioteca): barras horizontais e colunas por mês
-import { esc, brl, porcentagem, diaMes } from '../lib/format.js';
+import { esc, brl, brlCurto, porcentagem, diaMes } from '../lib/format.js';
 import { store, buscar } from '../lib/store.js';
 import { dialogo, icone } from '../lib/ui.js';
 import { itensDaCategoria, somar } from '../lib/calculos.js';
@@ -21,11 +21,11 @@ export function barrasCategorias(totais, categorias, { mostrarZeradas = true } =
       return `<li><button type="button" data-categoria="${d.id}" ${d.valor ? '' : 'disabled'}
         class="group grid w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1 rounded-lg px-2 py-1.5 text-left transition enabled:cursor-pointer enabled:hover:bg-stone-100 sm:grid-cols-[minmax(0,10rem)_1fr_auto] dark:enabled:hover:bg-stone-800"
         aria-label="${esc(d.nome)}: ${brl(d.valor)}${d.valor ? `, ${porcentagem(pct)} do total. Ver detalhes` : ', sem gastos'}">
-        <span class="truncate text-sm ${d.valor ? '' : 'text-stone-400 dark:text-stone-600 dark:text-stone-400'}">${esc(d.nome)}</span>
+        <span class="truncate text-sm ${d.valor ? '' : 'text-stone-400 dark:text-stone-400'}">${esc(d.nome)}</span>
         <span class="col-span-2 row-start-2 h-2.5 sm:col-span-1 sm:row-start-auto" aria-hidden="true">
           ${d.valor ? `<span class="block h-full rounded-r bg-brand-600 transition group-hover:bg-brand-500 dark:bg-brand-500" style="width:${Math.max((d.valor / maior) * 100, 1.5)}%"></span>` : ''}
         </span>
-        <span class="text-right text-sm font-semibold tabular-nums ${d.valor ? '' : 'font-normal text-stone-400 dark:text-stone-600 dark:text-stone-400'}">${d.valor ? brl(d.valor) : '—'}</span>
+        <span class="shrink-0 text-right text-sm font-semibold tabular-nums ${d.valor ? '' : 'font-normal text-stone-400 dark:text-stone-400'}">${d.valor ? brl(d.valor) : '—'}</span>
       </button></li>`;
     })
     .join('')}</ul>`;
@@ -59,7 +59,7 @@ export function colunasMeses(meses, mesAtivo) {
       return `<li class="flex h-full flex-1 flex-col items-center justify-end">
         <button type="button" data-mes="${m.data.toISOString()}" class="group flex h-full w-full cursor-pointer flex-col items-center justify-end gap-1 rounded-lg pt-1 transition hover:bg-stone-100 dark:hover:bg-stone-800"
           aria-label="${esc(m.rotuloLongo)}: ${brl(m.valor)}${ativo ? ' (mês escolhido)' : '. Ver este mês'}" aria-current="${ativo ? 'true' : 'false'}">
-          <span class="text-xs font-semibold tabular-nums ${ativo ? '' : 'text-stone-600 dark:text-stone-400'}">${m.valor ? brl(m.valor).replace(',00', '') : ''}</span>
+          <span class="text-xs font-semibold tabular-nums ${ativo ? '' : 'hidden text-stone-600 sm:inline dark:text-stone-400'}" title="${brl(m.valor)}">${m.valor ? brlCurto(m.valor).replace(',00', '') : ''}</span>
           <span class="block w-full max-w-12 rounded-t-md transition ${ativo ? 'bg-brand-600 dark:bg-brand-500' : 'bg-brand-200 group-hover:bg-brand-300 dark:bg-brand-900 dark:group-hover:bg-brand-800'}" style="height:${Math.max((m.valor / maior) * 75, m.valor ? 2 : 0)}%"></span>
           <span class="pb-1 text-xs ${ativo ? 'font-bold' : 'text-stone-600 dark:text-stone-400'}">${esc(m.rotulo)}</span>
         </button></li>`;

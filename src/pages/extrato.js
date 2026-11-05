@@ -63,10 +63,10 @@ export default {
       const ent = somar(entradas(visiveis));
       const sai = somar(saidasReais(visiveis)) + somar(visiveis.filter((l) => l.fatura_cartao_id));
       resultado.innerHTML = `
-        <dl class="mb-4 grid grid-cols-3 gap-2 text-sm" aria-live="polite">
-          <div class="card p-3 sm:p-3"><dt class="text-stone-600 dark:text-stone-400">Entradas</dt><dd class="font-semibold tabular-nums valor-entrada">${brl(ent)}</dd></div>
-          <div class="card p-3 sm:p-3"><dt class="text-stone-600 dark:text-stone-400">Saídas</dt><dd class="font-semibold tabular-nums valor-saida">${brl(sai)}</dd></div>
-          <div class="card p-3 sm:p-3"><dt class="text-stone-600 dark:text-stone-400">${visiveis.length} ${visiveis.length === 1 ? 'lançamento' : 'lançamentos'}</dt><dd class="font-semibold tabular-nums">${brl(ent - sai)}</dd></div>
+        <dl class="card mb-4 grid gap-x-4 gap-y-1 p-3 text-sm sm:grid-cols-3 sm:p-3" aria-live="polite">
+          ${[['Entradas', brl(ent), 'valor-entrada'], ['Saídas', brl(sai), 'valor-saida'],
+             [`Saldo (${visiveis.length} ${visiveis.length === 1 ? 'lançamento' : 'lançamentos'})`, brl(ent - sai), ent - sai < 0 ? 'valor-saida' : '']]
+            .map(([r, v, c]) => `<div class="flex flex-wrap items-baseline justify-between gap-x-3 sm:block"><dt class="text-stone-600 dark:text-stone-400">${r}</dt><dd class="font-semibold tabular-nums ${c}">${v}</dd></div>`).join('')}
         </dl>
         ${visiveis.length
           ? [...porDia].map(([dia, itens]) => `
