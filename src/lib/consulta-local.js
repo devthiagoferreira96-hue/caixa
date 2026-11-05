@@ -10,7 +10,7 @@ const COM_DATA = ['lancamentos', 'compras_cartao'];
 const PADROES = {
   contas: { ativa: true, saldo_inicial: 0 },
   cartoes: { ativo: true },
-  categorias: { grupo: 'Casa', no_grafico: true },
+  categorias: { grupo: 'Casa', no_grafico: true, tipo: 'saida' },
   pessoas: { tipo: 'Outro' },
   lancamentos: { pago: false },
 };

@@ -109,6 +109,10 @@ export function gerarExcel(periodo) {
     [T('Sobrou (entradas − gastos)', E.negrito), N(r.saldo, E.totalDinheiro)],
     [T('Ainda a pagar no período'), N(r.aPagar)],
     [],
+    [T('Resultado por área', E.cabecalho), T('Entradas', E.cabecalho), T('Gastos', E.cabecalho), T('Resultado', E.cabecalho)],
+    ...d.areas.map((a) => [T(a.area), N(a.entradas), N(a.gastos), N(a.resultado)]),
+    [T('Casa = tudo que não é dos grupos Fazenda e Empresa.')],
+    [],
     [T('Saldo das contas hoje', E.cabecalho), T('', E.cabecalho)],
     ...d.contas.map((c) => [T(c.ativa ? c.conta : `${c.conta} (desativada)`), N(c.saldo)]),
   ];
@@ -137,7 +141,7 @@ export function gerarExcel(periodo) {
     ])];
 
   const abas = [
-    { nome: 'Resumo', linhas: resumo, larguras: [34, 20] },
+    { nome: 'Resumo', linhas: resumo, larguras: [34, 20, 20, 20] },
     { nome: 'Lançamentos', linhas: lancamentos, larguras: [12, 34, 20, 28, 14, 16, 19, 11], congelar: 1, filtro: `A1:H${linhasL.length + 1}` },
     { nome: 'Cartões', linhas: cartoes, larguras: [10, 15, 18, 32, 28, 10, 19], congelar: 1, filtro: `A1:G${linhasC.length + 1}` },
     { nome: 'Por categoria', linhas: categorias, larguras: [30, 14, 19, 19, 19, 13], congelar: 1, filtro: `A1:F${linhasG.length + 1}` },

@@ -6,6 +6,7 @@
 import { local } from './local-db.js';
 import { store } from './store.js';
 import { mesISO } from './format.js';
+import { TIPO_PADRAO } from './exemplo.js';
 
 /** Transforma erros técnicos em mensagens que qualquer pessoa entende */
 export function traduzirErro(e) {
@@ -50,6 +51,33 @@ const valoresAnteriores = (antes, valores) => Object.fromEntries(Object.keys(val
 export async function carregarCadastros() {
   for (const t of ['contas', 'cartoes', 'categorias', 'pessoas']) {
     store[t] = ok(await local.from(t).select('*').order('nome'));
+  }
+  if (store.categorias.some((c) => !c.tipo)) {
+    await completarTipoDasCategorias();
+    store.categorias = ok(await local.from('categorias').select('*').order('nome'));
+  }
+}
+
+/**
+ * Dados de versões anteriores não tinham o tipo da categoria.
+ * O tipo é deduzido do nome (Venda = entrada etc.) e do uso: se a categoria já foi usada
+ * em entradas e saídas, vira "os dois". Assim nenhum lançamento antigo fica inválido.
+ * Aproveita para levar "Venda" do grupo Financeiro para Fazenda (é a venda da produção).
+ */
+async function completarTipoDasCategorias() {
+  const { lancamentos, compras_cartao: compras } = local.tabelas();
+  const usos = new Map();
+  const marcar = (id, tipo) => id && (usos.get(id) || usos.set(id, new Set()).get(id)).add(tipo);
+  lancamentos.filter((l) => !l.fatura_cartao_id).forEach((l) => marcar(l.categoria_id, l.tipo));
+  compras.forEach((c) => marcar(c.categoria_id, 'saida'));
+
+  for (const c of store.categorias.filter((x) => !x.tipo)) {
+    const tipos = new Set(usos.get(c.id) || []);
+    if (TIPO_PADRAO[c.nome] === 'ambos') tipos.add('entrada').add('saida');
+    else tipos.add(TIPO_PADRAO[c.nome] || (tipos.size ? [...tipos][0] : 'saida'));
+    const valores = { tipo: tipos.size > 1 ? 'ambos' : [...tipos][0] };
+    if (c.nome === 'Venda' && c.grupo === 'Financeiro') valores.grupo = 'Fazenda';
+    await alterar('categorias', [c.id], valores);
   }
 }
 

@@ -6,6 +6,15 @@ import { faturaDe, dividirParcelas } from './faturas.js';
 import { somarDias, toISO, hoje } from './format.js';
 import { criarConsultas, tabelasVazias } from './consulta-local.js';
 
+/** Categorias da planilha que não são de saída */
+export const TIPO_PADRAO = {
+  Venda: 'entrada',
+  'Rendimentos Bancários': 'entrada',
+  'Empréstimos Bancários': 'ambos', // entra quando pega, sai quando paga
+  'Empréstimos Dívidas': 'ambos',
+  'Ajuste Caixa': 'ambos', // corrige o saldo para mais ou para menos
+};
+
 /** Retorna as tabelas prontas para começar a usar */
 export function dadosIniciais({ comExemplo = false } = {}) {
   const banco = { tabelas: tabelasVazias() };
@@ -31,11 +40,11 @@ export function dadosIniciais({ comExemplo = false } = {}) {
     ['Restaurantes/Padarias', 'Casa', true], ['Veículo', 'Casa', true], ["Cigarro/Vap's", 'Casa', true],
     ['Despesas Fazenda', 'Fazenda', false], ['Insumos Fazenda', 'Fazenda', false], ['Cargas', 'Fazenda', false],
     ['Despesas Empresas', 'Empresa', false], ['Jurídico', 'Empresa', false],
-    ['Venda', 'Financeiro', false], ['Rendimentos Bancários', 'Financeiro', false],
+    ['Venda', 'Fazenda', false], ['Rendimentos Bancários', 'Financeiro', false],
     ['Empréstimos Bancários', 'Financeiro', false], ['Empréstimos Dívidas', 'Financeiro', false],
     ['Tarifas Bancárias', 'Financeiro', false], ['Ajuste Caixa', 'Financeiro', false],
     ['Assinatura Canais', 'Serviços', false], ['Segurança', 'Serviços', false], ['Telefone', 'Serviços', false],
-  ].forEach(([nome, grupo, no_grafico]) => (cat[nome] = inserir('categorias', { nome, grupo, no_grafico }).id));
+  ].forEach(([nome, grupo, no_grafico]) => (cat[nome] = inserir('categorias', { nome, grupo, no_grafico, tipo: TIPO_PADRAO[nome] || 'saida' }).id));
 
   if (comExemplo) exemplos(inserir, { contas, cartoes, cat });
   return banco.tabelas;
@@ -62,6 +71,7 @@ function exemplos(inserir, { contas, cartoes, cat }) {
   L('saida', 650, 'Ração do gado', 'Insumos Fazenda', 'MMP', -2, false);
   L('entrada', 8500, 'Venda de bezerros', 'Venda', 'MMP', -3, true);
   L('saida', 99.9, 'Internet', 'Telefone', 'Nubank', 5, false);
+  L('entrada', 38.5, 'Rendimento da poupança', 'Rendimentos Bancários', 'Nubank', -1, true);
   L('saida', 320, 'Diarista', 'Despesas Fixas Casa', 'Espécie', -1, true, maria);
   L('saida', 145, 'Pizzaria', 'Restaurantes/Padarias', 'Nubank', -2, true);
   L('saida', 230, 'Gasolina', 'Veículo', 'Nubank', -1, true);

@@ -1,9 +1,9 @@
 // Junta os dados de um período para exportar em Excel ou PDF.
 // Tudo é lido das tabelas locais; nada sai do aparelho até a pessoa compartilhar o arquivo.
 import { local } from './local-db.js';
-import { store } from './store.js';
+import { store, areaDaCategoria, GRUPOS_SEPARADOS } from './store.js';
 import { mesISO, nomeMes, dataCompleta, hojeISO } from './format.js';
-import { saidasReais, entradas, somar } from './calculos.js';
+import { saidasReais, entradas, somar, resumoPorArea } from './calculos.js';
 
 /** Períodos que a pessoa pode escolher */
 export function periodos(mes = store.mes) {
@@ -88,6 +88,10 @@ export function dadosDoPeriodo(periodo) {
     .forEach((l) => saldos.set(l.conta_id, saldos.get(l.conta_id) + (l.tipo === 'entrada' ? 1 : -1) * Number(l.valor)));
   const contas = store.contas.map((c) => ({ conta: c.nome, saldo: saldos.get(c.id), ativa: c.ativa !== false }));
 
+  const porArea = resumoPorArea(lancs, parcelas, areaDaCategoria, ['Casa', ...GRUPOS_SEPARADOS]);
+  const areas = Object.entries(porArea)
+    .filter(([nome, a]) => nome === 'Casa' || a.movimentos > 0)
+    .map(([nome, a]) => ({ area: nome, entradas: a.entradas, gastos: a.gastos, resultado: a.resultado }));
   const totalEntradas = somar(entradas(lancs));
   const totalCaixa = somar(saidasReais(lancs));
   const totalCartao = somar(parcelas);
@@ -96,6 +100,7 @@ export function dadosDoPeriodo(periodo) {
     cartao,
     categorias,
     contas,
+    areas,
     resumo: {
       entradas: totalEntradas,
       saidasCaixa: totalCaixa,

@@ -242,6 +242,18 @@ export function gerarPDF(periodo) {
   doc.texto(MARGEM, doc.y - 4, `Gastos no caixa: ${reais(r.saidasCaixa)}   ·   Gastos no cartão (faturas do período): ${reais(r.cartao)}`, { tam: 8.5, c: COR.suave, largura: UTIL });
   doc.y -= 8;
 
+  // Casa, Fazenda e Empresa separadas
+  doc.titulo('Resultado por área');
+  doc.tabela(
+    [{ titulo: 'Área', largura: UTIL - 3 * 110 }, { titulo: 'Entradas', largura: 110, direita: true },
+      { titulo: 'Gastos', largura: 110, direita: true }, { titulo: 'Resultado', largura: 110, direita: true }],
+    d.areas.map((a) => [a.area === 'Casa' ? 'Casa (sem Fazenda e Empresa)' : a.area, reais(a.entradas), reais(a.gastos), reais(a.resultado)]),
+    {
+      cores: (i, j) => (j === 3 ? (d.areas[i].resultado < 0 ? COR.vermelho : COR.verde) : null),
+      total: ['Geral', reais(r.entradas), reais(r.gastos), reais(r.saldo)],
+    },
+  );
+
   // Por categoria, com barrinha
   doc.titulo('Gastos por categoria');
   const maior = Math.max(...d.categorias.map((c) => c.total), 1);

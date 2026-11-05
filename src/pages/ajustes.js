@@ -1,6 +1,6 @@
 // Ajustes: backup, contas, cartões, categorias, pessoas, aparência, usuário e senha
 import { esc, valorParaCampo, lerValor, VALOR_MAXIMO, valorMaximoTexto, dataCompleta } from '../lib/format.js';
-import { store, categoriasPorGrupo } from '../lib/store.js';
+import { store, categoriasPorGrupo, TIPOS_CATEGORIA } from '../lib/store.js';
 import { salvarItem, excluirItem } from '../lib/api.js';
 import { local } from '../lib/local-db.js';
 import { desfazendo } from '../components/lancamento.js';
@@ -37,12 +37,13 @@ const LISTAS = {
   },
   categorias: {
     titulo: 'Categorias', icone: 'etiqueta',
-    explicacao: 'Organizam os gastos. Marque <strong>No gráfico</strong> para a categoria aparecer no gráfico do Início. O <strong>grupo</strong> separa Casa, Fazenda, Empresa etc. no Relatório.',
-    novo: { nome: '', grupo: 'Casa', no_grafico: true },
+    explicacao: 'O <strong>tipo</strong> diz se a categoria é de saída, de entrada ou dos dois (como Empréstimos); no lançamento só aparecem as do tipo certo. O <strong>grupo</strong> separa Casa, Fazenda, Empresa etc.: os grupos <strong>Fazenda</strong> e <strong>Empresa</strong> ficam fora do Resumo da casa e ganham um quadro próprio no Início. Marque <strong>No gráfico</strong> para a categoria aparecer no gráfico do Início.',
+    novo: { nome: '', grupo: 'Casa', tipo: 'saida', no_grafico: true },
     campos: [
-      { nome: 'nome', rotulo: 'Nome', tipo: 'texto', largura: 'sm:col-span-5' },
-      { nome: 'grupo', rotulo: 'Grupo', tipo: 'grupo', largura: 'sm:col-span-4' },
-      { nome: 'no_grafico', rotulo: 'No gráfico', tipo: 'marcar', largura: 'sm:col-span-3' },
+      { nome: 'nome', rotulo: 'Nome', tipo: 'texto', largura: 'sm:col-span-4' },
+      { nome: 'grupo', rotulo: 'Grupo', tipo: 'grupo', largura: 'sm:col-span-3' },
+      { nome: 'tipo', rotulo: 'Tipo', tipo: 'opcoes', opcoes: TIPOS_CATEGORIA, largura: 'sm:col-span-3' },
+      { nome: 'no_grafico', rotulo: 'No gráfico', tipo: 'marcar', largura: 'sm:col-span-2' },
     ],
     dicaExcluir: 'Categorias já usadas não podem ser excluídas; renomeie se precisar.',
   },
@@ -221,7 +222,10 @@ function linha(tabela, def, item) {
       if (c.tipo === 'dinheiro') campo = `<input id="${id}" name="${c.nome}" class="campo tabular-nums" inputmode="numeric" data-dinheiro value="${valorParaCampo(Math.abs(valor))}" placeholder="0,00">
         <label class="mt-1 flex items-center gap-1.5 text-xs"><input type="checkbox" name="${c.nome}_negativo" class="accent-red-700" ${valor < 0 ? 'checked' : ''}> negativo</label>`;
       else if (c.tipo === 'dia') campo = `<input id="${id}" name="${c.nome}" type="number" min="1" max="31" class="campo" value="${valor}">`;
-      else if (c.tipo === 'opcoes') campo = `<select id="${id}" name="${c.nome}" class="campo">${c.opcoes.map((o) => `<option ${o === valor ? 'selected' : ''}>${o}</option>`).join('')}</select>`;
+      else if (c.tipo === 'opcoes') campo = `<select id="${id}" name="${c.nome}" class="campo">${c.opcoes.map((o) => {
+        const [v, texto] = Array.isArray(o) ? o : [o, o];
+        return `<option value="${esc(v)}" ${v === (valor ?? (tabela === 'categorias' ? 'saida' : '')) ? 'selected' : ''}>${esc(texto)}</option>`;
+      }).join('')}</select>`;
       else if (c.tipo === 'grupo') campo = `<input id="${id}" name="${c.nome}" class="campo" list="grupos-lista" value="${esc(valor)}">`;
       else campo = `<input id="${id}" name="${c.nome}" class="campo" maxlength="60" value="${esc(valor)}" ${novo ? 'placeholder="Nome do novo item"' : ''}>`;
       return `<div class="${c.nome === 'nome' ? 'col-span-2' : 'col-span-1'} ${c.largura}">${rotulo}${campo}</div>`;
@@ -251,6 +255,14 @@ function lerLinha(form, def) {
     } else item[c.nome] = campo.value.trim();
   }
   if ('grupo' in item && !item.grupo) item.grupo = 'Outros';
+  if (form.dataset.tabela === 'categorias' && item.id) {
+    // não deixa mudar o tipo se já há lançamentos do outro tipo nessa categoria
+    const { lancamentos, compras_cartao: compras } = local.tabelas();
+    const usadaEm = (t) => lancamentos.some((l) => l.categoria_id === item.id && l.tipo === t && !l.fatura_cartao_id)
+      || (t === 'saida' && compras.some((c) => c.categoria_id === item.id));
+    if (item.tipo === 'entrada' && usadaEm('saida')) throw new Error(`"${item.nome}" já tem gastos lançados. Para usar também em entradas, escolha o tipo "Os dois".`);
+    if (item.tipo === 'saida' && usadaEm('entrada')) throw new Error(`"${item.nome}" já tem entradas lançadas. Para usar também em gastos, escolha o tipo "Os dois".`);
+  }
   return item;
 }
 
