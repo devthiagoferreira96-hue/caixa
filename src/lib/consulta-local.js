@@ -4,7 +4,8 @@
 // (modo offline) e pelo modo demonstração.
 // =====================================================================
 
-export const TABELAS = ['contas', 'cartoes', 'categorias', 'pessoas', 'lancamentos', 'compras_cartao', 'parcelas'];
+export const TABELAS = ['membros', 'contas', 'cartoes', 'categorias', 'pessoas', 'lancamentos', 'compras_cartao', 'parcelas'];
+const COM_AUTORIA = ['lancamentos', 'compras_cartao'];
 
 const PADROES = {
   contas: { ativa: true, saldo_inicial: 0 },
@@ -60,10 +61,10 @@ export function criarConsultas(banco) {
           }
           const linha = {
             ...PADROES[this.tabela],
-            criado_em: new Date().toISOString(),
+            ...(COM_AUTORIA.includes(this.tabela) ? { criado_em: new Date().toISOString() } : {}),
             familia_id: banco.familiaId,
             ...structuredClone(o),
-            id: o.id || crypto.randomUUID(),
+            ...(this.tabela === 'membros' ? {} : { id: o.id || crypto.randomUUID() }),
           };
           t[this.tabela].push(linha);
           dados.push(linha);

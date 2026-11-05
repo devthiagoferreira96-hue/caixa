@@ -44,7 +44,8 @@ async function salvarFila() {
 
 /** Coloca uma alteração na fila e tenta enviar */
 export async function enfileirar(operacao) {
-  fila.push({ ...operacao, criada_em: new Date().toISOString() });
+  // "offline" marca o que ficou esperando sem internet (só esses geram o aviso de armazenamento)
+  fila.push({ ...operacao, criada_em: new Date().toISOString(), offline: !navigator.onLine });
   await salvarFila();
   sincronizar();
 }
@@ -57,6 +58,10 @@ async function enviar(op) {
   if (op.op === 'insert') {
     // "upsert ignorando repetidos": se a internet cair no meio e reenviar, não duplica
     resposta = await tabela.upsert(op.linhas, { onConflict: 'id', ignoreDuplicates: true });
+  } else if (op.op === 'update' && op.onde) {
+    let q = tabela.update(op.valores);
+    for (const [coluna, valor] of Object.entries(op.onde)) q = q.eq(coluna, valor);
+    resposta = await q;
   } else if (op.op === 'update') {
     resposta = await tabela.update(op.valores).in('id', op.ids);
   } else {
@@ -75,7 +80,7 @@ export async function sincronizar() {
     return;
   }
   rodando = true;
-  const total = fila.length;
+  const total = fila.filter((op) => op.offline).length; // alterações feitas sem internet
   const falhas = [];
   try {
     if (total) { estado.enviando = true; avisar('enviando', { total }); }
@@ -92,9 +97,14 @@ export async function sincronizar() {
       await salvarFila();
     }
     if (total) { estado.enviando = false; avisar('enviado', { total, falhas }); }
+    else if (falhas.length) avisar('enviado', { total: 0, falhas });
     await baixarTudo();
   } catch (e) {
     estado.enviando = false;
+    if (erroDeRede(e) && fila.some((op) => !op.offline)) {
+      fila.forEach((op) => (op.offline = true)); // não conseguiu enviar: agora são alterações offline
+      await salvarFila();
+    }
     if (erroDeRede(e)) { estado.online = navigator.onLine; avisar(navigator.onLine ? 'erro' : 'sem-rede'); }
     else { console.error(e); avisar('erro'); }
   } finally {
@@ -109,8 +119,23 @@ export async function baixarTudo() {
   const familiaId = local.familia.id;
   const resultados = await Promise.all(TABELAS.map((t) => buscarTabela(t, familiaId)));
   if (fila.length) return; // alguém lançou algo durante o download: baixa de novo depois
+  const novos = itensNovosDeOutros(resultados);
   await local.substituir(Object.fromEntries(TABELAS.map((t, i) => [t, resultados[i]])));
-  avisar('dados');
+  avisar('dados', { novos });
+}
+
+/** Lançamentos e compras que não existiam na cópia local e foram feitos por outra pessoa */
+function itensNovosDeOutros(resultados) {
+  if (!local.ultimaAtualizacao) return []; // primeiro download: não avisa sobre tudo
+  const novos = [];
+  for (const tabela of ['lancamentos', 'compras_cartao']) {
+    const conhecidos = new Set(local.tabelas()[tabela].map((x) => x.id));
+    const vindos = resultados[TABELAS.indexOf(tabela)];
+    for (const item of vindos) {
+      if (!conhecidos.has(item.id) && item.criado_por && item.criado_por !== local.usuarioId) novos.push({ ...item, tabela });
+    }
+  }
+  return novos;
 }
 
 async function buscarTabela(tabela, familiaId) {

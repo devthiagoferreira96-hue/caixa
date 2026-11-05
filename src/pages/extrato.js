@@ -1,13 +1,13 @@
 // Extrato do mês: todos os lançamentos do caixa, com busca e filtros
 import { brl, esc, dataPorExtenso } from '../lib/format.js';
-import { store, contasAtivas, categoriasPorGrupo } from '../lib/store.js';
+import { store, contasAtivas, categoriasPorGrupo, autor } from '../lib/store.js';
 import { lancamentosDoMes } from '../lib/api.js';
 import { saidasReais, entradas, somar } from '../lib/calculos.js';
 import { itemLancamento, cliqueEmLancamento } from '../components/lancamento.js';
 import { icone, estadoVazio } from '../lib/ui.js';
 
 // Os filtros ficam guardados enquanto o sistema estiver aberto
-const filtros = { busca: '', conta: '', categoria: '', situacao: '' };
+const filtros = { busca: '', conta: '', categoria: '', situacao: '', autor: '' };
 
 export default {
   titulo: 'Extrato',
@@ -23,7 +23,7 @@ export default {
 
     el.innerHTML = `
       <div class="animate-entrar">
-        <div class="mb-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-4" role="search">
+        <div class="mb-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-5" role="search">
           <div class="relative sm:col-span-2 lg:col-span-1">
             <label for="f-busca" class="sr-only">Buscar pela descrição</label>
             <span class="pointer-events-none absolute inset-y-0 left-3 flex items-center text-stone-400">${icone('busca')}</span>
@@ -39,6 +39,9 @@ export default {
             <select id="f-f-sit" data-filtro="situacao" class="campo">
               ${[['', 'Pagos e em aberto'], ['aberto', 'Só em aberto'], ['pago', 'Só pagos'], ['entrada', 'Só entradas'], ['saida', 'Só saídas']]
                 .map(([v, t]) => `<option value="${v}" ${v === filtros.situacao ? 'selected' : ''}>${t}</option>`).join('')}</select></div>
+          ${store.membros.length > 1 ? `<div><label for="f-f-autor" class="sr-only">Filtrar por quem lançou</label>
+            <select id="f-f-autor" data-filtro="autor" class="campo"><option value="">Lançado por todos</option>
+            ${store.membros.map((m) => { const a = autor(m.user_id); return `<option value="${m.user_id}" ${m.user_id === filtros.autor ? 'selected' : ''}>Lançado por ${a.souEu ? `mim (${esc(a.nome)})` : esc(a.nome)}</option>`; }).join('')}</select></div>` : ''}
         </div>
         <div id="resultado"></div>
       </div>`;
@@ -53,7 +56,8 @@ export default {
         (!filtros.categoria || String(l.categoria_id) === filtros.categoria) &&
         (!filtros.situacao ||
           (filtros.situacao === 'pago' && l.pago) || (filtros.situacao === 'aberto' && !l.pago) ||
-          (filtros.situacao === l.tipo)));
+          (filtros.situacao === l.tipo)) &&
+        (!filtros.autor || l.criado_por === filtros.autor));
       const filtrando = Object.values(filtros).some(Boolean);
       const porDia = Map.groupBy ? Map.groupBy(visiveis, (l) => l.vencimento) : agrupar(visiveis);
       const ent = somar(entradas(visiveis));

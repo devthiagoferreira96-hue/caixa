@@ -24,12 +24,14 @@ function gravarAgora() {
 
 export const local = {
   familia: null,
+  usuarioId: null,
   ultimaAtualizacao: null,
   from: criarConsultas(banco),
 
   /** Abre a cópia deste usuário. Retorna true se já existia uma cópia com dados. */
   async abrir(userId) {
     chave = `dados:${userId}`;
+    this.usuarioId = userId;
     const salvo = await armazenamento.ler(chave).catch(() => null);
     banco.tabelas = { ...tabelasVazias(), ...(salvo?.tabelas || {}) };
     this.familia = salvo?.familia || null;
@@ -52,4 +54,5 @@ export const local = {
   },
 
   gravarAgora,
+  tabelas: () => banco.tabelas,
 };

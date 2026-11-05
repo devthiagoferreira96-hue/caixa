@@ -59,6 +59,17 @@ Se as duas pessoas alterarem **o mesmo lançamento** sem internet, vale a altera
 
 Os arquivos dessa parte são `src/lib/local-db.js` (cópia local), `src/lib/sync.js` (fila e envio) e `src/components/conexao.js` (avisos na tela).
 
+## Duas pessoas na mesma conta
+
+Cada pessoa tem o próprio login e as duas entram na mesma família (código de convite em Ajustes).
+
+- **Quem lançou:** a bolinha com as iniciais, ao lado do valor no Extrato, no Início e nos Cartões. O Extrato tem o filtro *Lançado por*, e a janela de edição mostra quem lançou e quem alterou, com data e hora. O nome de cada um fica em *Ajustes > Minha conta*.
+- **Aviso de lançamentos novos:** quando chegam dados da outra pessoa, aparece *"Thays lançou 2 itens"*, com o botão *Ver*.
+- **Gasto repetido:** antes de salvar, o sistema procura algo com o mesmo valor, no mesmo dia e com a mesma categoria ou descrição parecida, lançado pela outra pessoa (ou por você há menos de 10 minutos). Se achar, pergunta *"Thays lançou um gasto semelhante a este, deseja continuar mesmo assim?"*. A busca é feita na cópia local, então sem internet ela só enxerga o que já foi sincronizado.
+- **Desfazer:** criar, editar, marcar como pago, excluir lançamento, excluir compra, pagar fatura, desfazer pagamento e as alterações em Ajustes mostram o botão *Desfazer*.
+
+No modo demonstração, o link *Simular a Thays lançando um lanche*, na faixa amarela, mostra como esses avisos funcionam.
+
 ## 3. Publicar na internet (GitHub Pages, gratuito)
 
 1. No GitHub, abra o repositório e vá em **Settings > Pages > Build and deployment > Source** e escolha **GitHub Actions**.
