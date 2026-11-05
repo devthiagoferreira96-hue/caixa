@@ -309,6 +309,17 @@ export function montarPlano(abas, escolhas) {
     // ----- cartões
     for (const b of blocos) {
       const cartaoItem = cartao(b.cartao || `Cartão ${blocos.indexOf(b) + 1}`);
+      // sinal das compras: tem planilha que lança o gasto no cartão positivo e tem que lança negativo
+      // (como no caixa). Vale o que for maioria no bloco; o sinal contrário é estorno.
+      let negativos = 0, positivos = 0;
+      for (let l = a.titulos.linha + 1; l < a.linhas.length; l++) {
+        const r = a.linhas[l] || [];
+        if ([b.data - 1, b.data, b.categoria, b.descricao].some((i) => i >= 0 && TOTAL.test(chave(r[i])))) continue;
+        const n = lerNumero(cel(r, b.valor));
+        if (n < 0) negativos++;
+        else if (n > 0) positivos++;
+      }
+      const sinal = negativos > positivos ? -1 : 1;
       for (let l = a.titulos.linha + 1; l < a.linhas.length; l++) {
         const r = a.linhas[l] || [];
         const desc = limpo(cel(r, b.descricao));
@@ -317,7 +328,7 @@ export function montarPlano(abas, escolhas) {
         if (!desc && !cat && (bruto == null || bruto === '')) continue;
         // linha "TOTAL FATURA" (fica na coluna do mês, antes de DATA COMPRA) não é compra
         if ([b.data - 1, b.data, b.categoria, b.descricao].some((i) => i >= 0 && TOTAL.test(chave(r[i])))) continue;
-        const v = lerNumero(bruto);
+        const v = (lerNumero(bruto) ?? 0) * sinal;
         if (!v) { aviso(a, l, `compra "${desc || cat}" no ${cartaoItem.nome} está sem valor e não foi importada.`); continue; }
         if (v < 0) { aviso(a, l, `"${desc || cat}" no ${cartaoItem.nome} tem valor negativo (estorno) e não foi importado. Lance como entrada se precisar.`); continue; }
         const { numero, total } = lerParcela(cel(r, b.parcela)) || { numero: 1, total: 1 };

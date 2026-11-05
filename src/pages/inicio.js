@@ -41,7 +41,8 @@ export default {
     const categoriasGrafico = store.categorias.filter((c) => c.no_grafico);
     const gastos = gastosPorCategoria(lancamentos, parcelas);
     const somaGrafico = categoriasGrafico.reduce((s, c) => s + (gastos.get(c.id) || 0), 0);
-    const pagos = new Set(pagamentos.map((p) => p.fatura_cartao_id));
+    const pagos = new Set(pagamentos.filter((p) => p.pago).map((p) => p.fatura_cartao_id));
+    const agendados = new Set(pagamentos.filter((p) => !p.pago).map((p) => p.fatura_cartao_id));
     const semNada = !lancamentos.length && !parcelas.length;
 
     el.innerHTML = `
@@ -99,7 +100,7 @@ export default {
           <h2 id="t-faturas" class="card-titulo">Faturas de ${esc(nomeMes(store.mes).toLowerCase())}</h2>
           ${cartoesAtivos().length ? `<ul>${cartoesAtivos().map((c) => {
             const valor = totalDoCartao(parcelas, c.id);
-            const [cls, txt] = !valor ? ['selo-neutro', 'Sem compras'] : pagos.has(c.id) ? ['selo-ok', 'Paga'] : ['selo-aberto', 'Em aberto'];
+            const [cls, txt] = !valor ? ['selo-neutro', 'Sem compras'] : pagos.has(c.id) ? ['selo-ok', 'Paga'] : agendados.has(c.id) ? ['selo-aberto', 'Agendada'] : ['selo-aberto', 'Em aberto'];
             return `<li class="border-t border-stone-100 first:border-t-0 dark:border-stone-800">
               <a href="#cartoes" class="flex items-center gap-3 rounded-lg px-1 py-3 transition hover:bg-stone-50 dark:hover:bg-stone-800/60">
                 <span class="flex size-9 items-center justify-center rounded-lg bg-stone-100 text-stone-600 dark:bg-stone-800 dark:text-stone-300">${icone('cartao', 'size-5')}</span>
