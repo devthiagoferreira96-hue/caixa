@@ -1,7 +1,15 @@
 // Funções pequenas de formatação de dinheiro e datas (padrão brasileiro)
 
+// Espaço comum entre "R$" e o número: em telas estreitas o "R$" pode ir para uma linha
+// e o número para a outra, mas o número nunca é cortado no meio (ver .tabular-nums no CSS).
 export const brl = (v) =>
-  Number(v || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+  Number(v || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }).replace(/\u00a0/g, ' ');
+
+/** Versão curta para espaços apertados: R$ 4,2 mi (a partir de 1 milhão). Use com o valor completo em title. */
+export const brlCurto = (v) =>
+  Math.abs(Number(v || 0)) >= 1_000_000
+    ? Number(v).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL', notation: 'compact', maximumFractionDigits: 1 }).replace(/\u00a0/g, ' ')
+    : brl(v);
 
 // Sempre use esc() ao colocar texto digitado pelo usuário dentro de HTML
 export const esc = (s) =>

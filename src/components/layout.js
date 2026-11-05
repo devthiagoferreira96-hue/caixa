@@ -36,7 +36,7 @@ export function montarLayout() {
         <strong>Modo demonstração:</strong> dados de exemplo, guardados só neste navegador. Configure o Supabase no arquivo <code>.env</code> para usar de verdade.
         <button type="button" data-simular class="ml-1 inline-flex min-h-6 cursor-pointer items-center px-1 py-0.5 font-semibold underline underline-offset-2">Simular a Thays lançando um lanche</button></div>` : ''}
       ${faixaConexao()}
-      <header class="sticky top-0 z-20 border-b border-transparent bg-stone-100/90 backdrop-blur dark:bg-stone-950/90">
+      <header class="sticky top-0 z-20 border-b border-transparent bg-stone-100/90 pt-[env(safe-area-inset-top)] backdrop-blur dark:bg-stone-950/90">
         <div class="mx-auto flex max-w-6xl flex-wrap items-center gap-x-2 gap-y-1 px-4 py-3 lg:px-8 lg:py-5">
           <h1 id="titulo-pagina" tabindex="-1" class="min-w-0 flex-1 truncate text-xl font-bold outline-none lg:text-2xl"></h1>
           <div id="seletor-mes" class="order-last w-full sm:order-none sm:w-auto"></div>
@@ -97,7 +97,7 @@ export function seletorMes(visivel, aoMudar) {
     el.innerHTML = `
       <div class="flex items-center justify-between gap-1 sm:justify-start" role="group" aria-label="Escolher mês">
         <button type="button" class="btn-icone" data-mes="-1" aria-label="Mês anterior">${icone('esquerda')}</button>
-        <div class="min-w-40 text-center">
+        <div class="min-w-0 flex-1 text-center sm:min-w-40 sm:flex-none">
           <p class="font-semibold" aria-live="polite">${nomeMes(store.mes)}</p>
           ${ehAtual ? '' : '<button type="button" data-mes="0" class="cursor-pointer text-xs font-semibold text-brand-700 underline underline-offset-2 dark:text-brand-400">Voltar para o mês atual</button>'}
         </div>

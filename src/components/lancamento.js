@@ -37,19 +37,21 @@ export function itemLancamento(l, { mostrarPrazo = false } = {}) {
   ].filter(Boolean);
   const verbo = entrada ? 'recebido' : 'pago';
   return `
-  <li class="flex items-center gap-3 border-t border-stone-100 py-3 first:border-t-0 dark:border-stone-800">
+  <li class="@container border-t border-stone-100 py-3 first:border-t-0 dark:border-stone-800">
+   <div class="flex flex-wrap items-center gap-x-1 gap-y-1">
     <button type="button" data-pagar="${l.id}" class="check ${l.pago ? 'ligado' : ''}" aria-pressed="${l.pago}"
       aria-label="${l.pago ? `Desmarcar “${esc(l.descricao)}” como ${verbo}` : `Marcar “${esc(l.descricao)}” como ${verbo}`}"
       title="${l.pago ? 'Desmarcar' : `Marcar como ${verbo}`}">${l.pago ? icone('check', 'size-4') : ''}</button>
-    <button type="button" data-editar="${l.id}" class="-mx-2 min-w-0 flex-1 cursor-pointer rounded-lg px-2 py-1 text-left transition hover:bg-stone-50 dark:hover:bg-stone-800/60"
+    <button type="button" data-editar="${l.id}" class="min-w-[42%] flex-1 cursor-pointer rounded-lg px-2 py-1 text-left transition hover:bg-stone-50 dark:hover:bg-stone-800/60"
       aria-label="Abrir “${esc(l.descricao)}” para ver ou editar">
-      <span class="block truncate font-medium">${esc(l.descricao)}</span>
-      <span class="block truncate text-sm text-stone-600 dark:text-stone-400">${diaMes(l.vencimento)}${mostrarPrazo && !l.pago ? ` · ${quandoVence(l.vencimento)}` : ''} · ${detalhes.map(esc).join(' · ')}</span>
+      <span class="line-clamp-2 font-medium">${esc(l.descricao)}</span>
+      <span class="line-clamp-2 text-sm text-stone-600 dark:text-stone-400">${diaMes(l.vencimento)}${mostrarPrazo && !l.pago ? ` · ${quandoVence(l.vencimento)}` : ''} · ${detalhes.map(esc).join(' · ')}</span>
     </button>
-    <div class="shrink-0 text-right">
-      <span class="block font-semibold tabular-nums ${entrada ? 'valor-entrada' : 'valor-saida'}">${entrada ? '+' : '−'} ${brl(l.valor)}</span>
-      <span class="inline-flex items-center gap-1"><span class="selo ${classeSelo}">${textoSelo}</span>${seloAutor(l.criado_por)}</span>
+    <div class="text-right @max-[15.5rem]:flex @max-[15.5rem]:basis-full @max-[15.5rem]:flex-wrap @max-[15.5rem]:items-center @max-[15.5rem]:gap-2 @max-[15.5rem]:pl-12 @max-[15.5rem]:text-left">
+      <span class="block text-sm font-semibold tabular-nums sm:text-base ${entrada ? 'valor-entrada' : 'valor-saida'}">${entrada ? '+' : '−'} ${brl(l.valor)}</span>
+      <span class="inline-flex flex-wrap items-center justify-end gap-1"><span class="selo ${classeSelo}">${textoSelo}</span>${seloAutor(l.criado_por)}</span>
     </div>
+   </div>
   </li>`;
 }
 

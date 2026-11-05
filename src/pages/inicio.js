@@ -1,5 +1,5 @@
 // Tela inicial: saldos, resumo do mês, contas a pagar, faturas e gráfico por categoria
-import { brl, esc, mesISO, somarDias, nomeMes } from '../lib/format.js';
+import { brl, brlCurto, esc, mesISO, somarDias, nomeMes } from '../lib/format.js';
 import { store, contasAtivas, cartoesAtivos } from '../lib/store.js';
 import { saldosContas, lancamentosDoMes, parcelasDoMes, pendentesAte, pagamentosDeFatura } from '../lib/api.js';
 import { gastosPorCategoria, saidasReais, entradas, somar, totalDoCartao } from '../lib/calculos.js';
@@ -44,28 +44,30 @@ export default {
       <div class="grid gap-4">
         <section class="card" aria-labelledby="t-saldo">
           <h2 id="t-saldo" class="card-titulo">Saldo total hoje</h2>
-          <p class="text-3xl font-bold tabular-nums ${total < 0 ? 'valor-saida' : ''}">${brl(total)}</p>
+          <p class="text-2xl font-bold tabular-nums sm:text-3xl ${total < 0 ? 'valor-saida' : ''}">${brl(total)}</p>
           <ul class="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3">
             ${contas.map((c) => {
               const v = saldos.get(c.id) || 0;
               return `<li class="rounded-xl border border-stone-200 p-3 dark:border-stone-800">
                 <p class="truncate text-sm text-stone-600 dark:text-stone-400">${esc(c.nome)}</p>
-                <p class="font-semibold whitespace-nowrap tabular-nums ${v < 0 ? 'valor-saida' : ''}">${brl(v)}</p></li>`;
+                <p class="text-sm font-semibold tabular-nums sm:text-base ${v < 0 ? 'valor-saida' : ''}" title="${brl(v)}">${brlCurto(v)}</p></li>`;
             }).join('')}
           </ul>
         </section>
 
         <section class="card" aria-labelledby="t-resumo">
           <h2 id="t-resumo" class="card-titulo">Resumo de ${esc(nomeMes(store.mes).toLowerCase())}</h2>
-          <dl class="grid grid-cols-3 gap-2">
-            <div class="rounded-xl bg-brand-50 p-3 dark:bg-brand-950"><dt class="text-sm text-stone-600 dark:text-stone-400">Entrou</dt><dd class="font-semibold tabular-nums valor-entrada">${brl(totalEntradas)}</dd></div>
-            <div class="rounded-xl bg-red-50 p-3 dark:bg-red-950/40"><dt class="text-sm text-stone-600 dark:text-stone-400">Saiu</dt><dd class="font-semibold tabular-nums valor-saida">${brl(totalSaidas)}</dd></div>
-            <div class="rounded-xl bg-stone-100 p-3 dark:bg-stone-800"><dt class="text-sm text-stone-600 dark:text-stone-400">Resultado</dt><dd class="font-semibold tabular-nums ${resultado < 0 ? 'valor-saida' : ''}">${brl(resultado)}</dd></div>
+          <dl class="grid gap-2 sm:grid-cols-3">
+            ${[['Entrou', brl(totalEntradas), 'bg-brand-50 dark:bg-brand-950', 'valor-entrada'],
+               ['Saiu', brl(totalSaidas), 'bg-red-50 dark:bg-red-950/40', 'valor-saida'],
+               ['Resultado', brl(resultado), 'bg-stone-100 dark:bg-stone-800', resultado < 0 ? 'valor-saida' : '']]
+              .map(([rotulo, valor, fundo, cor]) => `<div class="flex flex-wrap items-baseline justify-between gap-x-3 rounded-xl p-3 sm:block ${fundo}">
+                <dt class="text-sm text-stone-600 dark:text-stone-400">${rotulo}</dt><dd class="font-semibold tabular-nums ${cor}">${valor}</dd></div>`).join('')}
           </dl>
         </section>
 
         <section class="card" aria-labelledby="t-pagar">
-          <div class="mb-1 flex items-center justify-between gap-2">
+          <div class="mb-1 flex flex-wrap items-baseline justify-between gap-x-2">
             <h2 id="t-pagar" class="card-titulo mb-0">Contas a pagar e receber</h2>
             <span class="text-sm text-stone-600 dark:text-stone-400">atrasadas e próximos 7 dias</span>
           </div>
@@ -92,11 +94,11 @@ export default {
             const valor = totalDoCartao(parcelas, c.id);
             const [cls, txt] = !valor ? ['selo-neutro', 'Sem compras'] : pagos.has(c.id) ? ['selo-ok', 'Paga'] : ['selo-aberto', 'Em aberto'];
             return `<li class="border-t border-stone-100 first:border-t-0 dark:border-stone-800">
-              <a href="#cartoes" class="-mx-2 flex items-center gap-3 rounded-lg px-2 py-3 transition hover:bg-stone-50 dark:hover:bg-stone-800/60">
+              <a href="#cartoes" class="flex items-center gap-3 rounded-lg px-1 py-3 transition hover:bg-stone-50 dark:hover:bg-stone-800/60">
                 <span class="flex size-9 items-center justify-center rounded-lg bg-stone-100 text-stone-600 dark:bg-stone-800 dark:text-stone-300">${icone('cartao', 'size-5')}</span>
-                <span class="min-w-0 flex-1"><span class="block truncate font-medium">${esc(c.nome)}</span>
+                <span class="min-w-0 flex-1"><span class="line-clamp-2 font-medium">${esc(c.nome)}</span>
                 <span class="block text-sm text-stone-600 dark:text-stone-400">vence ${vencimentoFatura(c, mesISO(store.mes)).split('-').reverse().slice(0, 2).join('/')}</span></span>
-                <span class="text-right"><span class="block font-semibold tabular-nums">${brl(valor)}</span><span class="selo ${cls}">${txt}</span></span>
+                <span class="shrink-0 text-right"><span class="block font-semibold tabular-nums">${brl(valor)}</span><span class="selo ${cls}">${txt}</span></span>
               </a></li>`;
           }).join('')}</ul>` : estadoVazio('Nenhum cartão cadastrado', 'Cadastre seus cartões em Ajustes.', '<a href="#ajustes" class="btn-sec">Ir para Ajustes</a>')}
         </section>

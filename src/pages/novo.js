@@ -107,7 +107,7 @@ export default {
         o.textContent = i ? `${i + 1}x${total ? ` de ${brl(total / (i + 1))}` : ''}` : `À vista (1x)${total ? ` · ${brl(total)}` : ''}`;
       });
       area.innerHTML = `
-        <p class="flex items-start gap-2"><span class="mt-0.5 text-brand-700 dark:text-brand-400">${icone('calendario')}</span>
+        <p class="flex items-start gap-2"><span class="mt-0.5 shrink-0 text-brand-700 dark:text-brand-400">${icone('calendario')}</span>
         <span>A ${n > 1 ? '1ª parcela' : 'compra'} entra na fatura de <strong>${nomeMes(parseISO(primeira))}</strong>, que vence em <strong>${dataCompleta(vencimentoFatura(cartao, primeira))}</strong>.
         ${n > 1 ? `<br>${n} parcelas de <strong>${brl(valores[0])}</strong>, até <strong>${nomeMes(parseISO(ultima))}</strong>.` : ''}</span></p>
         <p class="mt-2 text-stone-600 dark:text-stone-400">${esc(cartao.nome)} fecha todo dia ${cartao.dia_fechamento}. Compras a partir desse dia vão para a fatura seguinte.</p>`;

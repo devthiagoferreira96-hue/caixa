@@ -1,5 +1,5 @@
 // Cartões: fatura do mês de cada cartão, compras, pagamento da fatura e próximos meses
-import { brl, esc, mesISO, nomeMes, nomeMesCurto, inicioMes, diaMes, dataCompleta, hojeISO } from '../lib/format.js';
+import { brl, brlCurto, esc, mesISO, nomeMes, nomeMesCurto, inicioMes, diaMes, dataCompleta, hojeISO } from '../lib/format.js';
 import { store, cartoesAtivos, contasAtivas, nomeCategoria } from '../lib/store.js';
 import { parcelasEntre, pagamentosDeFatura, excluirCompra, criarLancamentos, excluirLancamentos } from '../lib/api.js';
 import { vencimentoFatura } from '../lib/faturas.js';
@@ -46,23 +46,25 @@ export default {
         return `
         <section class="card" aria-labelledby="cartao-${c.id}">
           <div class="flex items-start justify-between gap-2">
-            <div><h2 id="cartao-${c.id}" class="font-bold">${esc(c.nome)}</h2>
+            <div class="min-w-0"><h2 id="cartao-${c.id}" class="font-bold">${esc(c.nome)}</h2>
             <p class="text-sm text-stone-600 dark:text-stone-400">Fecha dia ${c.dia_fechamento} · vence ${dataCompleta(venc)}</p></div>
-            <span class="selo ${!total ? 'selo-neutro' : pago ? 'selo-ok' : 'selo-aberto'}">${!total ? 'Sem compras' : pago ? 'Paga' : 'Em aberto'}</span>
+            <span class="selo shrink-0 ${!total ? 'selo-neutro' : pago ? 'selo-ok' : 'selo-aberto'}">${!total ? 'Sem compras' : pago ? 'Paga' : 'Em aberto'}</span>
           </div>
-          <p class="mt-3 text-3xl font-bold tabular-nums">${brl(total)}</p>
+          <p class="mt-3 text-2xl font-bold tabular-nums sm:text-3xl">${brl(total)}</p>
           <p class="text-sm text-stone-600 dark:text-stone-400">${itens.length} ${itens.length === 1 ? 'compra' : 'compras'} na fatura de ${esc(nomeMes(store.mes).toLowerCase())}</p>
 
           ${itens.length ? `<ul class="mt-3">${itens.map((p) => `
             <li class="flex items-center gap-2 border-t border-stone-100 py-2.5 dark:border-stone-800">
               <div class="min-w-0 flex-1">
-                <p class="truncate font-medium">${esc(p.compra.descricao)}${p.compra.qtd_parcelas > 1 ? ` <span class="selo selo-neutro">${p.numero}/${p.compra.qtd_parcelas}</span>` : ''}</p>
-                <p class="truncate text-sm text-stone-600 dark:text-stone-400">${diaMes(p.compra.data_compra)} · ${esc(nomeCategoria(p.compra.categoria_id))}${p.compra.subcategoria ? ` / ${esc(p.compra.subcategoria)}` : ''}</p>
+                <p class="line-clamp-2 font-medium">${esc(p.compra.descricao)}${p.compra.qtd_parcelas > 1 ? ` <span class="selo selo-neutro">${p.numero}/${p.compra.qtd_parcelas}</span>` : ''}</p>
+                <p class="line-clamp-2 text-sm text-stone-600 dark:text-stone-400">${diaMes(p.compra.data_compra)} · ${esc(nomeCategoria(p.compra.categoria_id))}${p.compra.subcategoria ? ` / ${esc(p.compra.subcategoria)}` : ''}</p>
               </div>
-              <span class="font-semibold tabular-nums">${brl(p.valor)}</span>
-              ${seloAutor(p.compra.criado_por)}
-              <button type="button" class="btn-icone size-9 text-stone-400 hover:text-red-700" data-excluir-compra="${p.compra.id}"
-                aria-label="Excluir a compra ${esc(p.compra.descricao)}" title="Excluir compra">${icone('lixo', 'size-4')}</button>
+              <div class="flex shrink-0 flex-col items-end">
+                <span class="text-sm font-semibold tabular-nums sm:text-base">${brl(p.valor)}</span>
+                <span class="flex items-center gap-0.5">${seloAutor(p.compra.criado_por)}
+                  <button type="button" class="btn-icone size-9 text-stone-500 hover:text-red-700 dark:text-stone-400" data-excluir-compra="${p.compra.id}"
+                    aria-label="Excluir a compra ${esc(p.compra.descricao)}" title="Excluir compra">${icone('lixo', 'size-4')}</button></span>
+              </div>
             </li>`).join('')}</ul>` : ''}
 
           ${total ? (pago
@@ -77,7 +79,7 @@ export default {
               <li class="rounded-xl bg-stone-100 p-2 dark:bg-stone-800">
                 <span class="block text-xs text-stone-600 dark:text-stone-400">${nomeMesCurto(m)}</span>
                 <span class="mx-auto my-1 block h-1.5 rounded-full bg-stone-200 dark:bg-stone-700" aria-hidden="true"><span class="block h-full rounded-full bg-brand-500" style="width:${(v / maior) * 100}%"></span></span>
-                <span class="block text-sm font-semibold tabular-nums">${brl(v)}</span>
+                <span class="block text-xs font-semibold tabular-nums sm:text-sm" title="${brl(v)}">${brlCurto(v)}</span>
               </li>`).join('')}</ul>
           </div>
         </section>`;

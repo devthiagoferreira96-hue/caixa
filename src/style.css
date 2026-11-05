@@ -30,7 +30,11 @@
   html.texto-grande { font-size: 112.5%; }
   body {
     @apply bg-stone-100 text-stone-900 antialiased dark:bg-stone-950 dark:text-stone-100;
+    /* palavras enormes sem espaço (digitadas pelo usuário) quebram em vez de vazar da tela */
+    overflow-wrap: anywhere;
   }
+  /* valores em dinheiro nunca quebram no meio do número */
+  .tabular-nums { overflow-wrap: normal; word-break: keep-all; }
   :focus-visible {
     @apply outline-2 outline-offset-2 outline-brand-500;
   }
