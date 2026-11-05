@@ -5,11 +5,18 @@
 -- criados automaticamente quando a primeira pessoa cria a família no app.
 -- =====================================================================
 
+-- ---------- Código de convite: 6 caracteres sem os que confundem (0/O, 1/I)
+-- 32^6 = mais de 1 bilhão de combinações
+create or replace function gerar_codigo_convite() returns text language sql volatile as $$
+  select string_agg(substr('ABCDEFGHJKLMNPQRSTUVWXYZ23456789', 1 + floor(random() * 32)::int, 1), '')
+  from generate_series(1, 6);
+$$;
+
 -- ---------- Família e membros (você e sua esposa veem os mesmos dados)
 create table familias (
   id uuid primary key default gen_random_uuid(),
   nome text not null,
-  codigo_convite text not null unique default upper(substr(md5(random()::text), 1, 6)),
+  codigo_convite text not null unique default gerar_codigo_convite(),
   criado_em timestamptz default now()
 );
 
@@ -74,7 +81,7 @@ create table lancamentos (
   pessoa_id bigint references pessoas(id) on delete set null,
   parcela text,                                 -- ex.: "3/12" em contas repetidas
   grupo uuid,                                   -- liga lançamentos repetidos entre si
-  fatura_cartao_id bigint references cartoes(id) on delete cascade,  -- é pagamento de fatura?
+  fatura_cartao_id bigint references cartoes(id) on delete set null, -- é pagamento de fatura?
   fatura_mes date,
   criado_por uuid default auth.uid(),
   criado_em timestamptz default now()
@@ -104,6 +111,13 @@ create table parcelas (              -- criadas pelo app a partir da compra
   fatura_mes date not null           -- 1º dia do mês em que a fatura vence
 );
 
+-- Tentativas de usar código de convite (limita quem tenta adivinhar códigos)
+create table tentativas_convite (
+  user_id uuid not null,
+  em timestamptz not null default now()
+);
+alter table tentativas_convite enable row level security; -- sem políticas: só as funções acessam
+
 create index on lancamentos (familia_id, vencimento);
 create index on lancamentos (familia_id, fatura_mes);
 create index on lancamentos (grupo);
@@ -128,6 +142,39 @@ create policy "renomear a propria familia" on familias for update to authenticat
 
 alter table membros enable row level security;
 create policy "ver o proprio vinculo" on membros for select to authenticated using (user_id = auth.uid());
+
+-- ---------- Integridade: um lançamento/compra só pode apontar para conta, categoria,
+-- pessoa, cartão ou compra da MESMA família
+create or replace function conferir_mesma_familia() returns trigger
+language plpgsql security definer set search_path = public as $$
+declare
+  ref record;
+  existe boolean;
+begin
+  for ref in
+    select * from (values
+      ('contas', to_jsonb(new) ->> 'conta_id'),
+      ('categorias', to_jsonb(new) ->> 'categoria_id'),
+      ('pessoas', to_jsonb(new) ->> 'pessoa_id'),
+      ('cartoes', coalesce(to_jsonb(new) ->> 'cartao_id', to_jsonb(new) ->> 'fatura_cartao_id')),
+      ('compras_cartao', to_jsonb(new) ->> 'compra_id')
+    ) as r(tabela, id) where r.id is not null
+  loop
+    execute format('select exists (select 1 from %I where id = $1 and familia_id = $2)', ref.tabela)
+      into existe using ref.id::bigint, new.familia_id;
+    if not existe then
+      raise exception 'Item de outra família (%)', ref.tabela;
+    end if;
+  end loop;
+  return new;
+end $$;
+
+create trigger mesma_familia before insert or update on lancamentos
+  for each row execute function conferir_mesma_familia();
+create trigger mesma_familia before insert or update on compras_cartao
+  for each row execute function conferir_mesma_familia();
+create trigger mesma_familia before insert or update on parcelas
+  for each row execute function conferir_mesma_familia();
 
 -- ---------- Saldo de cada conta (substitui o bloco SUMIFS "ESPÉCIE / MMP / ...")
 create view saldo_contas with (security_invoker = on) as
@@ -176,15 +223,28 @@ begin
 end $$;
 
 -- ---------- Entrar numa família que já existe (2ª pessoa), usando o código de convite
+-- Retorna o id da família, ou null se o código não existir (o app mostra a mensagem).
+-- Não usa "raise" no código errado para que a tentativa fique registrada.
 create or replace function entrar_familia(p_codigo text) returns uuid
 language plpgsql security definer set search_path = public as $$
 declare f uuid;
 begin
   if auth.uid() is null then raise exception 'Faça login primeiro'; end if;
+  -- no máximo 5 tentativas erradas por hora para cada pessoa
+  if (select count(*) from tentativas_convite
+      where user_id = auth.uid() and em > now() - interval '1 hour') >= 5 then
+    raise exception 'Muitas tentativas de codigo. Espere uma hora e tente de novo.';
+  end if;
   select id into f from familias where codigo_convite = upper(trim(p_codigo));
-  if f is null then raise exception 'codigo de convite invalido'; end if;
+  if f is null then
+    insert into tentativas_convite (user_id) values (auth.uid());
+    return null;
+  end if;
   insert into membros (familia_id, user_id) values (f, auth.uid()) on conflict do nothing;
   return f;
 end $$;
 
-revoke execute on function criar_familia(text), entrar_familia(text) from anon;
+-- Só quem fez login pode chamar as funções (no Supabase elas nascem liberadas para todos)
+revoke execute on function criar_familia(text), entrar_familia(text), eh_membro(uuid),
+  gerar_codigo_convite(), conferir_mesma_familia() from public, anon;
+grant execute on function criar_familia(text), entrar_familia(text), eh_membro(uuid) to authenticated;

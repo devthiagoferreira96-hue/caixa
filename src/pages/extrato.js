@@ -60,14 +60,14 @@ export default {
       const sai = somar(saidasReais(visiveis)) + somar(visiveis.filter((l) => l.fatura_cartao_id));
       resultado.innerHTML = `
         <dl class="mb-4 grid grid-cols-3 gap-2 text-sm" aria-live="polite">
-          <div class="card p-3 sm:p-3"><dt class="text-stone-500 dark:text-stone-400">Entradas</dt><dd class="font-semibold tabular-nums valor-entrada">${brl(ent)}</dd></div>
-          <div class="card p-3 sm:p-3"><dt class="text-stone-500 dark:text-stone-400">Saídas</dt><dd class="font-semibold tabular-nums valor-saida">${brl(sai)}</dd></div>
-          <div class="card p-3 sm:p-3"><dt class="text-stone-500 dark:text-stone-400">${visiveis.length} ${visiveis.length === 1 ? 'lançamento' : 'lançamentos'}</dt><dd class="font-semibold tabular-nums">${brl(ent - sai)}</dd></div>
+          <div class="card p-3 sm:p-3"><dt class="text-stone-600 dark:text-stone-400">Entradas</dt><dd class="font-semibold tabular-nums valor-entrada">${brl(ent)}</dd></div>
+          <div class="card p-3 sm:p-3"><dt class="text-stone-600 dark:text-stone-400">Saídas</dt><dd class="font-semibold tabular-nums valor-saida">${brl(sai)}</dd></div>
+          <div class="card p-3 sm:p-3"><dt class="text-stone-600 dark:text-stone-400">${visiveis.length} ${visiveis.length === 1 ? 'lançamento' : 'lançamentos'}</dt><dd class="font-semibold tabular-nums">${brl(ent - sai)}</dd></div>
         </dl>
         ${visiveis.length
           ? [...porDia].map(([dia, itens]) => `
             <section class="mb-3" aria-label="${esc(dataPorExtenso(dia))}">
-              <h2 class="mb-1.5 px-1 text-sm font-semibold text-stone-500 dark:text-stone-400">${esc(dataPorExtenso(dia))}</h2>
+              <h2 class="mb-1.5 px-1 text-sm font-semibold text-stone-600 dark:text-stone-400">${esc(dataPorExtenso(dia))}</h2>
               <ul class="card py-1 sm:py-1" data-lista>${itens.map((l) => itemLancamento(l)).join('')}</ul>
             </section>`).join('')
           : `<div class="card">${filtrando

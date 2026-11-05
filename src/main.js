@@ -54,7 +54,7 @@ async function abrirSistema() {
 function telaCarregando() {
   document.getElementById('app').innerHTML = `
     <div class="grid min-h-dvh place-items-center" role="status">
-      <div class="flex flex-col items-center gap-3 text-stone-500">
+      <div class="flex flex-col items-center gap-3 text-stone-600 dark:text-stone-400">
         <span class="flex size-12 animate-pulse items-center justify-center rounded-2xl bg-brand-600 font-bold text-white" aria-hidden="true">R$</span>
         Abrindo o caixa…
       </div>

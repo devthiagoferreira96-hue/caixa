@@ -30,7 +30,7 @@ const LISTAS = {
       { nome: 'dia_vencimento', rotulo: 'Dia que vence', tipo: 'dia', largura: 'sm:col-span-3' },
       { nome: 'ativo', rotulo: 'Em uso', tipo: 'marcar', largura: 'sm:col-span-2' },
     ],
-    dicaExcluir: 'Excluir um cartão apaga também todas as compras dele.',
+    dicaExcluir: 'Excluir um cartão apaga também todas as compras dele. Os pagamentos de fatura já feitos continuam no extrato.',
   },
   categorias: {
     titulo: 'Categorias', icone: 'etiqueta',
@@ -102,7 +102,7 @@ export default {
               <label class="opcao-modo"><input type="radio" name="tema" value="${v}" class="sr-only" ${pref.tema === v ? 'checked' : ''}>${t}</label>`).join('')}
           </div></fieldset>
         <label class="mt-4 flex cursor-pointer items-center justify-between gap-3 rounded-xl border border-stone-200 p-3 dark:border-stone-700">
-          <span><span class="block font-semibold">Letras maiores</span><span class="text-sm text-stone-500 dark:text-stone-400">Aumenta o tamanho de todo o texto.</span></span>
+          <span><span class="block font-semibold">Letras maiores</span><span class="text-sm text-stone-600 dark:text-stone-400">Aumenta o tamanho de todo o texto.</span></span>
           <input type="checkbox" data-texto-grande class="size-6 accent-brand-600" ${pref.textoGrande ? 'checked' : ''}>
         </label>`)}
 
@@ -147,7 +147,7 @@ export default {
       if (excluir) {
         const [tabela, id] = excluir.dataset.excluir.split(':');
         const item = store[tabela].find((x) => x.id === Number(id));
-        const extra = tabela === 'cartoes' ? ' Todas as compras deste cartão também serão apagadas.' : '';
+        const extra = tabela === 'cartoes' ? ' Todas as compras deste cartão também serão apagadas (os pagamentos de fatura continuam no extrato).' : '';
         if (!(await confirmar(`“${item.nome}” será excluído.${extra}`, { botao: 'Excluir', perigo: true }))) return;
         try { await excluirItem(tabela, item.id); toast(`${item.nome} excluído`); ctx.atualizar(); } catch (err) { toast(err.message, { tipo: 'erro' }); }
       } else if (e.target.closest('[data-copiar]')) {
@@ -179,7 +179,7 @@ const secao = (id, titulo, ic, conteudo) => `
 function listaCategorias(def) {
   const grupos = [...new Set(store.categorias.map((c) => c.grupo))];
   return `<datalist id="grupos-lista">${grupos.map((g) => `<option value="${esc(g)}"></option>`).join('')}</datalist>` + Object.entries(categoriasPorGrupo()).map(([grupo, cats]) => `
-    <h3 class="mt-4 mb-2 text-sm font-semibold text-stone-500 first:mt-0 dark:text-stone-400">${esc(grupo)}</h3>
+    <h3 class="mt-4 mb-2 text-sm font-semibold text-stone-600 dark:text-stone-400 first:mt-0 dark:text-stone-400">${esc(grupo)}</h3>
     <ul class="grid gap-3">${cats.map((c) => linha('categorias', def, c)).join('')}</ul>`).join('');
 }
 
@@ -209,7 +209,7 @@ function linha(tabela, def, item) {
     </div>
     <div class="col-span-2 flex gap-2 sm:col-span-3 sm:justify-end">
       <button type="submit" class="${novo ? 'btn-primario' : 'btn-sec'} flex-1 sm:flex-none">${novo ? `${icone('mais')} Adicionar` : 'Salvar'}</button>
-      ${novo ? '' : `<button type="button" class="btn-icone text-stone-500 hover:text-red-700" data-excluir="${tabela}:${item.id}" aria-label="Excluir ${esc(item.nome)}" title="Excluir">${icone('lixo')}</button>`}
+      ${novo ? '' : `<button type="button" class="btn-icone text-stone-600 dark:text-stone-400 hover:text-red-700" data-excluir="${tabela}:${item.id}" aria-label="Excluir ${esc(item.nome)}" title="Excluir">${icone('lixo')}</button>`}
     </div>
   </form></li>`;
 }

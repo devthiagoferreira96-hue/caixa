@@ -54,6 +54,16 @@ VITE_SUPABASE_ANON_KEY=eyJhbGciOi...
 
 ---
 
+## Testes
+
+```bash
+npm test
+```
+
+Roda os testes das regras de negócio (em qual fatura cai cada compra, divisão de parcelas, datas e somas).
+
+> **Já tinha rodado o `schema.sql` antes?** Rode também o `supabase/atualizacao-1.sql` no SQL Editor. Em um projeto novo, não precisa: o `schema.sql` já tem tudo.
+
 ## Como o código está organizado
 
 ```
@@ -75,6 +85,8 @@ src/
   components/              peças usadas em várias telas
   pages/                   uma tela por arquivo
 supabase/schema.sql        tabelas, segurança e funções do banco
+supabase/atualizacao-1.sql atualização para quem já tinha o banco criado
+tests/                     testes das regras (npm test)
 ```
 
 ### Tabelas

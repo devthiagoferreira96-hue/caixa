@@ -179,6 +179,6 @@ export const esqueleto = (linhas = 3) => `
 export const estadoVazio = (titulo, texto, acaoHTML = '') => `
   <div class="flex flex-col items-center gap-2 px-4 py-8 text-center">
     <p class="font-semibold">${titulo}</p>
-    <p class="max-w-sm text-sm text-stone-500 dark:text-stone-400">${texto}</p>
+    <p class="max-w-sm text-sm text-stone-600 dark:text-stone-400">${texto}</p>
     ${acaoHTML ? `<div class="mt-2">${acaoHTML}</div>` : ''}
   </div>`;

@@ -15,7 +15,9 @@ export function traduzirErro(e) {
   if (/password should be|at least 6/i.test(m)) return new Error('A senha precisa ter pelo menos 6 caracteres.');
   if (/rate limit/i.test(m)) return new Error('Muitas tentativas seguidas. Espere um minuto e tente de novo.');
   if (e?.code === '23503' || /foreign key/i.test(m)) return new Error('Esse item já foi usado em lançamentos, por isso não pode ser excluído.');
+  if (/muitas tentativas de codigo/i.test(m)) return new Error('Muitas tentativas com código errado. Espere uma hora e tente de novo.');
   if (/codigo de convite/i.test(m)) return new Error('Código de convite não encontrado. Confira as letras e números.');
+  if (/outra família/i.test(m)) return new Error('Algum item escolhido não pertence à sua família. Recarregue a página e tente de novo.');
   if (/failed to fetch|networkerror|load failed/i.test(m)) return new Error('Sem conexão com a internet. Verifique e tente de novo.');
   return new Error(m || 'Algo deu errado. Tente de novo.');
 }
@@ -47,7 +49,8 @@ export async function criarFamilia(nome) {
   return minhaFamilia();
 }
 export async function entrarFamilia(codigo) {
-  ok(await supabase.rpc('entrar_familia', { p_codigo: codigo.trim().toUpperCase() }));
+  const familiaId = ok(await supabase.rpc('entrar_familia', { p_codigo: codigo.trim().toUpperCase() }));
+  if (!familiaId) throw new Error('Código de convite não encontrado. Confira as letras e números.');
   return minhaFamilia();
 }
 export const renomearFamilia = async (nome) =>

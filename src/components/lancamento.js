@@ -30,7 +30,7 @@ export function itemLancamento(l, { mostrarPrazo = false } = {}) {
     <button type="button" data-editar="${l.id}" class="-mx-2 min-w-0 flex-1 cursor-pointer rounded-lg px-2 py-1 text-left transition hover:bg-stone-50 dark:hover:bg-stone-800/60"
       aria-label="Abrir “${esc(l.descricao)}” para ver ou editar">
       <span class="block truncate font-medium">${esc(l.descricao)}</span>
-      <span class="block truncate text-sm text-stone-500 dark:text-stone-400">${diaMes(l.vencimento)}${mostrarPrazo && !l.pago ? ` · ${quandoVence(l.vencimento)}` : ''} · ${detalhes.map(esc).join(' · ')}</span>
+      <span class="block truncate text-sm text-stone-600 dark:text-stone-400">${diaMes(l.vencimento)}${mostrarPrazo && !l.pago ? ` · ${quandoVence(l.vencimento)}` : ''} · ${detalhes.map(esc).join(' · ')}</span>
     </button>
     <div class="shrink-0 text-right">
       <span class="block font-semibold tabular-nums ${entrada ? 'valor-entrada' : 'valor-saida'}">${entrada ? '+' : '−'} ${brl(l.valor)}</span>

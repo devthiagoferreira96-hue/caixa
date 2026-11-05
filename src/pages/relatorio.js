@@ -46,7 +46,7 @@ export default {
       <section class="card" aria-labelledby="t-meses">
         <div class="mb-4 flex flex-wrap items-end justify-between gap-3">
           <div><h2 id="t-meses" class="card-titulo mb-1">Gastos dos últimos 6 meses</h2>
-          <p class="text-2xl font-bold tabular-nums">${brl(atual.valor)} <span class="text-base font-medium text-stone-500 dark:text-stone-400">em ${esc(nomeMes(store.mes).toLowerCase())}</span></p></div>
+          <p class="text-2xl font-bold tabular-nums">${brl(atual.valor)} <span class="text-base font-medium text-stone-600 dark:text-stone-400">em ${esc(nomeMes(store.mes).toLowerCase())}</span></p></div>
           ${media ? `<p class="rounded-xl px-3 py-2 text-sm ${variacao > 0 ? 'bg-red-50 text-red-800 dark:bg-red-950/40 dark:text-red-300' : 'bg-brand-50 text-brand-800 dark:bg-brand-950 dark:text-brand-200'}">
             ${variacao > 0 ? '▲' : '▼'} ${porcentagem(Math.abs(variacao))} ${variacao > 0 ? 'acima' : 'abaixo'} da média dos meses anteriores (${brl(media)})</p>` : ''}
         </div>
@@ -59,12 +59,12 @@ export default {
           <section class="card" aria-labelledby="g-${esc(g.grupo)}">
             <div class="mb-2 flex items-baseline justify-between gap-2">
               <h2 id="g-${esc(g.grupo)}" class="font-bold">${esc(g.grupo)}</h2>
-              <p class="text-sm text-stone-500 dark:text-stone-400"><span class="font-semibold text-stone-900 tabular-nums dark:text-stone-100">${brl(g.total)}</span> · ${porcentagem((g.total / atual.valor) * 100)} do mês</p>
+              <p class="text-sm text-stone-600 dark:text-stone-400"><span class="font-semibold text-stone-900 tabular-nums dark:text-stone-100">${brl(g.total)}</span> · ${porcentagem((g.total / atual.valor) * 100)} do mês</p>
             </div>
             ${barrasCategorias(gastos, g.cats, { mostrarZeradas: false })}
           </section>`).join('')
           : `<div class="card">${estadoVazio('Nenhum gasto neste mês', 'Quando houver lançamentos, eles aparecem aqui separados por grupo e categoria.')}</div>`}
-          ${gastos.get(null) ? `<p class="px-1 text-sm text-stone-500">Sem categoria: ${brl(gastos.get(null))}</p>` : ''}
+          ${gastos.get(null) ? `<p class="px-1 text-sm text-stone-600 dark:text-stone-400">Sem categoria: ${brl(gastos.get(null))}</p>` : ''}
         </div>
 
         <div class="grid gap-4">
@@ -82,7 +82,7 @@ export default {
             ${porPessoa.size ? `<ul>${[...porPessoa].sort((a, b) => b[1] - a[1]).map(([id, v]) => {
               const p = buscar('pessoas', id);
               return `<li class="flex items-center justify-between gap-2 border-t border-stone-100 py-2.5 first:border-t-0 dark:border-stone-800">
-                <span><span class="block font-medium">${esc(p?.nome || 'Pessoa removida')}</span><span class="text-sm text-stone-500 dark:text-stone-400">${esc(p?.tipo || '')}</span></span>
+                <span><span class="block font-medium">${esc(p?.nome || 'Pessoa removida')}</span><span class="text-sm text-stone-600 dark:text-stone-400">${esc(p?.tipo || '')}</span></span>
                 <span class="font-semibold tabular-nums">${brl(v)}</span></li>`;
             }).join('')}</ul>` : estadoVazio('Ninguém neste mês', 'Preencha o campo "Pessoa" ao lançar pagamentos de funcionários e prestadores.')}
           </section>

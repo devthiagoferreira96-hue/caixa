@@ -28,7 +28,7 @@ export default {
           ${[['saida', 'saida', 'Saída', 'Paguei ou vou pagar'], ['entrada', 'entrada', 'Entrada', 'Recebi dinheiro'], ['cartao', 'cartao', 'Cartão', 'Comprei no crédito']]
             .map(([v, ic, t, sub]) => `<label class="opcao-modo">
               <input type="radio" name="modo" value="${v}" class="sr-only" ${v === ultimoModo ? 'checked' : ''}>
-              ${icone(ic, 'size-6')}<span>${t}</span><span class="text-xs font-normal text-stone-500 dark:text-stone-400">${sub}</span>
+              ${icone(ic, 'size-6')}<span>${t}</span><span class="text-xs font-normal text-stone-600 dark:text-stone-400">${sub}</span>
             </label>`).join('')}
         </div>
       </fieldset>
@@ -61,7 +61,7 @@ export default {
           <div class="grid gap-4 sm:grid-cols-2">
             <div data-campo><label class="rotulo" for="f-parcelas">Parcelas</label>
               <select id="f-parcelas" name="parcelas" class="campo">${Array.from({ length: 24 }, (_, i) => `<option value="${i + 1}">${i ? `${i + 1}x` : 'À vista (1x)'}</option>`).join('')}</select></div>
-            <div data-campo><label class="rotulo" for="f-sub">Subcategoria <span class="font-normal text-stone-500">(opcional)</span></label>
+            <div data-campo><label class="rotulo" for="f-sub">Subcategoria <span class="font-normal text-stone-600 dark:text-stone-400">(opcional)</span></label>
               <input id="f-sub" name="subcategoria" class="campo" maxlength="60" placeholder="Ex.: Eletrodoméstico"></div>
           </div>
           <div class="rounded-xl bg-stone-100 p-4 text-sm dark:bg-stone-800" aria-live="polite" data-previa></div>`
@@ -108,7 +108,7 @@ export default {
         <p class="flex items-start gap-2"><span class="mt-0.5 text-brand-700 dark:text-brand-400">${icone('calendario')}</span>
         <span>A ${n > 1 ? '1ª parcela' : 'compra'} entra na fatura de <strong>${nomeMes(parseISO(primeira))}</strong>, que vence em <strong>${dataCompleta(vencimentoFatura(cartao, primeira))}</strong>.
         ${n > 1 ? `<br>${n} parcelas de <strong>${brl(valores[0])}</strong>, até <strong>${nomeMes(parseISO(ultima))}</strong>.` : ''}</span></p>
-        <p class="mt-2 text-stone-500 dark:text-stone-400">${esc(cartao.nome)} fecha todo dia ${cartao.dia_fechamento}. Compras a partir desse dia vão para a fatura seguinte.</p>`;
+        <p class="mt-2 text-stone-600 dark:text-stone-400">${esc(cartao.nome)} fecha todo dia ${cartao.dia_fechamento}. Compras a partir desse dia vão para a fatura seguinte.</p>`;
     };
 
     form.addEventListener('change', (e) => (e.target.name === 'modo' ? trocarModo() : atualizarPrevia()));

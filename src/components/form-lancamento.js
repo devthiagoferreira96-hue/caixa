@@ -18,7 +18,7 @@ export const campoValor = (valor, rotulo = 'Valor') => `
   <div data-campo>
     <label class="rotulo" for="f-valor">${rotulo}</label>
     <div class="relative">
-      <span class="pointer-events-none absolute inset-y-0 left-3 flex items-center font-semibold text-stone-500" aria-hidden="true">R$</span>
+      <span class="pointer-events-none absolute inset-y-0 left-3 flex items-center font-semibold text-stone-600 dark:text-stone-400" aria-hidden="true">R$</span>
       <input id="f-valor" name="valor" class="campo pl-10 text-lg font-semibold tabular-nums" inputmode="numeric" autocomplete="off"
         placeholder="0,00" value="${valorParaCampo(valor)}" aria-describedby="dica-valor">
     </div>
@@ -55,7 +55,7 @@ export function camposCaixa(l = {}) {
       </div>
     </div>
     <div data-campo>
-      <label class="rotulo" for="f-pessoa">Pessoa <span class="font-normal text-stone-500">(opcional)</span></label>
+      <label class="rotulo" for="f-pessoa">Pessoa <span class="font-normal text-stone-600 dark:text-stone-400">(opcional)</span></label>
       <input id="f-pessoa" name="pessoa" class="campo" list="lista-pessoas" autocomplete="off" placeholder="Funcionário, prestador, alguém da família…" value="${esc(pessoa)}">
       <datalist id="lista-pessoas">${store.pessoas.map((p) => `<option value="${esc(p.nome)}"></option>`).join('')}</datalist>
       <p class="dica">Escreva um nome novo e ele é cadastrado automaticamente.</p>
@@ -63,7 +63,7 @@ export function camposCaixa(l = {}) {
     <label class="flex cursor-pointer items-start gap-3 rounded-xl border border-stone-200 p-3 has-checked:border-brand-500 has-checked:bg-brand-50 dark:border-stone-700 dark:has-checked:bg-brand-950">
       <input type="checkbox" name="pago" class="mt-0.5 size-5 accent-brand-600" ${pago ? 'checked' : ''}>
       <span><span class="block font-semibold" data-texto-pago>Já foi pago</span>
-      <span class="block text-sm text-stone-500 dark:text-stone-400">Desmarque se for uma conta que ainda vai vencer. Ela aparece em "Contas a pagar".</span></span>
+      <span class="block text-sm text-stone-600 dark:text-stone-400">Desmarque se for uma conta que ainda vai vencer. Ela aparece em "Contas a pagar".</span></span>
     </label>`;
 }
 

@@ -84,6 +84,7 @@ export function criarDemo() {
           const compras = db.compras_cartao.filter((c) => ids.includes(c.cartao_id)).map((c) => c.id);
           db.compras_cartao = db.compras_cartao.filter((c) => !compras.includes(c.id));
           db.parcelas = db.parcelas.filter((p) => !compras.includes(p.compra_id));
+          db.lancamentos.forEach((l) => ids.includes(l.fatura_cartao_id) && (l.fatura_cartao_id = null));
         }
         if (this.tabela === 'pessoas') db.lancamentos.forEach((l) => ids.includes(l.pessoa_id) && (l.pessoa_id = null));
       } else {
