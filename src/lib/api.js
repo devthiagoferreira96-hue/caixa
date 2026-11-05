@@ -1,32 +1,16 @@
 // =====================================================================
-// Todas as conversas com os dados ficam aqui. As telas nunca falam com o
-// Supabase direto: elas usam estas funções.
-//
-// FUNCIONA SEM INTERNET:
-//  - leituras vêm da cópia local (local-db.js);
-//  - alterações são aplicadas na cópia local na hora e entram na fila
-//    (sync.js), que é enviada ao Supabase quando houver conexão.
-// Só login, criar família e entrar com convite precisam de internet.
+// Todas as leituras e gravações de dados passam por aqui.
+// As telas nunca mexem no armazenamento direto: elas usam estas funções.
+// Os dados ficam no aparelho (local-db.js), cifrados com a senha.
 // =====================================================================
-import { supabase } from './supabase.js';
 import { local } from './local-db.js';
-import { enfileirar } from './sync.js';
 import { store } from './store.js';
 import { mesISO } from './format.js';
 
 /** Transforma erros técnicos em mensagens que qualquer pessoa entende */
 export function traduzirErro(e) {
   const m = String(e?.message || e || '');
-  if (/invalid login/i.test(m)) return new Error('E-mail ou senha incorretos.');
-  if (/email not confirmed/i.test(m)) return new Error('Falta confirmar o e-mail: abra o link que enviamos para sua caixa de entrada.');
-  if (/already registered|already been registered/i.test(m)) return new Error('Esse e-mail já tem cadastro. Use a opção "Entrar".');
-  if (/password should be|at least 6/i.test(m)) return new Error('A senha precisa ter pelo menos 6 caracteres.');
-  if (/rate limit/i.test(m)) return new Error('Muitas tentativas seguidas. Espere um minuto e tente de novo.');
   if (e?.code === '23503' || /foreign key/i.test(m)) return new Error('Esse item já foi usado em lançamentos, por isso não pode ser excluído.');
-  if (/muitas tentativas de codigo/i.test(m)) return new Error('Muitas tentativas com código errado. Espere uma hora e tente de novo.');
-  if (/codigo de convite/i.test(m)) return new Error('Código de convite não encontrado. Confira as letras e números.');
-  if (/outra família/i.test(m)) return new Error('Algum item escolhido não pertence à sua família.');
-  if (/failed to fetch|networkerror|load failed/i.test(m)) return new Error('Sem conexão com a internet. Verifique e tente de novo.');
   return new Error(m || 'Algo deu errado. Tente de novo.');
 }
 
@@ -34,95 +18,39 @@ const ok = ({ data, error }) => {
   if (error) throw traduzirErro(error);
   return data;
 };
-const exigirInternet = (acao) => {
-  if (!navigator.onLine) throw new Error(`Para ${acao} é preciso estar conectado à internet.`);
-};
 
 // ---------- Escritas: aplica na cópia local e coloca na fila
-const COM_AUTORIA = ['lancamentos', 'compras_cartao'];
+const COM_DATA = ['lancamentos', 'compras_cartao']; // guardam quando foram lançados/alterados
 const agora = () => new Date().toISOString();
 
 async function inserir(tabela, linhas) {
-  const autoria = COM_AUTORIA.includes(tabela) ? { criado_por: store.user.id, criado_em: agora() } : {};
-  const novas = linhas.map((l) => ({ id: crypto.randomUUID(), familia_id: store.familia.id, ...autoria, ...l }));
-  const salvas = ok(await local.from(tabela).insert(novas).select());
-  await enfileirar({ op: 'insert', tabela, linhas: novas });
-  return salvas;
+  const novas = linhas.map((l) => ({ id: crypto.randomUUID(), ...(COM_DATA.includes(tabela) ? { criado_em: agora() } : {}), ...l }));
+  return ok(await local.from(tabela).insert(novas).select());
 }
 async function alterar(tabela, ids, valores) {
-  if (COM_AUTORIA.includes(tabela)) valores = { ...valores, alterado_por: store.user.id, alterado_em: agora() };
-  const salvas = ok(await local.from(tabela).update(valores).in('id', ids).select());
-  await enfileirar({ op: 'update', tabela, ids, valores });
-  return salvas;
+  if (COM_DATA.includes(tabela)) valores = { ...valores, alterado_em: agora() };
+  return ok(await local.from(tabela).update(valores).in('id', ids).select());
 }
 async function remover(tabela, ids) {
   ok(await local.from(tabela).delete().in('id', ids));
-  await enfileirar({ op: 'delete', tabela, ids });
 }
 
 // ---------- Desfazer: guardar como estava antes e saber voltar
 const copiar = async (tabela, coluna, valores) =>
   valores.length ? ok(await local.from(tabela).select('*').in(coluna, valores)) : [];
-/** Coloca de volta itens excluídos, com os mesmos ids (o servidor aceita porque o id é UUID) */
+/** Coloca de volta itens excluídos, com os mesmos ids */
 async function reinserir(tabela, linhas) {
   if (!linhas.length) return;
   ok(await local.from(tabela).insert(linhas));
-  await enfileirar({ op: 'insert', tabela, linhas });
 }
 /** Volta os campos alterados ao valor anterior */
 const valoresAnteriores = (antes, valores) => Object.fromEntries(Object.keys(valores).map((k) => [k, antes[k] ?? null]));
-
-// ---------- Login (precisa de internet)
-export const auth = {
-  entrar: async (email, senha) => ok(await supabase.auth.signInWithPassword({ email, password: senha })),
-  criarConta: async (email, senha) =>
-    ok(await supabase.auth.signUp({ email, password: senha, options: { emailRedirectTo: location.href.split('#')[0] } })),
-  recuperarSenha: async (email) =>
-    ok(await supabase.auth.resetPasswordForEmail(email, { redirectTo: location.href.split('#')[0] })),
-  sair: async () => ok(await supabase.auth.signOut()),
-};
-
-// ---------- Família
-/** Busca a família no Supabase (com internet) ou usa a que está guardada no aparelho */
-export async function minhaFamilia() {
-  if (!navigator.onLine) return local.familia;
-  const vinculo = ok(await supabase.from('membros').select('familia_id').eq('user_id', store.user.id).maybeSingle());
-  if (!vinculo) return null;
-  const familia = ok(await supabase.from('familias').select('*').eq('id', vinculo.familia_id).single());
-  local.definirFamilia(familia);
-  return familia;
-}
-export async function criarFamilia(nome) {
-  exigirInternet('criar a família');
-  ok(await supabase.rpc('criar_familia', { p_nome: nome }));
-  return minhaFamilia();
-}
-export async function entrarFamilia(codigo) {
-  exigirInternet('entrar na família');
-  const familiaId = ok(await supabase.rpc('entrar_familia', { p_codigo: codigo.trim().toUpperCase() }));
-  if (!familiaId) throw new Error('Código de convite não encontrado. Confira as letras e números.');
-  return minhaFamilia();
-}
-/** Muda o nome com que você aparece no sistema ("Thiago") */
-export async function mudarMeuNome(nome) {
-  ok(await local.from('membros').update({ nome }).eq('user_id', store.user.id));
-  await enfileirar({ op: 'update', tabela: 'membros', onde: { user_id: store.user.id, familia_id: store.familia.id }, valores: { nome } });
-  await carregarCadastros();
-}
-
-export async function renomearFamilia(nome) {
-  const familia = { ...store.familia, nome };
-  local.definirFamilia(familia);
-  await enfileirar({ op: 'update', tabela: 'familias', ids: [familia.id], valores: { nome } });
-  return familia;
-}
 
 // ---------- Cadastros (contas, cartões, categorias, pessoas)
 export async function carregarCadastros() {
   for (const t of ['contas', 'cartoes', 'categorias', 'pessoas']) {
     store[t] = ok(await local.from(t).select('*').order('nome'));
   }
-  store.membros = ok(await local.from('membros').select('*').order('user_id'));
 }
 
 /**
@@ -257,31 +185,57 @@ const parecidos = (a, b) => {
 
 /**
  * Procura um lançamento ou compra no cartão parecido com o que vai ser salvo:
- * mesmo valor, mesma data e (mesma categoria, descrição parecida ou lançado há menos de 2 horas).
- * Só considera o que foi lançado por OUTRA pessoa, ou por você mesmo há menos de 10 minutos.
+ * mesmo valor, mesma data e (mesma categoria ou descrição parecida).
  * Retorna o item encontrado (com `origem`: 'caixa' ou 'cartao') ou null.
  */
 export async function procurarParecido({ tipo, valor, data, categoria_id, descricao }) {
   const centavos = (v) => Math.round(Number(v) * 100);
-  const minutosDesde = (iso) => (iso ? (Date.now() - new Date(iso)) / 60000 : Infinity);
   const candidatos = [];
   const lancs = ok(await local.from('lancamentos').select('*').eq('vencimento', data));
   lancs
     .filter((l) => !l.fatura_cartao_id && (tipo === 'entrada' ? l.tipo === 'entrada' : l.tipo === 'saida'))
-    .forEach((l) => candidatos.push({ ...l, origem: 'caixa', valorTotal: l.valor, data: l.vencimento }));
+    .forEach((l) => candidatos.push({ ...l, origem: 'caixa', valorTotal: l.valor }));
   if (tipo !== 'entrada') {
     ok(await local.from('compras_cartao').select('*').eq('data_compra', data))
-      .forEach((c) => candidatos.push({ ...c, origem: 'cartao', valorTotal: c.valor_total, data: c.data_compra }));
+      .forEach((c) => candidatos.push({ ...c, origem: 'cartao', valorTotal: c.valor_total }));
   }
-  return candidatos.find((c) => {
-    if (centavos(c.valorTotal) !== centavos(valor) || !c.criado_por) return false;
-    const minutos = minutosDesde(c.criado_em);
-    const deOutro = c.criado_por !== store.user.id;
-    if (!deOutro && minutos > 10) return false;
-    return c.categoria_id === categoria_id || parecidos(c.descricao, descricao) || minutos < 120;
-  }) || null;
+  return candidatos.find((c) => centavos(c.valorTotal) === centavos(valor) &&
+    (c.categoria_id === categoria_id || parecidos(c.descricao, descricao))) || null;
 }
 
 /** Pagamentos de fatura registrados para um mês (são lançamentos com fatura_mes preenchido) */
 export const pagamentosDeFatura = async (mes = store.mes) =>
   ok(await local.from('lancamentos').select('*').eq('fatura_mes', mesISO(mes)));
+
+// ---------- Backup
+/** Monta o conteúdo do arquivo de backup (todos os dados, sem a senha) */
+export function conteudoBackup() {
+  return {
+    app: 'caixa-familia',
+    versao: 1,
+    exportado_em: new Date().toISOString(),
+    usuario: local.usuario,
+    tabelas: local.tabelas(),
+  };
+}
+
+/** Lê e confere um arquivo de backup. Retorna as tabelas ou lança erro com mensagem clara. */
+export function lerBackup(textoDoArquivo) {
+  let dados;
+  try { dados = JSON.parse(textoDoArquivo); } catch { throw new Error('Esse arquivo não é um backup do Caixa da Família.'); }
+  if (dados?.app !== 'caixa-familia' || typeof dados.tabelas !== 'object') {
+    throw new Error('Esse arquivo não é um backup do Caixa da Família.');
+  }
+  for (const t of local.TABELAS) {
+    if (dados.tabelas[t] !== undefined && !Array.isArray(dados.tabelas[t])) throw new Error('O arquivo de backup está danificado.');
+  }
+  return dados;
+}
+
+/** Restaura um backup. Retorna `desfazer()`, que volta os dados de antes. */
+export async function restaurarBackup(dados) {
+  const antes = structuredClone(local.tabelas());
+  await local.substituir(dados.tabelas);
+  await carregarCadastros();
+  return async () => { await local.substituir(antes); await carregarCadastros(); };
+}

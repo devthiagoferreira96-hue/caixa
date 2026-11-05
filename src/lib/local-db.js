@@ -1,58 +1,129 @@
 // =====================================================================
-// CÓPIA LOCAL DOS DADOS
-// Todas as telas leem daqui, por isso o sistema funciona sem internet.
-// A cópia fica salva no aparelho (IndexedDB) e é atualizada pelo sync.js
-// sempre que há conexão.
+// DADOS NO APARELHO
+// Tudo fica guardado no próprio celular/computador (IndexedDB), cifrado com
+// a senha do usuário. Não existe servidor: o sistema funciona 100% offline.
+//
+// No aparelho ficam duas coisas:
+//   "conta" -> nome do usuário, o "sal" da senha e um verificador cifrado
+//   "dados" -> todas as tabelas, cifradas
 // =====================================================================
-import { criarConsultas, tabelasVazias } from './consulta-local.js';
+import { criarConsultas, tabelasVazias, TABELAS } from './consulta-local.js';
+import { chaveDaSenha, novoSal, cifrar, decifrar } from './cofre.js';
 import * as armazenamento from './armazenamento.js';
 
-const banco = { tabelas: tabelasVazias(), familiaId: null, aoMudar: () => agendarGravacao() };
-let chave = null;
+const banco = { tabelas: tabelasVazias(), aoMudar: () => agendarGravacao() };
+let chave = null; // existe só na memória enquanto o sistema está desbloqueado
 let timer = null;
+let gravando = Promise.resolve();
+
+const VERIFICADOR = 'caixa-ok';
 
 function agendarGravacao() {
   clearTimeout(timer);
   timer = setTimeout(gravarAgora, 150);
 }
+
+/** Cifra e grava tudo no aparelho (as gravações acontecem uma de cada vez, na ordem) */
 function gravarAgora() {
-  if (!chave) return Promise.resolve();
-  return armazenamento
-    .gravar(chave, { tabelas: banco.tabelas, familia: local.familia, ultimaAtualizacao: local.ultimaAtualizacao })
-    .catch((e) => console.warn('Não foi possível salvar a cópia local', e));
+  clearTimeout(timer);
+  if (!chave) return gravando;
+  const instantaneo = { tabelas: banco.tabelas, ultimoBackup: local.ultimoBackup };
+  gravando = gravando
+    .then(async () => armazenamento.gravar('dados', await cifrar(chave, instantaneo)))
+    .catch((e) => console.error('Não foi possível salvar no aparelho', e));
+  return gravando;
 }
 
 export const local = {
-  familia: null,
-  usuarioId: null,
-  ultimaAtualizacao: null,
+  usuario: null,
+  ultimoBackup: null,
   from: criarConsultas(banco),
+  tabelas: () => banco.tabelas,
 
-  /** Abre a cópia deste usuário. Retorna true se já existia uma cópia com dados. */
-  async abrir(userId) {
-    chave = `dados:${userId}`;
-    this.usuarioId = userId;
-    const salvo = await armazenamento.ler(chave).catch(() => null);
-    banco.tabelas = { ...tabelasVazias(), ...(salvo?.tabelas || {}) };
-    this.familia = salvo?.familia || null;
-    this.ultimaAtualizacao = salvo?.ultimaAtualizacao || null;
-    banco.familiaId = this.familia?.id || null;
-    return Boolean(this.familia && this.ultimaAtualizacao);
+  /** Já existe um usuário criado neste aparelho? Retorna o nome ou null */
+  async usuarioCadastrado() {
+    const conta = await armazenamento.ler('conta').catch(() => null);
+    return conta?.usuario || null;
   },
 
-  definirFamilia(familia) {
-    this.familia = familia;
-    banco.familiaId = familia.id;
-    agendarGravacao();
+  /** Primeiro acesso: cria o usuário e grava os dados iniciais */
+  async criarConta(usuario, senha, tabelasIniciais) {
+    const sal = novoSal();
+    chave = await chaveDaSenha(senha, sal);
+    await armazenamento.gravar('conta', { usuario, sal, verificador: await cifrar(chave, VERIFICADOR), criada_em: new Date().toISOString() });
+    this.usuario = usuario;
+    this.ultimoBackup = null;
+    banco.tabelas = { ...tabelasVazias(), ...tabelasIniciais };
+    await gravarAgora();
+    pedirArmazenamentoPersistente();
   },
 
-  /** Troca toda a cópia pelos dados que vieram do Supabase */
-  substituir(tabelas) {
+  /** Abre os dados com a senha. Retorna false se a senha estiver errada. */
+  async desbloquear(senha) {
+    const conta = await armazenamento.ler('conta');
+    const tentativa = await chaveDaSenha(senha, conta.sal);
+    try {
+      if ((await decifrar(tentativa, conta.verificador)) !== VERIFICADOR) return false;
+    } catch {
+      return false; // senha errada: a decifragem falha
+    }
+    chave = tentativa;
+    const salvo = await armazenamento.ler('dados');
+    const dados = salvo ? await decifrar(chave, salvo) : {};
+    banco.tabelas = { ...tabelasVazias(), ...(dados.tabelas || {}) };
+    this.usuario = conta.usuario;
+    this.ultimoBackup = dados.ultimoBackup || null;
+    pedirArmazenamentoPersistente();
+    return true;
+  },
+
+  /** Troca o nome e/ou a senha (cifra tudo de novo com a senha nova) */
+  async alterarConta({ usuario, senhaAtual, senhaNova }) {
+    const conta = await armazenamento.ler('conta');
+    if (senhaNova) {
+      const atual = await chaveDaSenha(senhaAtual, conta.sal);
+      try { await decifrar(atual, conta.verificador); } catch { throw new Error('A senha atual está incorreta.'); }
+      const sal = novoSal();
+      chave = await chaveDaSenha(senhaNova, sal);
+      conta.sal = sal;
+      conta.verificador = await cifrar(chave, VERIFICADOR);
+    }
+    if (usuario) conta.usuario = usuario;
+    await armazenamento.gravar('conta', conta);
+    await gravarAgora();
+    this.usuario = conta.usuario;
+  },
+
+  /** Troca todos os dados (restaurar backup) */
+  async substituir(tabelas) {
     banco.tabelas = { ...tabelasVazias(), ...tabelas };
-    this.ultimaAtualizacao = new Date().toISOString();
-    return gravarAgora();
+    await gravarAgora();
+  },
+
+  async marcarBackup() {
+    this.ultimoBackup = new Date().toISOString();
+    await gravarAgora();
+  },
+
+  /** Esquece a chave da memória (os dados continuam cifrados no aparelho) */
+  bloquear() {
+    clearTimeout(timer);
+    chave = null;
+    banco.tabelas = tabelasVazias();
+  },
+
+  /** Apaga usuário e dados deste aparelho */
+  async apagarTudo() {
+    this.bloquear();
+    await armazenamento.apagar('dados');
+    await armazenamento.apagar('conta');
   },
 
   gravarAgora,
-  tabelas: () => banco.tabelas,
+  TABELAS,
 };
+
+// Pede ao navegador para não apagar os dados do site quando faltar espaço
+function pedirArmazenamentoPersistente() {
+  navigator.storage?.persist?.().catch(() => {});
+}

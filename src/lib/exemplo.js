@@ -1,95 +1,20 @@
 // =====================================================================
-// MODO DEMONSTRAÇÃO
-// Um "Supabase de mentira" para ver o sistema funcionando antes de configurar
-// o banco. Ele guarda os dados de exemplo neste navegador e imita os comandos
-// que o app usa. Para testar o modo offline, desligue a internet: ele passa a
-// responder "sem conexão", igual ao Supabase de verdade.
+// Dados iniciais: contas, cartões e categorias da planilha.
+// Opcionalmente, também lançamentos de exemplo para conhecer o sistema.
 // =====================================================================
 import { faturaDe, dividirParcelas } from './faturas.js';
 import { somarDias, toISO, hoje } from './format.js';
 import { criarConsultas, tabelasVazias } from './consulta-local.js';
-import * as armazenamento from './armazenamento.js';
 
-const CHAVE = 'demo-servidor-v2';
-const ID_THIAGO = 'usuario-demo';
-const ID_THAYS = 'usuario-thays';
-
-export function criarDemo() {
-  const FAMILIA = 'familia-demo';
-  const USUARIO = { id: ID_THIAGO, email: 'demonstracao@caixa.app' };
-  const banco = { tabelas: {}, familiaId: FAMILIA, aoMudar: () => armazenamento.gravar(CHAVE, banco.tabelas).catch(() => {}) };
-  const novasTabelas = () => ({
-    ...tabelasVazias(),
-    familias: [{ id: FAMILIA, nome: 'Família Demonstração', codigo_convite: 'DEMO42' }],
-    membros: [
-      { familia_id: FAMILIA, user_id: ID_THIAGO, nome: 'Thiago' },
-      { familia_id: FAMILIA, user_id: ID_THAYS, nome: 'Thays' },
-    ],
-  });
+/** Retorna as tabelas prontas para começar a usar */
+export function dadosIniciais({ comExemplo = false } = {}) {
+  const banco = { tabelas: tabelasVazias() };
   const consultar = criarConsultas(banco);
-  const inserir = (tabela, obj) => {
-    const linha = consultar(tabela).insert(obj).executar().data[0];
-    return linha;
-  };
-  const pronto = armazenamento.ler(CHAVE).catch(() => null).then((salvo) => {
-    if (salvo?.familias) banco.tabelas = salvo;
-    else { banco.tabelas = novasTabelas(); popular(inserir); banco.aoMudar(); }
-  });
+  const inserir = (tabela, obj) => consultar(tabela).insert(obj).executar().data[0];
 
-  const semRede = () => !navigator.onLine;
-  const respostaSemRede = { data: null, error: { message: 'Failed to fetch' } };
-  const espera = () => new Promise((r) => setTimeout(r, 60));
-
-  let sessao = { user: USUARIO };
-  const ouvintes = [];
-  const avisar = (evento) => ouvintes.forEach((f) => f(evento, sessao));
-
-  return {
-    from(tabela) {
-      const q = consultar(tabela);
-      // responde como a internet: espera um pouco e falha se estiver offline
-      q.then = (ok, falha) => pronto.then(espera).then(() => (semRede() ? respostaSemRede : q.executar())).then(ok, falha);
-      return q;
-    },
-    // Só no modo demonstração: simula a outra pessoa da família lançando algo no celular dela
-    demo: {
-      async outraPessoaLanca() {
-        await pronto;
-        const t = banco.tabelas;
-        inserir('lancamentos', {
-          tipo: 'saida', valor: 12, descricao: 'Lanche', pago: true,
-          categoria_id: t.categorias.find((c) => c.nome === 'Restaurantes/Padarias')?.id,
-          conta_id: t.contas.find((c) => c.nome === 'Nubank')?.id,
-          vencimento: toISO(hoje()), data_pagamento: toISO(hoje()),
-          criado_por: ID_THAYS, criado_em: new Date().toISOString(),
-        });
-      },
-    },
-    rpc: async () => (await espera(), semRede() ? respostaSemRede : { data: FAMILIA, error: null }),
-    auth: {
-      getSession: async () => ({ data: { session: sessao }, error: null }),
-      onAuthStateChange(fn) {
-        ouvintes.push(fn);
-        return { data: { subscription: { unsubscribe() {} } } };
-      },
-      async signInWithPassword() {
-        if (semRede()) return respostaSemRede;
-        sessao = { user: USUARIO }; avisar('SIGNED_IN'); return { data: { session: sessao }, error: null };
-      },
-      async signUp() {
-        if (semRede()) return respostaSemRede;
-        sessao = { user: USUARIO }; avisar('SIGNED_IN'); return { data: { session: sessao }, error: null };
-      },
-      async signOut() { sessao = null; avisar('SIGNED_OUT'); return { error: null }; },
-      async resetPasswordForEmail() { return semRede() ? respostaSemRede : { error: null }; },
-    },
-  };
-}
-
-// ---------- Dados de exemplo
-function popular(inserir) {
+  const saldos = comExemplo ? [850, 6200, 1450, 300, 0] : [0, 0, 0, 0, 0];
   const contas = Object.fromEntries(
-    [['Espécie', 850], ['MMP', 6200], ['Nubank', 1450], ['TMP', 300], ['M.C.', 0]]
+    ['Espécie', 'MMP', 'Nubank', 'TMP', 'M.C.'].map((nome, i) => [nome, saldos[i]])
       .map(([nome, saldo_inicial]) => [nome, inserir('contas', { nome, saldo_inicial }).id]),
   );
   const cartoes = [
@@ -112,14 +37,19 @@ function popular(inserir) {
     ['Assinatura Canais', 'Serviços', false], ['Segurança', 'Serviços', false], ['Telefone', 'Serviços', false],
   ].forEach(([nome, grupo, no_grafico]) => (cat[nome] = inserir('categorias', { nome, grupo, no_grafico }).id));
 
+  if (comExemplo) exemplos(inserir, { contas, cartoes, cat });
+  return banco.tabelas;
+}
+
+// ---------- Lançamentos de exemplo
+function exemplos(inserir, { contas, cartoes, cat }) {
   const joao = inserir('pessoas', { nome: 'João', tipo: 'Funcionário' }).id;
   const maria = inserir('pessoas', { nome: 'Maria', tipo: 'Prestador' }).id;
   inserir('pessoas', { nome: 'Thays', tipo: 'Família' });
 
   let vez = 0;
   const autoria = (data) => ({
-    criado_por: vez++ % 3 === 1 ? ID_THAYS : ID_THIAGO,
-    criado_em: new Date(`${data}T${String(9 + (vez % 10)).padStart(2, '0')}:15:00`).toISOString(),
+    criado_em: new Date(`${data}T${String(9 + (vez++ % 10)).padStart(2, '0')}:15:00`).toISOString(),
   });
   const L = (tipo, valor, descricao, categoria, conta, dias, pago, pessoa_id = null) =>
     inserir('lancamentos', {

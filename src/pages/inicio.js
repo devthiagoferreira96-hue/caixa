@@ -6,6 +6,8 @@ import { gastosPorCategoria, saidasReais, entradas, somar, totalDoCartao } from 
 import { itemLancamento, cliqueEmLancamento } from '../components/lancamento.js';
 import { barrasCategorias, abrirDetalheCategoria } from '../components/grafico.js';
 import { icone, estadoVazio } from '../lib/ui.js';
+import { local } from '../lib/local-db.js';
+import { fazerBackup } from '../components/backup.js';
 import { vencimentoFatura } from '../lib/faturas.js';
 
 export default {
@@ -78,6 +80,7 @@ export default {
       </div>
 
       <div class="grid gap-4">
+        ${lembreteBackup()}
         ${semNada ? `
         <section class="card border-brand-200 bg-brand-50 dark:border-brand-900 dark:bg-brand-950" aria-labelledby="t-comecar">
           <h2 id="t-comecar" class="font-bold">Vamos começar?</h2>
@@ -113,9 +116,22 @@ export default {
     </div>`;
 
     el.onclick = async (e) => {
+      if (e.target.closest('[data-backup]')) { if (await fazerBackup()) ctx.atualizar(); return; }
       if (await cliqueEmLancamento(e, pendentes, ctx.atualizar)) return;
       const barra = e.target.closest('[data-categoria]');
       if (barra) abrirDetalheCategoria(barra.dataset.categoria, lancamentos, parcelas);
     };
   },
 };
+
+/** Aviso para fazer backup: se nunca fez (e já tem lançamentos) ou se o último tem mais de 30 dias */
+function lembreteBackup() {
+  const temDados = local.tabelas().lancamentos.length + local.tabelas().compras_cartao.length > 0;
+  const dias = local.ultimoBackup ? Math.floor((Date.now() - new Date(local.ultimoBackup)) / 86400000) : null;
+  if (!temDados || (dias !== null && dias < 30)) return '';
+  return `<section class="card border-amber-300 bg-amber-50 dark:border-amber-800 dark:bg-amber-900/30" aria-labelledby="t-backup">
+    <h2 id="t-backup" class="flex items-center gap-2 font-bold text-amber-900 dark:text-amber-100">${icone('alerta')} ${dias === null ? 'Faça seu primeiro backup' : `Último backup há ${dias} dias`}</h2>
+    <p class="mt-1 text-sm text-amber-900 dark:text-amber-100">Os dados ficam só neste aparelho. Se ele for perdido ou formatado, só o backup traz tudo de volta.</p>
+    <button type="button" class="btn-primario mt-3" data-backup>${icone('baixar')} Fazer backup agora</button>
+  </section>`;
+}

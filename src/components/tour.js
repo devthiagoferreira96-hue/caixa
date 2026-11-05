@@ -3,10 +3,11 @@ import { dialogo, icone } from '../lib/ui.js';
 import { salvarPreferencias } from '../lib/preferencias.js';
 
 const PASSOS = [
-  ['casa', 'Bem-vindos ao Caixa da Família', 'Aqui vocês controlam o dinheiro da casa: o que entrou, o que saiu, as contas a pagar e as faturas dos cartões. Tudo que um de vocês lança, o outro vê na hora.'],
+  ['casa', 'Bem-vindo ao Caixa da Família', 'Aqui você controla o dinheiro da casa: o que entrou, o que saiu, as contas a pagar e as faturas dos cartões. Funciona sem internet e os dados ficam só neste aparelho, protegidos pela sua senha.'],
   ['mais', 'Lance um gasto em segundos', 'Toque no botão verde <strong>+</strong> (ou <strong>Novo lançamento</strong> no computador). Escolha se foi uma saída, uma entrada ou uma compra no cartão e preencha o valor.'],
   ['check', 'Marque o que já foi pago', 'Contas que ainda vão vencer aparecem com o círculo vazio. Quando pagar, toque no círculo: ele fica verde e o saldo da conta é atualizado.'],
   ['cartao', 'Cartões e parcelas', 'Numa compra parcelada, digite o valor total e o número de parcelas. O sistema coloca cada parcela na fatura certa, de acordo com o dia de fechamento do cartão.'],
+  ['baixar', 'Faça backup', 'Como os dados ficam só neste aparelho, faça um <strong>backup</strong> de vez em quando (em Ajustes) e guarde o arquivo no Drive, e-mail ou WhatsApp.'],
   ['ajuda', 'Ficou com dúvida?', 'Toque no <strong>?</strong> no topo de qualquer tela para ver uma explicação dela. Errou alguma coisa? Quase tudo tem o botão <strong>Desfazer</strong>.'],
 ];
 

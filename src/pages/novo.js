@@ -2,7 +2,7 @@
 import { brl, esc, hojeISO, lerValor, somarMeses, nomeMes, parseISO, dataCompleta, VALOR_MAXIMO, valorMaximoTexto } from '../lib/format.js';
 import { store, cartoesAtivos, buscar } from '../lib/store.js';
 import { criarLancamentos, excluirLancamentos, criarCompra, excluirCompra, pessoaPorNome, procurarParecido } from '../lib/api.js';
-import { autor, nomeCategoria } from '../lib/store.js';
+import { nomeCategoria } from '../lib/store.js';
 import { desfazendo } from '../components/lancamento.js';
 import { faturaDe, vencimentoFatura, dividirParcelas } from '../lib/faturas.js';
 import { icone, toast, mascaraDinheiro, erroNoCampo, limparErros, dialogo } from '../lib/ui.js';
@@ -197,29 +197,25 @@ async function salvarCompra(form, botao) {
 }
 
 /**
- * Se a outra pessoa (ou você, há poucos minutos) já lançou algo igual, pergunta antes de salvar.
- * Retorna true para salvar, false para não salvar.
+ * Se já existe um lançamento igual (mesmo valor, mesmo dia e mesma categoria ou descrição parecida),
+ * pergunta antes de salvar. Retorna true para salvar, false para não salvar.
  */
 async function podeSalvarMesmoParecido(dados) {
   const igual = await procurarParecido(dados);
   if (!igual) return true;
-  const quem = autor(igual.criado_por);
-  const ehOutro = quem && !quem.souEu;
-  const minutos = Math.max(1, Math.round((Date.now() - new Date(igual.criado_em)) / 60000));
-  const horario = new Date(igual.criado_em).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+  const horario = igual.criado_em ? ` às ${new Date(igual.criado_em).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}` : '';
   const oQue = dados.tipo === 'entrada' ? 'uma entrada semelhante a esta' : 'um gasto semelhante a este';
-  const titulo = ehOutro ? `${quem.nome} lançou ${oQue}` : `Você já lançou ${oQue}`;
   const onde = igual.origem === 'cartao' ? `no ${esc(buscar('cartoes', igual.cartao_id)?.nome || 'cartão')}` : `em ${esc(buscar('contas', igual.conta_id)?.nome || 'conta')}`;
   return new Promise((resolver) => {
     const d = dialogo({
-      titulo: ehOutro ? 'Gasto parecido já lançado' : 'Lançamento repetido?',
+      titulo: 'Lançamento repetido?',
       largura: 'max-w-md',
       corpo: `
-        <p class="text-stone-700 dark:text-stone-300"><strong>${esc(titulo)}</strong>${ehOutro ? '' : ` há ${minutos} min`}. Deseja continuar mesmo assim?</p>
+        <p class="text-stone-700 dark:text-stone-300"><strong>Você já lançou ${oQue}.</strong> Deseja continuar mesmo assim?</p>
         <div class="mt-4 flex items-center gap-3 rounded-xl border border-stone-200 p-3 dark:border-stone-700">
-          <span class="min-w-0 flex-1"><span class="block truncate font-semibold">${esc(igual.descricao)}</span>
-          <span class="block text-sm text-stone-600 dark:text-stone-400">${esc(nomeCategoria(igual.categoria_id))} · ${onde} · ${ehOutro ? `lançado por ${esc(quem.nome)} ` : ''}às ${horario}</span></span>
-          <span class="font-semibold tabular-nums">${brl(igual.valorTotal)}</span>
+          <span class="min-w-0 flex-1"><span class="block font-semibold">${esc(igual.descricao)}</span>
+          <span class="block text-sm text-stone-600 dark:text-stone-400">${esc(nomeCategoria(igual.categoria_id))} · ${onde}${igual.criado_em ? ` · lançado${horario}` : ''}</span></span>
+          <span class="shrink-0 font-semibold tabular-nums">${brl(igual.valorTotal)}</span>
         </div>
         <div class="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
           <button type="button" class="btn-neutro" data-r="sim">Lançar mesmo assim</button>
