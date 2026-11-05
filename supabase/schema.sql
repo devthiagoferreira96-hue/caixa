@@ -1,7 +1,7 @@
 -- =====================================================================
 -- Caixa da Família — banco de dados (Supabase / PostgreSQL)
 -- Como usar: Supabase > SQL Editor > New query > cole TUDO > Run
--- Pode rodar uma vez só. As contas, cartões e categorias padrão são
+-- Pode rodar uma vez só. (Para recomeçar do zero, rode antes o reset.sql.) As contas, cartões e categorias padrão são
 -- criados automaticamente quando a primeira pessoa cria a família no app.
 -- =====================================================================
 
@@ -34,7 +34,7 @@ $$;
 
 -- ---------- Cadastros
 create table contas (                -- Espécie, MMP, Nubank, TMP, M.C.
-  id bigint generated always as identity primary key,
+  id uuid primary key default gen_random_uuid(),  -- o app gera o id (funciona offline)
   familia_id uuid not null references familias(id) on delete cascade,
   nome text not null,
   saldo_inicial numeric(12,2) not null default 0    -- saldo que já existia antes de usar o sistema
@@ -43,7 +43,7 @@ create table contas (                -- Espécie, MMP, Nubank, TMP, M.C.
 );
 
 create table cartoes (               -- Mercado Pago, Nubank, Thays
-  id bigint generated always as identity primary key,
+  id uuid primary key default gen_random_uuid(),  -- o app gera o id (funciona offline)
   familia_id uuid not null references familias(id) on delete cascade,
   nome text not null,
   dia_fechamento int not null check (dia_fechamento between 1 and 31),
@@ -52,7 +52,7 @@ create table cartoes (               -- Mercado Pago, Nubank, Thays
 );
 
 create table categorias (
-  id bigint generated always as identity primary key,
+  id uuid primary key default gen_random_uuid(),  -- o app gera o id (funciona offline)
   familia_id uuid not null references familias(id) on delete cascade,
   nome text not null,
   grupo text not null default 'Casa',          -- Casa, Fazenda, Empresa, Financeiro, Serviços...
@@ -60,7 +60,7 @@ create table categorias (
 );
 
 create table pessoas (               -- família, funcionários, prestadores
-  id bigint generated always as identity primary key,
+  id uuid primary key default gen_random_uuid(),  -- o app gera o id (funciona offline)
   familia_id uuid not null references familias(id) on delete cascade,
   nome text not null,
   tipo text not null default 'Outro'           -- Família, Funcionário, Prestador, Outro
@@ -68,7 +68,7 @@ create table pessoas (               -- família, funcionários, prestadores
 
 -- ---------- Movimentação do caixa (colunas A:K da planilha)
 create table lancamentos (
-  id bigint generated always as identity primary key,
+  id uuid primary key default gen_random_uuid(),  -- o app gera o id (funciona offline)
   familia_id uuid not null references familias(id) on delete cascade,
   tipo text not null check (tipo in ('saida','entrada')),
   valor numeric(12,2) not null check (valor > 0 and valor <= 99999999.99),  -- até R$ 99.999.999,99
@@ -76,12 +76,12 @@ create table lancamentos (
   vencimento date not null,
   pago boolean not null default false,          -- STATUS "OK"
   data_pagamento date,
-  conta_id bigint references contas(id),
-  categoria_id bigint references categorias(id),
-  pessoa_id bigint references pessoas(id) on delete set null,
+  conta_id uuid references contas(id),
+  categoria_id uuid references categorias(id),
+  pessoa_id uuid references pessoas(id) on delete set null,
   parcela text,                                 -- ex.: "3/12" em contas repetidas
   grupo uuid,                                   -- liga lançamentos repetidos entre si
-  fatura_cartao_id bigint references cartoes(id) on delete set null, -- é pagamento de fatura?
+  fatura_cartao_id uuid references cartoes(id) on delete set null, -- é pagamento de fatura?
   fatura_mes date,
   criado_por uuid default auth.uid(),
   criado_em timestamptz default now()
@@ -89,22 +89,22 @@ create table lancamentos (
 
 -- ---------- Compras no cartão (colunas Q:AP da planilha)
 create table compras_cartao (
-  id bigint generated always as identity primary key,
+  id uuid primary key default gen_random_uuid(),  -- o app gera o id (funciona offline)
   familia_id uuid not null references familias(id) on delete cascade,
-  cartao_id bigint not null references cartoes(id) on delete cascade,
+  cartao_id uuid not null references cartoes(id) on delete cascade,
   data_compra date not null,
   valor_total numeric(12,2) not null check (valor_total > 0 and valor_total <= 99999999.99),
   qtd_parcelas int not null default 1 check (qtd_parcelas between 1 and 48),
   descricao text not null,
-  categoria_id bigint references categorias(id),
+  categoria_id uuid references categorias(id),
   subcategoria text,
   criado_por uuid default auth.uid(),
   criado_em timestamptz default now()
 );
 
 create table parcelas (              -- criadas pelo app a partir da compra
-  id bigint generated always as identity primary key,
-  compra_id bigint not null references compras_cartao(id) on delete cascade,
+  id uuid primary key default gen_random_uuid(),  -- o app gera o id (funciona offline)
+  compra_id uuid not null references compras_cartao(id) on delete cascade,
   familia_id uuid not null references familias(id) on delete cascade,
   numero int not null,
   valor numeric(12,2) not null,
@@ -161,7 +161,7 @@ begin
     ) as r(tabela, id) where r.id is not null
   loop
     execute format('select exists (select 1 from %I where id = $1 and familia_id = $2)', ref.tabela)
-      into existe using ref.id::bigint, new.familia_id;
+      into existe using ref.id::uuid, new.familia_id;
     if not existe then
       raise exception 'Item de outra família (%)', ref.tabela;
     end if;

@@ -93,7 +93,7 @@ export default {
     const atualizarPrevia = () => {
       const area = el.querySelector('[data-previa]');
       if (!area || modo() !== 'cartao') return;
-      const cartao = buscar('cartoes', Number(form.cartao_id.value));
+      const cartao = buscar('cartoes', form.cartao_id.value);
       const n = Number(form.parcelas.value);
       const total = lerValor(form.valor.value) || 0;
       const data = form.data_compra.value || hojeISO();
@@ -173,7 +173,7 @@ async function salvarCaixa(form, botao, tipo) {
 async function salvarCompra(form, botao) {
   const total = lerValor(form.valor.value);
   const descricao = form.descricao.value.trim();
-  const categoria_id = Number(form.categoria_id.value) || null;
+  const categoria_id = form.categoria_id.value || null;
   let ok = true;
   if (!(total > 0)) { erroNoCampo(form, 'valor', 'Digite o valor total da compra.'); ok = false; }
   else if (total > VALOR_MAXIMO) { erroNoCampo(form, 'valor', `O valor máximo é ${valorMaximoTexto()}.`); ok = false; }
@@ -183,7 +183,7 @@ async function salvarCompra(form, botao) {
   if (!ok) { form.querySelector('[aria-invalid]').focus(); return null; }
 
   botao.disabled = true;
-  const cartao = buscar('cartoes', Number(form.cartao_id.value));
+  const cartao = buscar('cartoes', form.cartao_id.value);
   const n = Number(form.parcelas.value);
   const compra = await criarCompra(
     { cartao_id: cartao.id, data_compra: form.data_compra.value, valor_total: total, qtd_parcelas: n, descricao, categoria_id, subcategoria: form.subcategoria.value.trim() || null },

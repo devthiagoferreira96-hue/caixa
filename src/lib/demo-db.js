@@ -1,121 +1,68 @@
 // =====================================================================
 // MODO DEMONSTRAÇÃO
-// Um "Supabase de mentira" que guarda tudo na memória do navegador.
-// Serve para ver o sistema funcionando antes de configurar o banco.
-// Ele imita só os comandos que o app usa (select, insert, update, delete,
-// eq, in, gte, lt, lte, order, single, rpc e auth). Ao recarregar a página
-// os dados voltam ao exemplo.
+// Um "Supabase de mentira" para ver o sistema funcionando antes de configurar
+// o banco. Ele guarda os dados de exemplo neste navegador e imita os comandos
+// que o app usa. Para testar o modo offline, desligue a internet: ele passa a
+// responder "sem conexão", igual ao Supabase de verdade.
 // =====================================================================
 import { faturaDe, dividirParcelas } from './faturas.js';
 import { somarDias, toISO, hoje } from './format.js';
+import { criarConsultas, tabelasVazias } from './consulta-local.js';
+import * as armazenamento from './armazenamento.js';
 
-const PADROES = {
-  contas: { ativa: true, saldo_inicial: 0 },
-  cartoes: { ativo: true },
-  categorias: { grupo: 'Casa', no_grafico: true },
-  pessoas: { tipo: 'Outro' },
-  lancamentos: { pago: false },
-};
+const CHAVE = 'demo-servidor';
 
 export function criarDemo() {
-  let seq = 1;
   const FAMILIA = 'familia-demo';
   const USUARIO = { id: 'usuario-demo', email: 'demonstracao@caixa.app' };
-  const db = {
+  const banco = { tabelas: {}, familiaId: FAMILIA, aoMudar: () => armazenamento.gravar(CHAVE, banco.tabelas).catch(() => {}) };
+  const novasTabelas = () => ({
+    ...tabelasVazias(),
     familias: [{ id: FAMILIA, nome: 'Família Demonstração', codigo_convite: 'DEMO42' }],
     membros: [{ familia_id: FAMILIA, user_id: USUARIO.id }],
-    contas: [], cartoes: [], categorias: [], pessoas: [],
-    lancamentos: [], compras_cartao: [], parcelas: [],
-  };
-
+  });
+  const consultar = criarConsultas(banco);
   const inserir = (tabela, obj) => {
-    const linha = { id: seq++, familia_id: FAMILIA, criado_em: new Date().toISOString(), ...PADROES[tabela], ...obj };
-    db[tabela].push(linha);
+    const linha = consultar(tabela).insert(obj).executar().data[0];
     return linha;
   };
+  const pronto = armazenamento.ler(CHAVE).catch(() => null).then((salvo) => {
+    if (salvo?.familias) banco.tabelas = salvo;
+    else { banco.tabelas = novasTabelas(); popular(inserir); banco.aoMudar(); }
+  });
 
-  popular(inserir);
-
-  class Consulta {
-    constructor(tabela) {
-      this.tabela = tabela;
-      this.op = 'select';
-      this.filtros = [];
-      this.ordem = null;
-      this.unico = false;
-    }
-    select() { return this; }
-    insert(linhas) { this.op = 'insert'; this.linhas = [].concat(linhas); return this; }
-    update(valores) { this.op = 'update'; this.valores = valores; return this; }
-    delete() { this.op = 'delete'; return this; }
-    eq(c, v) { this.filtros.push((r) => r[c] === v); return this; }
-    in(c, lista) { this.filtros.push((r) => lista.includes(r[c])); return this; }
-    gte(c, v) { this.filtros.push((r) => r[c] != null && r[c] >= v); return this; }
-    gt(c, v) { this.filtros.push((r) => r[c] != null && r[c] > v); return this; }
-    lte(c, v) { this.filtros.push((r) => r[c] != null && r[c] <= v); return this; }
-    lt(c, v) { this.filtros.push((r) => r[c] != null && r[c] < v); return this; }
-    order(c, { ascending = true } = {}) { this.ordem = { c, asc: ascending }; return this; }
-    single() { this.unico = true; return this; }
-    maybeSingle() { this.unico = true; return this; }
-    then(ok, falha) {
-      // pequeno atraso para parecer uma chamada de rede de verdade
-      return new Promise((r) => setTimeout(() => r(this.executar()), 80)).then(ok, falha);
-    }
-    executar() {
-      const passa = (r) => this.filtros.every((f) => f(r));
-      let dados;
-      if (this.op === 'insert') {
-        dados = this.linhas.map((o) => inserir(this.tabela, structuredClone(o)));
-      } else if (this.op === 'update') {
-        dados = db[this.tabela].filter(passa);
-        dados.forEach((r) => Object.assign(r, this.valores));
-      } else if (this.op === 'delete') {
-        dados = db[this.tabela].filter(passa);
-        const ids = dados.map((r) => r.id);
-        if (this.tabela === 'categorias' && db.lancamentos.some((l) => ids.includes(l.categoria_id))) {
-          return { data: null, error: { code: '23503', message: 'foreign key violation' } };
-        }
-        if (this.tabela === 'contas' && db.lancamentos.some((l) => ids.includes(l.conta_id))) {
-          return { data: null, error: { code: '23503', message: 'foreign key violation' } };
-        }
-        db[this.tabela] = db[this.tabela].filter((r) => !passa(r));
-        if (this.tabela === 'compras_cartao') db.parcelas = db.parcelas.filter((p) => !ids.includes(p.compra_id));
-        if (this.tabela === 'cartoes') {
-          const compras = db.compras_cartao.filter((c) => ids.includes(c.cartao_id)).map((c) => c.id);
-          db.compras_cartao = db.compras_cartao.filter((c) => !compras.includes(c.id));
-          db.parcelas = db.parcelas.filter((p) => !compras.includes(p.compra_id));
-          db.lancamentos.forEach((l) => ids.includes(l.fatura_cartao_id) && (l.fatura_cartao_id = null));
-        }
-        if (this.tabela === 'pessoas') db.lancamentos.forEach((l) => ids.includes(l.pessoa_id) && (l.pessoa_id = null));
-      } else {
-        dados = db[this.tabela].filter(passa);
-      }
-      dados = dados.map((r) => ({ ...r }));
-      if (this.ordem) {
-        const { c, asc } = this.ordem;
-        dados.sort((a, b) => (a[c] > b[c] ? 1 : a[c] < b[c] ? -1 : 0) * (asc ? 1 : -1));
-      }
-      return { data: this.unico ? (dados[0] ?? null) : dados, error: null };
-    }
-  }
+  const semRede = () => !navigator.onLine;
+  const respostaSemRede = { data: null, error: { message: 'Failed to fetch' } };
+  const espera = () => new Promise((r) => setTimeout(r, 60));
 
   let sessao = { user: USUARIO };
   const ouvintes = [];
   const avisar = (evento) => ouvintes.forEach((f) => f(evento, sessao));
 
   return {
-    from: (tabela) => new Consulta(tabela),
-    rpc: async () => ({ data: FAMILIA, error: null }),
+    from(tabela) {
+      const q = consultar(tabela);
+      // responde como a internet: espera um pouco e falha se estiver offline
+      q.then = (ok, falha) => pronto.then(espera).then(() => (semRede() ? respostaSemRede : q.executar())).then(ok, falha);
+      return q;
+    },
+    rpc: async () => (await espera(), semRede() ? respostaSemRede : { data: FAMILIA, error: null }),
     auth: {
       getSession: async () => ({ data: { session: sessao }, error: null }),
       onAuthStateChange(fn) {
         ouvintes.push(fn);
         return { data: { subscription: { unsubscribe() {} } } };
       },
-      async signInWithPassword() { sessao = { user: USUARIO }; avisar('SIGNED_IN'); return { data: { session: sessao }, error: null }; },
-      async signUp() { sessao = { user: USUARIO }; avisar('SIGNED_IN'); return { data: { session: sessao }, error: null }; },
+      async signInWithPassword() {
+        if (semRede()) return respostaSemRede;
+        sessao = { user: USUARIO }; avisar('SIGNED_IN'); return { data: { session: sessao }, error: null };
+      },
+      async signUp() {
+        if (semRede()) return respostaSemRede;
+        sessao = { user: USUARIO }; avisar('SIGNED_IN'); return { data: { session: sessao }, error: null };
+      },
       async signOut() { sessao = null; avisar('SIGNED_OUT'); return { error: null }; },
-      async resetPasswordForEmail() { return { error: null }; },
+      async resetPasswordForEmail() { return semRede() ? respostaSemRede : { error: null }; },
     },
   };
 }

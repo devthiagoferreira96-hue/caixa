@@ -85,7 +85,7 @@ export default {
     el.onclick = async (e) => {
       const excluir = e.target.closest('[data-excluir-compra]');
       if (excluir) {
-        const compra = parcelas.find((p) => p.compra.id === Number(excluir.dataset.excluirCompra)).compra;
+        const compra = parcelas.find((p) => p.compra.id === excluir.dataset.excluirCompra).compra;
         const msg = compra.qtd_parcelas > 1
           ? `A compra “${compra.descricao}” e as ${compra.qtd_parcelas} parcelas serão excluídas de todas as faturas.`
           : `A compra “${compra.descricao}” será excluída.`;
@@ -96,14 +96,14 @@ export default {
       const desfazer = e.target.closest('[data-desfazer]');
       if (desfazer) {
         if (!(await confirmar('A fatura volta a ficar em aberto e o valor volta para o saldo da conta.', { titulo: 'Desfazer pagamento?', botao: 'Desfazer pagamento' }))) return;
-        await excluirLancamentos([Number(desfazer.dataset.desfazer)]);
+        await excluirLancamentos([desfazer.dataset.desfazer]);
         toast('Pagamento desfeito');
         ctx.atualizar();
         return;
       }
       const pagar = e.target.closest('[data-pagar-fatura]');
       if (pagar) {
-        const cartao = cartoes.find((c) => c.id === Number(pagar.dataset.pagarFatura));
+        const cartao = cartoes.find((c) => c.id === pagar.dataset.pagarFatura);
         pagarFatura(cartao, totalDoCartao(doMes, cartao.id), mesAtual, ctx);
       }
     };
@@ -136,7 +136,7 @@ function pagarFatura(cartao, total, mes, ctx) {
         tipo: 'saida', valor: Math.round(total * 100) / 100,
         descricao: `Fatura ${cartao.nome} (${nomeMes(store.mes).toLowerCase()})`,
         vencimento: form.data.value || hojeISO(), pago: true, data_pagamento: form.data.value || hojeISO(),
-        conta_id: Number(form.conta.value), categoria_id: null, fatura_cartao_id: cartao.id, fatura_mes: mes,
+        conta_id: form.conta.value, categoria_id: null, fatura_cartao_id: cartao.id, fatura_mes: mes,
       }]);
       d.close();
       toast(`Fatura do ${cartao.nome} paga`);

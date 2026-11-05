@@ -19,7 +19,7 @@ npm run dev
 
 Abra o endereço que aparecer no terminal (normalmente http://localhost:5173).
 
-Sem o arquivo `.env`, o sistema abre em **modo demonstração**: ele usa dados de exemplo guardados na memória, e nada fica salvo. Assim dá para testar tudo antes de configurar o banco.
+Sem o arquivo `.env`, o sistema abre em **modo demonstração**: ele usa dados de exemplo guardados só neste navegador. Assim dá para testar tudo antes de configurar o banco, inclusive o modo offline: no Chrome, abra as Ferramentas do desenvolvedor (F12), vá em *Network* e escolha *Offline*.
 
 ## 2. Criar o banco no Supabase
 
@@ -43,6 +43,22 @@ VITE_SUPABASE_ANON_KEY=eyJhbGciOi...
 2. Vá em **Ajustes** e preencha o **saldo inicial** de cada conta e os **dias de fechamento e vencimento** de cada cartão.
 3. **Sua esposa:** cria a conta dela, escolhe **Recebi um convite** e digita o código que aparece em *Ajustes > Família e convite*.
 
+## Funciona sem internet
+
+Depois do primeiro acesso em cada aparelho, o sistema funciona mesmo sem conexão:
+
+- **Os dados ficam numa cópia guardada no aparelho** (IndexedDB) e todas as telas leem dessa cópia.
+- **O que for lançado, editado ou excluído sem internet entra numa fila**, que também fica guardada, mesmo se a pessoa fechar o navegador ou sair da conta.
+- **Quando a internet volta, ou quando a pessoa entra na conta**, aparece a mensagem *"Dados registrados offline sendo armazenados"* e a fila é enviada ao Supabase na ordem em que tudo foi feito. No fim aparece a confirmação.
+- **Depois de enviar, o sistema baixa os dados atualizados**, incluindo o que a outra pessoa lançou. Isso também acontece a cada minuto e sempre que o app volta para a tela.
+- **O app abre sem internet** porque o `public/sw.js` (service worker) guarda os arquivos do sistema. Isso só vale na versão publicada (`npm run build`), não no `npm run dev`.
+
+Precisam de internet: o primeiro acesso em cada aparelho, o login, criar a família e entrar com o código de convite.
+
+Se as duas pessoas alterarem **o mesmo lançamento** sem internet, vale a alteração que chegar por último ao servidor. Se o servidor recusar alguma alteração (por exemplo, excluir uma categoria que a outra pessoa acabou de usar), o sistema avisa qual foi e atualiza os dados com o que está no servidor.
+
+Os arquivos dessa parte são `src/lib/local-db.js` (cópia local), `src/lib/sync.js` (fila e envio) e `src/components/conexao.js` (avisos na tela).
+
 ## 3. Publicar na internet (GitHub Pages, gratuito)
 
 1. No GitHub, abra o repositório e vá em **Settings > Pages > Build and deployment > Source** e escolha **GitHub Actions**.
@@ -62,7 +78,7 @@ npm test
 
 Roda os testes das regras de negócio (em qual fatura cai cada compra, divisão de parcelas, datas e somas).
 
-> **Já tinha rodado o `schema.sql` antes?** Rode também o `supabase/atualizacao-1.sql` no SQL Editor. Em um projeto novo, não precisa: o `schema.sql` já tem tudo.
+> **Já tinha rodado uma versão anterior do `schema.sql`?** Esta versão usa IDs no formato UUID (necessários para o modo offline). Rode `supabase/reset.sql` (**apaga todos os dados**) e depois o `schema.sql` de novo.
 
 ## Como o código está organizado
 
@@ -74,7 +90,11 @@ src/
   style.css                Tailwind + componentes (botões, campos, cartões)
   lib/
     supabase.js            conexão (ou modo demonstração)
-    api.js                 TODAS as consultas ao banco ficam aqui
+    api.js                 TODAS as leituras e gravações passam por aqui
+    local-db.js            cópia dos dados no aparelho (modo offline)
+    sync.js                fila de alterações e envio ao Supabase
+    consulta-local.js      consultas na cópia local (mesmos comandos do Supabase)
+    armazenamento.js       IndexedDB (guardar no aparelho)
     demo-db.js             banco de mentira para o modo demonstração
     store.js               dados em memória (contas, cartões, categorias…)
     faturas.js             regra de fechamento/vencimento e parcelas
@@ -85,7 +105,7 @@ src/
   components/              peças usadas em várias telas
   pages/                   uma tela por arquivo
 supabase/schema.sql        tabelas, segurança e funções do banco
-supabase/atualizacao-1.sql atualização para quem já tinha o banco criado
+supabase/reset.sql         apaga tudo para recomeçar (use com cuidado)
 tests/                     testes das regras (npm test)
 ```
 

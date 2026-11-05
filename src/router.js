@@ -27,6 +27,15 @@ export function iniciarApp() {
   if (!lerPreferencias().tourVisto) setTimeout(abrirTour, 400);
 }
 
+// Chegaram dados novos (da outra pessoa ou depois de enviar a fila): redesenha a tela,
+// a não ser que a pessoa esteja preenchendo algo (formulário ou janela aberta).
+document.addEventListener('caixa:dados-atualizados', () => {
+  if (!telaAtual || !document.getElementById('conteudo')) return;
+  const preenchendo = ['novo', 'ajustes'].includes(location.hash.slice(1)) || document.querySelector('dialog[open]') ||
+    document.activeElement?.matches?.('#conteudo input, #conteudo select, #conteudo textarea');
+  if (!preenchendo) desenhar(true);
+});
+
 function navegar(primeiraVez) {
   const rota = location.hash.slice(1) || 'inicio';
   telaAtual = TELAS[rota] || TELAS.inicio;
