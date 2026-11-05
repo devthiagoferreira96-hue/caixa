@@ -22,22 +22,10 @@ const TOPICOS = [
   ['relatorio', 'Gráficos e relatório', `
     <p>O gráfico do Início mostra as categorias da casa. Em Ajustes > Categorias, a opção <strong>No gráfico</strong> escolhe quais aparecem.</p>
     <p>O <a href="#relatorio" class="font-semibold underline">Relatório</a> mostra todas as categorias, separadas por grupo, os últimos 6 meses e os pagamentos por pessoa.</p>`],
-  ['pessoas', 'Usar em duas pessoas', `
-    <p>Quem criou a família vê o <strong>código de convite</strong> em <a href="#ajustes" class="font-semibold underline">Ajustes</a>. A outra pessoa cria a conta dela e digita esse código. Daí em diante, os dois veem tudo igual.</p>`],
-  ['pessoas', 'Quem lançou cada coisa', `
-    <p>A bolinha colorida com as iniciais, ao lado do valor, mostra quem lançou. Passe o mouse ou toque nela para ver o nome. No Extrato, o filtro <strong>Lançado por</strong> mostra só o que uma pessoa lançou.</p>
-    <p>Ao abrir um lançamento, o rodapé mostra quem lançou e quem alterou por último, com data e hora.</p>
-    <p>Quando a outra pessoa lança algo, aparece um aviso como <strong>"Thays lançou 2 itens"</strong>. Toque em <strong>Ver</strong> para abrir.</p>
-    <p>Para mudar o nome que aparece para os outros, vá em <a href="#ajustes" class="font-semibold underline">Ajustes > Minha conta</a>.</p>`],
-  ['alerta', 'Gasto lançado duas vezes', `
-    <p>Se você for lançar um gasto com o <strong>mesmo valor, no mesmo dia</strong> e com a mesma categoria ou descrição parecida de algo que a outra pessoa já lançou, o sistema pergunta antes: <em>"Thays lançou um gasto semelhante a este, deseja continuar mesmo assim?"</em></p>
-    <p><strong>Não lançar</strong> cancela sem mudar nada. <strong>Lançar mesmo assim</strong> salva normalmente. O mesmo aviso aparece se você mesmo repetir um lançamento em poucos minutos.</p>`],
-  ['repetir', 'Desfazer', `
-    <p>Depois de lançar, editar, marcar como pago, excluir, pagar fatura ou mudar algo em Ajustes, aparece um aviso embaixo da tela com o botão <strong>Desfazer</strong>. Ele volta tudo como estava, inclusive as parcelas de uma compra excluída.</p>`],
   ['celular', 'Colocar na tela do celular', `
     <p><strong>Android (Chrome):</strong> abra o sistema, toque nos três pontinhos ⋮ e em <strong>Adicionar à tela inicial</strong>.</p>
     <p><strong>iPhone (Safari):</strong> toque no botão de compartilhar e em <strong>Adicionar à Tela de Início</strong>.</p>
-    <p>Ele vai abrir como um aplicativo, sem a barra do navegador.</p>`],
+    <p>Ele vai abrir como um aplicativo, sem a barra do navegador, e funciona mesmo sem internet.</p>`],
   ['paleta', 'Letras maiores e modo escuro', `
     <p>Em <a href="#ajustes" class="font-semibold underline">Ajustes > Aparência</a> dá para aumentar o tamanho das letras e escolher o tema claro ou escuro.</p>`],
 ];

@@ -1,14 +1,17 @@
 # Caixa da Família
 
-Sistema web para controlar os gastos da família: entradas e saídas do caixa, contas a pagar, cartões de crédito com parcelas, relatórios e pagamentos de funcionários e prestadores. Ele substitui a planilha `NOVO_CAIXA.xlsx`.
+Sistema para controlar os gastos da família: entradas e saídas do caixa, contas a pagar, cartões de crédito com parcelas, relatórios e pagamentos de funcionários e prestadores. Ele substitui a planilha `NOVO_CAIXA.xlsx`.
 
-Funciona no computador e no celular. No celular, dá para instalar na tela inicial como se fosse um app.
+- **Funciona 100% sem internet.** Os dados ficam só no aparelho (celular ou computador) e não existe servidor nem banco de dados na nuvem.
+- **Protegido por senha.** Ela é pedida sempre que o sistema é aberto, e também criptografa os dados guardados no aparelho (AES-256).
+- **Backup por arquivo.** Gera um arquivo com todos os dados, para guardar no Drive, no e-mail ou no WhatsApp e restaurar quando precisar.
+- **Instala no celular** como um aplicativo (PWA) e funciona no computador também.
 
-**Tecnologias:** JavaScript (ES Modules, sem framework), [Tailwind CSS 4](https://tailwindcss.com), [Supabase](https://supabase.com) (banco PostgreSQL + login) e [Vite](https://vite.dev).
+**Tecnologias:** JavaScript (ES Modules, sem framework), [Tailwind CSS 4](https://tailwindcss.com), [Vite](https://vite.dev), IndexedDB e Web Crypto (já vêm no navegador).
 
 ---
 
-## 1. Rodar no seu computador (modo demonstração)
+## 1. Rodar no seu computador
 
 Precisa do [Node.js](https://nodejs.org) 20 ou mais novo.
 
@@ -19,67 +22,42 @@ npm run dev
 
 Abra o endereço que aparecer no terminal (normalmente http://localhost:5173).
 
-Sem o arquivo `.env`, o sistema abre em **modo demonstração**: ele usa dados de exemplo guardados só neste navegador. Assim dá para testar tudo antes de configurar o banco, inclusive o modo offline: no Chrome, abra as Ferramentas do desenvolvedor (F12), vá em *Network* e escolha *Offline*.
+No primeiro acesso, o sistema pede **seu nome** e uma **senha**. Marque *Começar com dados de exemplo* para conhecer o sistema; depois, em *Ajustes > Usuário e senha > Apagar tudo*, dá para começar do zero.
 
-## 2. Criar o banco no Supabase
+## 2. Publicar e instalar no celular
 
-1. Crie uma conta em [supabase.com](https://supabase.com) e um projeto novo (o plano gratuito basta).
-2. Abra **SQL Editor > New query**, cole todo o conteúdo de [`supabase/schema.sql`](supabase/schema.sql) e clique em **Run**.
-3. Em **Project Settings > API**, copie a **Project URL** e a chave **anon public**.
-4. Na pasta do projeto, copie `.env.example` para `.env` e cole os dois valores:
+Para instalar no celular, o sistema precisa estar num endereço **https**. Isso é só para entregar os arquivos do sistema: os dados nunca saem do aparelho. Duas opções gratuitas:
 
-```env
-VITE_SUPABASE_URL=https://xxxxxxxx.supabase.co
-VITE_SUPABASE_ANON_KEY=eyJhbGciOi...
-```
+**GitHub Pages (já configurado):**
 
-5. Rode `npm run dev` de novo. Agora o sistema pede login.
+1. Envie o projeto para o GitHub (`git push`).
+2. No repositório, vá em **Settings > Pages > Source** e escolha **GitHub Actions**.
+3. Quando a aba **Actions** ficar verde, o site estará em `https://devthiagoferreira96-hue.github.io/caixa/`.
 
-> **Confirmação de e-mail:** por padrão, o Supabase manda um e-mail de confirmação no cadastro. Para uso só da família, você pode desligar em **Authentication > Sign In / Providers > Email > Confirm email**.
+**Vercel:** em vercel.com, escolha **Add New > Project**, selecione o repositório e clique em **Deploy** (ela detecta o Vite sozinha). Se usar a Vercel, pode apagar `.github/workflows/deploy.yml`.
 
-### Primeiro acesso
+**Instalar:**
 
-1. **Você:** clica em *Criar conta*, entra e escolhe **Sou o primeiro a usar**. A família é criada já com as contas (Espécie, MMP, Nubank, TMP, M.C.), os cartões e as categorias da planilha.
-2. Vá em **Ajustes** e preencha o **saldo inicial** de cada conta e os **dias de fechamento e vencimento** de cada cartão.
-3. **Sua esposa:** cria a conta dela, escolhe **Recebi um convite** e digita o código que aparece em *Ajustes > Família e convite*.
+- **Android (Chrome):** abra o endereço, toque nos três pontinhos ⋮ e depois em **Instalar app**.
+- **iPhone (Safari):** abra o endereço, toque em compartilhar e depois em **Adicionar à Tela de Início**.
 
-## Funciona sem internet
+Depois de instalado, o sistema abre e funciona sem internet. Quando você publicar uma versão nova, o celular atualiza sozinho na próxima vez que tiver internet; **os dados não são afetados**.
 
-Depois do primeiro acesso em cada aparelho, o sistema funciona mesmo sem conexão:
+## Senha e segurança
 
-- **Os dados ficam numa cópia guardada no aparelho** (IndexedDB) e todas as telas leem dessa cópia.
-- **O que for lançado, editado ou excluído sem internet entra numa fila**, que também fica guardada, mesmo se a pessoa fechar o navegador ou sair da conta.
-- **Quando a internet volta, ou quando a pessoa entra na conta**, aparece a mensagem *"Dados registrados offline sendo armazenados"* e a fila é enviada ao Supabase na ordem em que tudo foi feito. No fim aparece a confirmação.
-- **Depois de enviar, o sistema baixa os dados atualizados**, incluindo o que a outra pessoa lançou. Isso também acontece a cada minuto e sempre que o app volta para a tela.
-- **O app abre sem internet** porque o `public/sw.js` (service worker) guarda os arquivos do sistema. Isso só vale na versão publicada (`npm run build`), não no `npm run dev`.
+- A senha **nunca é guardada**. A partir dela é gerada uma chave (PBKDF2, 310 mil repetições) que cifra os dados com AES-GCM 256 bits. Sem a senha, os dados guardados no aparelho são ilegíveis.
+- A senha é pedida toda vez que o sistema é aberto, e de novo se o app ficar mais de 1 minuto em segundo plano. O cadeado no menu bloqueia na hora.
+- Depois de 5 senhas erradas seguidas, o sistema espera 30 segundos entre tentativas.
+- **Esqueceu a senha?** Não há como recuperar. Na tela de senha, *Esqueci minha senha* apaga o acesso deste aparelho; depois é só criar um novo e restaurar um backup.
 
-Precisam de internet: o primeiro acesso em cada aparelho, o login, criar a família e entrar com o código de convite.
+## Backup
 
-Se as duas pessoas alterarem **o mesmo lançamento** sem internet, vale a alteração que chegar por último ao servidor. Se o servidor recusar alguma alteração (por exemplo, excluir uma categoria que a outra pessoa acabou de usar), o sistema avisa qual foi e atualiza os dados com o que está no servidor.
+Como os dados ficam só no aparelho, **perder o aparelho é perder os dados**, a não ser que exista um backup.
 
-Os arquivos dessa parte são `src/lib/local-db.js` (cópia local), `src/lib/sync.js` (fila e envio) e `src/components/conexao.js` (avisos na tela).
-
-## Duas pessoas na mesma conta
-
-Cada pessoa tem o próprio login e as duas entram na mesma família (código de convite em Ajustes).
-
-- **Quem lançou:** a bolinha com as iniciais, ao lado do valor no Extrato, no Início e nos Cartões. O Extrato tem o filtro *Lançado por*, e a janela de edição mostra quem lançou e quem alterou, com data e hora. O nome de cada um fica em *Ajustes > Minha conta*.
-- **Aviso de lançamentos novos:** quando chegam dados da outra pessoa, aparece *"Thays lançou 2 itens"*, com o botão *Ver*.
-- **Gasto repetido:** antes de salvar, o sistema procura algo com o mesmo valor, no mesmo dia e com a mesma categoria ou descrição parecida, lançado pela outra pessoa (ou por você há menos de 10 minutos). Se achar, pergunta *"Thays lançou um gasto semelhante a este, deseja continuar mesmo assim?"*. A busca é feita na cópia local, então sem internet ela só enxerga o que já foi sincronizado.
-- **Desfazer:** criar, editar, marcar como pago, excluir lançamento, excluir compra, pagar fatura, desfazer pagamento e as alterações em Ajustes mostram o botão *Desfazer*.
-
-No modo demonstração, o link *Simular a Thays lançando um lanche*, na faixa amarela, mostra como esses avisos funcionam.
-
-## 3. Publicar na internet (GitHub Pages, gratuito)
-
-1. No GitHub, abra o repositório e vá em **Settings > Pages > Build and deployment > Source** e escolha **GitHub Actions**.
-2. Vá em **Settings > Secrets and variables > Actions > New repository secret** e crie os secrets `VITE_SUPABASE_URL` e `VITE_SUPABASE_ANON_KEY`.
-3. Envie o código para a branch `main`. O workflow `.github/workflows/deploy.yml` gera e publica o site sozinho, e o endereço aparece na aba **Actions**. Será algo como `https://devthiagoferreira96-hue.github.io/caixa/`.
-4. No Supabase, em **Authentication > URL Configuration**, coloque esse endereço em **Site URL** (assim os links de e-mail apontam para o lugar certo).
-
-> A chave *anon* pode ficar pública: quem protege os dados são as regras de segurança (RLS) do `schema.sql`. Cada família só enxerga os próprios dados. **Nunca** coloque a chave `service_role` no projeto.
-
----
+- **Fazer backup:** *Ajustes > Backup dos dados > Fazer backup agora*. No celular, abre o *Compartilhar* (Drive, e-mail ou WhatsApp); no computador, baixa um arquivo `.json`.
+- **Restaurar:** em *Ajustes > Restaurar um backup* ou, num aparelho novo, em *Já tenho um arquivo de backup* na primeira tela. A restauração tem *Desfazer*.
+- O Início mostra um lembrete quando você ainda não fez backup ou quando o último tem mais de 30 dias.
+- O arquivo de backup **não tem senha**: guarde-o num lugar só seu.
 
 ## Testes
 
@@ -89,38 +67,36 @@ npm test
 
 Roda os testes das regras de negócio (em qual fatura cai cada compra, divisão de parcelas, datas e somas).
 
-> **Já tinha rodado uma versão anterior do `schema.sql`?** Esta versão usa IDs no formato UUID (necessários para o modo offline). Rode `supabase/reset.sql` (**apaga todos os dados**) e depois o `schema.sql` de novo.
+---
 
 ## Como o código está organizado
 
 ```
 index.html                 página única (o JavaScript monta as telas)
+public/                    ícones, manifest (instalar no celular) e sw.js (abrir sem internet)
 src/
-  main.js                  início: verifica login e família
+  main.js                  início: primeiro acesso ou tela de senha, bloqueio automático
   router.js                troca de tela pelo endereço (#inicio, #extrato…)
   style.css                Tailwind + componentes (botões, campos, cartões)
   lib/
-    supabase.js            conexão (ou modo demonstração)
-    api.js                 TODAS as leituras e gravações passam por aqui
-    local-db.js            cópia dos dados no aparelho (modo offline)
-    sync.js                fila de alterações e envio ao Supabase
-    consulta-local.js      consultas na cópia local (mesmos comandos do Supabase)
+    local-db.js            dados no aparelho: usuário, senha e tabelas cifradas
+    cofre.js               criptografia (PBKDF2 + AES-GCM, Web Crypto)
     armazenamento.js       IndexedDB (guardar no aparelho)
-    demo-db.js             banco de mentira para o modo demonstração
+    consulta-local.js      consultas nos dados: from().select().eq().order()...
+    api.js                 TODAS as leituras e gravações passam por aqui
+    exemplo.js             contas/cartões/categorias iniciais e dados de exemplo
     store.js               dados em memória (contas, cartões, categorias…)
     faturas.js             regra de fechamento/vencimento e parcelas
     calculos.js            somas (substituem os SUMIF da planilha)
     format.js              dinheiro e datas no padrão brasileiro
     ui.js                  ícones, avisos, janelas, máscara de valor
     preferencias.js        tema escuro e letras maiores
-  components/              peças usadas em várias telas
-  pages/                   uma tela por arquivo
-supabase/schema.sql        tabelas, segurança e funções do banco
-supabase/reset.sql         apaga tudo para recomeçar (use com cuidado)
+  components/              peças usadas em várias telas (layout, gráficos, backup…)
+  pages/                   uma tela por arquivo (acesso, início, extrato, novo…)
 tests/                     testes das regras (npm test)
 ```
 
-### Tabelas
+### Tabelas (guardadas no aparelho)
 
 | Tabela | O que guarda | Na planilha |
 |---|---|---|
@@ -129,19 +105,14 @@ tests/                     testes das regras (npm test)
 | `contas` | Espécie, MMP, Nubank… com saldo inicial | bloco de saldos (M:N) |
 | `categorias` | categorias, grupo e se aparecem no gráfico do Início | lista de categorias |
 | `pessoas` | funcionários, prestadores, família | coluna PESSOA |
-| `familias` / `membros` | quem pode ver os dados | — |
+
+> As consultas em `consulta-local.js` usam o mesmo formato de bibliotecas de banco como o Supabase (`from('lancamentos').select('*').eq(...)`). Se um dia quiser guardar os dados na nuvem e usar em vários aparelhos, dá para trocar só a camada de dados, sem reescrever as telas.
 
 ## Acessibilidade
 
-- Todos os campos têm rótulo, dica e mensagem de erro, lidas por leitores de tela.
+- Todos os campos têm rótulo, dica e mensagem de erro lidas por leitores de tela.
 - Dá para usar tudo pelo teclado. As janelas fecham com `Esc` e há o link "Pular para o conteúdo".
 - Os botões têm pelo menos 44px de altura, bons para tocar no celular.
 - O status nunca é indicado só pela cor: sempre vem com texto ("Pago", "Atrasado").
 - Opções de **letras maiores** e **modo escuro** em Ajustes, e o sistema respeita a configuração de "reduzir movimento" do aparelho.
-- O botão **?** em cada tela explica aquela tela. Também há uma apresentação no primeiro acesso, a página *Como usar* e o botão **Desfazer** nas ações principais.
-
-## Próximos passos sugeridos
-
-- Importar o histórico da planilha (exportar como CSV e criar uma tela de importação).
-- Uma área própria para as despesas da Fazenda, da Empresa e de Serviços.
-- Lembretes de contas vencendo (Supabase Edge Functions + e-mail).
+- O botão **?** explica cada tela, há uma apresentação no primeiro acesso e o botão **Desfazer** nas ações.

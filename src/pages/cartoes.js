@@ -6,7 +6,7 @@ import { vencimentoFatura } from '../lib/faturas.js';
 import { totalDoCartao } from '../lib/calculos.js';
 import { icone, toast, dialogo, confirmar, estadoVazio } from '../lib/ui.js';
 import { opcoesConta } from '../components/form-lancamento.js';
-import { seloAutor, desfazendo } from '../components/lancamento.js';
+import { desfazendo } from '../components/lancamento.js';
 
 export default {
   titulo: 'Cartões',
@@ -61,7 +61,7 @@ export default {
               </div>
               <div class="flex shrink-0 flex-col items-end">
                 <span class="text-sm font-semibold tabular-nums sm:text-base">${brl(p.valor)}</span>
-                <span class="flex items-center gap-0.5">${seloAutor(p.compra.criado_por)}
+                <span class="flex items-center gap-0.5">
                   <button type="button" class="btn-icone size-9 text-stone-500 hover:text-red-700 dark:text-stone-400" data-excluir-compra="${p.compra.id}"
                     aria-label="Excluir a compra ${esc(p.compra.descricao)}" title="Excluir compra">${icone('lixo', 'size-4')}</button></span>
               </div>

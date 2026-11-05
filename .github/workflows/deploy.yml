@@ -1,6 +1,6 @@
 # Publica o sistema no GitHub Pages toda vez que você enviar código para a branch main.
 # Antes, configure: Settings > Pages > Source: "GitHub Actions"
-# e Settings > Secrets and variables > Actions: VITE_SUPABASE_URL e VITE_SUPABASE_ANON_KEY
+# (o site só entrega os arquivos do sistema; os dados ficam no aparelho de quem usa)
 name: Publicar no GitHub Pages
 
 on:
@@ -27,9 +27,6 @@ jobs:
           node-version: 22
       - run: npm install
       - run: npm run build
-        env:
-          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
-          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist

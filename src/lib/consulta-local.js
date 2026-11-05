@@ -1,11 +1,11 @@
 // =====================================================================
-// Consultas em dados guardados no próprio aparelho, com os MESMOS comandos
-// do Supabase (from().select().eq().order()...). Usado pela cópia local
-// (modo offline) e pelo modo demonstração.
+// Consultas nos dados guardados no aparelho, no estilo from().select().eq().order().
+// (É a mesma "cara" de bibliotecas de banco como o Supabase, então dá para trocar
+// por um banco na nuvem no futuro sem reescrever as telas.)
 // =====================================================================
 
-export const TABELAS = ['membros', 'contas', 'cartoes', 'categorias', 'pessoas', 'lancamentos', 'compras_cartao', 'parcelas'];
-const COM_AUTORIA = ['lancamentos', 'compras_cartao'];
+export const TABELAS = ['contas', 'cartoes', 'categorias', 'pessoas', 'lancamentos', 'compras_cartao', 'parcelas'];
+const COM_DATA = ['lancamentos', 'compras_cartao'];
 
 const PADROES = {
   contas: { ativa: true, saldo_inicial: 0 },
@@ -18,8 +18,8 @@ const PADROES = {
 const erroFK = { code: '23503', message: 'foreign key violation' };
 
 /**
- * `banco` = { tabelas: { contas: [...], ... }, familiaId, aoMudar() }
- * Retorna uma função `from(tabela)` igual à do Supabase.
+ * `banco` = { tabelas: { contas: [...], ... }, aoMudar() }
+ * Retorna uma função `from(tabela)`.
  */
 export function criarConsultas(banco) {
   class Consulta {
@@ -61,10 +61,9 @@ export function criarConsultas(banco) {
           }
           const linha = {
             ...PADROES[this.tabela],
-            ...(COM_AUTORIA.includes(this.tabela) ? { criado_em: new Date().toISOString() } : {}),
-            familia_id: banco.familiaId,
+            ...(COM_DATA.includes(this.tabela) ? { criado_em: new Date().toISOString() } : {}),
             ...structuredClone(o),
-            ...(this.tabela === 'membros' ? {} : { id: o.id || crypto.randomUUID() }),
+            id: o.id || crypto.randomUUID(),
           };
           t[this.tabela].push(linha);
           dados.push(linha);

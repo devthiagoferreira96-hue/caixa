@@ -1,10 +1,7 @@
 // Estrutura fixa da tela: menu lateral (computador), menu de baixo (celular) e cabeçalho
 import { esc, nomeMes, inicioMes } from '../lib/format.js';
 import { store } from '../lib/store.js';
-import { modoDemo, supabase } from '../lib/supabase.js';
-import { sincronizar } from '../lib/sync.js';
 import { icone } from '../lib/ui.js';
-import { faixaConexao } from './conexao.js';
 
 const MENU = [
   ['inicio', 'Início', 'inicio'],
@@ -22,26 +19,23 @@ export function montarLayout() {
     <aside class="fixed inset-y-0 left-0 z-30 hidden w-64 flex-col border-r border-stone-200 bg-white p-4 lg:flex dark:border-stone-800 dark:bg-stone-900">
       <div class="flex items-center gap-3 px-2 pb-6">
         <span class="flex size-10 items-center justify-center rounded-xl bg-brand-600 text-sm font-bold text-white" aria-hidden="true">R$</span>
-        <div class="min-w-0"><p class="font-bold">Caixa da Família</p><p class="truncate text-sm text-stone-600 dark:text-stone-400">${esc(store.familia.nome)}</p></div>
+        <div class="min-w-0"><p class="font-bold">Caixa da Família</p><p class="truncate text-sm text-stone-600 dark:text-stone-400" data-saudacao>Olá, ${esc(store.usuario)}</p></div>
       </div>
       <a href="#novo" data-nav="novo" class="btn-primario mb-4 w-full">${icone('mais')} Novo lançamento</a>
       <nav aria-label="Menu principal"><ul class="grid gap-1">
         ${MENU.map(([rota, nome, ic]) => `<li><a href="#${rota}" data-nav="${rota}" class="nav-link">${icone(ic)}${nome}</a></li>`).join('')}
       </ul></nav>
-      <p class="mt-auto truncate px-2 text-xs text-stone-600 dark:text-stone-400" title="${esc(store.user.email)}">Conectado como<br>${esc(store.user.email)}</p>
+      <button type="button" data-bloquear class="nav-link mt-auto w-full cursor-pointer">${icone('cadeado')}Bloquear</button>
     </aside>
 
     <div class="lg:pl-64">
-      ${modoDemo ? `<div class="bg-amber-100 px-4 py-2 text-center text-sm text-amber-900 dark:bg-amber-900/50 dark:text-amber-100" role="note">
-        <strong>Modo demonstração:</strong> dados de exemplo, guardados só neste navegador. Configure o Supabase no arquivo <code>.env</code> para usar de verdade.
-        <button type="button" data-simular class="ml-1 inline-flex min-h-6 cursor-pointer items-center px-1 py-0.5 font-semibold underline underline-offset-2">Simular a Thays lançando um lanche</button></div>` : ''}
-      ${faixaConexao()}
       <header class="sticky top-0 z-20 border-b border-transparent bg-stone-100/90 pt-[env(safe-area-inset-top)] backdrop-blur dark:bg-stone-950/90">
         <div class="mx-auto flex max-w-6xl flex-wrap items-center gap-x-2 gap-y-1 px-4 py-3 lg:px-8 lg:py-5">
           <h1 id="titulo-pagina" tabindex="-1" class="min-w-0 flex-1 truncate text-xl font-bold outline-none lg:text-2xl"></h1>
           <div id="seletor-mes" class="order-last w-full sm:order-none sm:w-auto"></div>
           <button type="button" id="btn-ajuda" class="btn-icone" aria-label="Ajuda desta tela" title="Ajuda desta tela">${icone('ajuda')}</button>
           <a href="#ajustes" class="btn-icone lg:hidden" aria-label="Ajustes" title="Ajustes">${icone('ajustes')}</a>
+          <button type="button" data-bloquear class="btn-icone lg:hidden" aria-label="Bloquear o sistema" title="Bloquear">${icone('cadeado')}</button>
         </div>
       </header>
       <main id="conteudo" tabindex="-1" class="mx-auto max-w-6xl px-4 pt-1 pb-32 outline-none lg:px-8 lg:pb-12"></main>
@@ -58,13 +52,8 @@ export function montarLayout() {
     </nav>
     <div id="toasts" class="pointer-events-none fixed inset-x-0 bottom-24 z-[60] flex flex-col items-center gap-2 px-4 lg:bottom-6 lg:pl-64"></div>`;
 
-  document.dispatchEvent(new Event('caixa:layout'));
-
-  // Modo demonstração: simula a outra pessoa lançando algo no celular dela
-  document.querySelector('[data-simular]')?.addEventListener('click', async () => {
-    await supabase.demo.outraPessoaLanca();
-    sincronizar();
-  });
+  // Bloquear: volta para a tela de senha
+  document.querySelectorAll('[data-bloquear]').forEach((b) => (b.onclick = () => window.dispatchEvent(new Event('caixa:bloquear'))));
 
   // "Pular para o conteúdo" sem trocar a rota (o # é usado pelas telas)
   document.querySelector('[data-pular]').onclick = (e) => {

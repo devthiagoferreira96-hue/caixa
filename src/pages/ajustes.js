@@ -1,13 +1,13 @@
-// Ajustes: família e convite, contas, cartões, categorias, pessoas, aparência e sair
-import { esc, valorParaCampo, lerValor, VALOR_MAXIMO, valorMaximoTexto } from '../lib/format.js';
-import { store, categoriasPorGrupo, autor } from '../lib/store.js';
-import { salvarItem, excluirItem, renomearFamilia, mudarMeuNome, auth } from '../lib/api.js';
-import { desfazendo, seloAutor } from '../components/lancamento.js';
-import { icone, toast, confirmar, mascaraDinheiro } from '../lib/ui.js';
+// Ajustes: backup, contas, cartões, categorias, pessoas, aparência, usuário e senha
+import { esc, valorParaCampo, lerValor, VALOR_MAXIMO, valorMaximoTexto, dataCompleta } from '../lib/format.js';
+import { store, categoriasPorGrupo } from '../lib/store.js';
+import { salvarItem, excluirItem } from '../lib/api.js';
+import { local } from '../lib/local-db.js';
+import { desfazendo } from '../components/lancamento.js';
+import { fazerBackup, restaurarComConfirmacao } from '../components/backup.js';
+import { icone, toast, confirmar, mascaraDinheiro, dialogo, erroNoCampo, limparErros } from '../lib/ui.js';
 import { lerPreferencias, salvarPreferencias } from '../lib/preferencias.js';
 import { abrirTour } from '../components/tour.js';
-import { modoDemo } from '../lib/supabase.js';
-import { estado } from '../lib/sync.js';
 
 // Definição de cada lista editável: quais campos aparecem e como são lidos
 const LISTAS = {
@@ -56,40 +56,28 @@ const LISTAS = {
   },
 };
 
-const abertas = new Set(['familia']);
+const abertas = new Set(['backup']);
 
 export default {
   titulo: 'Ajustes',
   usaMes: false,
   ajuda: `
     <p>Toque no nome de cada seção para abrir.</p>
-    <p><strong>Família</strong>: o código de convite para a outra pessoa entrar.</p>
+    <p><strong>Backup</strong>: gera um arquivo com todos os dados. Guarde-o fora do aparelho (Drive, e-mail ou WhatsApp). Se trocar de celular ou esquecer a senha, é ele que traz os dados de volta.</p>
     <p><strong>Contas, Cartões, Categorias e Pessoas</strong>: mude qualquer campo e toque em <strong>Salvar</strong> na mesma linha. Para incluir um item novo, use a última linha de cada lista.</p>
-    <p><strong>Aparência</strong>: modo escuro e letras maiores, só neste aparelho.</p>`,
+    <p><strong>Aparência</strong>: modo escuro e letras maiores.</p>
+    <p><strong>Usuário e senha</strong>: troque seu nome ou sua senha, ou apague tudo deste aparelho.</p>`,
 
   async render(el, ctx) {
     const pref = lerPreferencias();
     el.innerHTML = `
     <div class="mx-auto grid max-w-3xl gap-3 animate-entrar">
-      ${secao('familia', 'Família e convite', 'casa', `
-        <form data-familia class="flex flex-col gap-2 sm:flex-row sm:items-end">
-          <div class="flex-1"><label class="rotulo" for="a-familia">Nome da família</label>
-          <input id="a-familia" name="nome" class="campo" value="${esc(store.familia.nome)}" maxlength="60"></div>
-          <button class="btn-sec">Salvar</button>
-        </form>
-          ${store.membros.length ? `<p class="mt-5 mb-2 text-sm font-semibold">Quem usa o sistema</p>
-          <ul class="grid gap-2">${store.membros.map((m) => `<li class="flex items-center gap-2 text-sm">${seloAutor(m.user_id)}<span>${esc(m.nome || 'Sem nome')}${m.user_id === store.user.id ? ' <span class="text-stone-600 dark:text-stone-400">(você)</span>' : ''}</span></li>`).join('')}</ul>` : ''}
-        <div class="mt-5 rounded-xl bg-brand-50 p-4 dark:bg-brand-950">
-          <p class="font-semibold">Como colocar outra pessoa no sistema</p>
-          <ol class="mt-2 grid list-decimal gap-1 pl-5 text-sm text-stone-700 dark:text-stone-300">
-            <li>A pessoa abre o sistema e toca em <strong>Criar conta</strong>, com o e-mail dela.</li>
-            <li>Na tela seguinte, escolhe <strong>Recebi um convite</strong>.</li>
-            <li>Digita este código:</li>
-          </ol>
-          <div class="mt-3 flex items-center gap-2">
-            <output class="rounded-xl bg-white px-4 py-2 font-mono text-2xl font-bold tracking-[0.3em] dark:bg-stone-900" aria-label="Código de convite">${esc(store.familia.codigo_convite)}</output>
-            <button type="button" class="btn-neutro" data-copiar>${icone('copiar')} Copiar</button>
-          </div>
+      ${secao('backup', 'Backup dos dados', 'baixar', `
+        <p class="text-sm text-stone-700 dark:text-stone-300">Seus dados ficam <strong>só neste aparelho</strong>. Faça um backup de vez em quando e guarde o arquivo fora dele (Drive, e-mail ou WhatsApp).</p>
+        <p class="mt-2 text-sm ${!local.ultimoBackup ? 'font-semibold text-amber-800 dark:text-amber-300' : 'text-stone-600 dark:text-stone-400'}">${local.ultimoBackup ? `Último backup: ${dataCompleta(local.ultimoBackup.slice(0, 10))}` : 'Você ainda não fez nenhum backup.'}</p>
+        <div class="mt-4 flex flex-col gap-2 sm:flex-row">
+          <button type="button" class="btn-primario" data-backup>${icone('baixar')} Fazer backup agora</button>
+          <button type="button" class="btn-neutro" data-restaurar>${icone('enviar')} Restaurar um backup</button>
         </div>`)}
 
       ${Object.entries(LISTAS).map(([tabela, def]) => secao(tabela, def.titulo, def.icone, `
@@ -110,17 +98,20 @@ export default {
           <input type="checkbox" data-texto-grande class="size-6 accent-brand-600" ${pref.textoGrande ? 'checked' : ''}>
         </label>`)}
 
-      ${secao('conta', 'Minha conta', 'sair', `
-        <form data-meu-nome class="flex flex-col gap-2 sm:flex-row sm:items-end">
-          <div class="flex-1"><label class="rotulo" for="a-meu-nome">Seu nome no sistema</label>
-          <input id="a-meu-nome" name="nome" class="campo" maxlength="40" value="${esc(autor(store.user.id)?.nome || '')}" aria-describedby="dica-meu-nome">
-          <p id="dica-meu-nome" class="dica">É o nome que aparece para a outra pessoa, como em "Thays lançou 2 itens".</p></div>
-          <button class="btn-sec sm:mb-7">Salvar</button>
+      ${secao('conta', 'Usuário e senha', 'cadeado', `
+        <form data-meu-nome class="flex flex-col gap-2 sm:flex-row sm:items-end" novalidate>
+          <div class="flex-1"><label class="rotulo" for="a-meu-nome">Seu nome</label>
+          <input id="a-meu-nome" name="nome" class="campo" maxlength="40" value="${esc(store.usuario)}"></div>
+          <button class="btn-sec">Salvar</button>
         </form>
-        <p class="mt-4 text-sm text-stone-600 dark:text-stone-400">Conectado como <strong>${esc(store.user.email)}</strong>${modoDemo ? ' (demonstração)' : ''}.</p>
         <div class="mt-4 flex flex-wrap gap-2">
+          <button type="button" class="btn-neutro" data-trocar-senha>${icone('cadeado')} Trocar a senha</button>
           <button type="button" class="btn-neutro" data-tour>${icone('ajuda')} Ver a apresentação de novo</button>
-          <button type="button" class="btn-neutro text-red-700 dark:text-red-400" data-sair>${icone('sair')} Sair</button>
+        </div>
+        <div class="mt-6 rounded-xl border border-red-200 p-4 dark:border-red-900">
+          <p class="font-semibold text-red-800 dark:text-red-300">Apagar tudo deste aparelho</p>
+          <p class="mt-1 text-sm text-stone-600 dark:text-stone-400">Apaga o usuário e todos os dados. Use para começar do zero (por exemplo, depois de testar com os dados de exemplo).</p>
+          <button type="button" class="btn-neutro mt-3 text-red-700 dark:text-red-400" data-apagar-tudo>${icone('lixo')} Apagar tudo</button>
         </div>`)}
     </div>`;
 
@@ -136,17 +127,14 @@ export default {
         if (form.dataset.meuNome !== undefined) {
           const nome = form.nome.value.trim();
           if (!nome) throw new Error('Escreva seu nome.');
-          const antes = autor(store.user.id)?.nome || '';
-          await mudarMeuNome(nome);
-          toast(`Agora você aparece como ${nome}`, { acao: desfazendo(() => mudarMeuNome(antes), ctx.atualizar) });
-          ctx.atualizar();
-          return;
-        }
-        if (form.dataset.familia !== undefined) {
-          if (!form.nome.value.trim()) throw new Error('Escreva um nome para a família.');
-          const antes = store.familia.nome;
-          store.familia = await renomearFamilia(form.nome.value.trim());
-          toast('Nome da família salvo', { acao: desfazendo(async () => { store.familia = await renomearFamilia(antes); }, ctx.atualizar) });
+          const antes = store.usuario;
+          const trocar = async (n) => {
+            await local.alterarConta({ usuario: n });
+            store.usuario = n;
+            document.querySelectorAll('[data-saudacao]').forEach((p) => (p.textContent = `Olá, ${n}`));
+          };
+          await trocar(nome);
+          toast(`Nome alterado para ${nome}`, { acao: desfazendo(() => trocar(antes), ctx.atualizar) });
           return;
         }
         const tabela = form.dataset.tabela;
@@ -174,15 +162,16 @@ export default {
           toast(`${item.nome} excluído`, { acao: desfazendo(desfazer, ctx.atualizar) });
           ctx.atualizar();
         } catch (err) { toast(err.message, { tipo: 'erro' }); }
-      } else if (e.target.closest('[data-copiar]')) {
-        try { await navigator.clipboard.writeText(store.familia.codigo_convite); toast('Código copiado'); } catch { toast('Não deu para copiar. Anote o código mostrado na tela.', { tipo: 'erro' }); }
+      } else if (e.target.closest('[data-backup]')) {
+        if (await fazerBackup()) ctx.atualizar();
+      } else if (e.target.closest('[data-restaurar]')) {
+        await restaurarComConfirmacao(ctx.atualizar);
       } else if (e.target.closest('[data-tour]')) {
         abrirTour();
-      } else if (e.target.closest('[data-sair]')) {
-        const aviso = estado.pendentes
-          ? `Ainda há ${estado.pendentes} ${estado.pendentes === 1 ? 'alteração feita' : 'alterações feitas'} sem internet. ${estado.pendentes === 1 ? 'Ela fica guardada' : 'Elas ficam guardadas'} neste aparelho e ${estado.pendentes === 1 ? 'será enviada' : 'serão enviadas'} quando você entrar de novo com internet.`
-          : 'Você vai precisar do e-mail e da senha para entrar de novo.';
-        if (await confirmar(aviso, { titulo: 'Sair do sistema?', botao: 'Sair' })) auth.sair();
+      } else if (e.target.closest('[data-trocar-senha]')) {
+        trocarSenha();
+      } else if (e.target.closest('[data-apagar-tudo]')) {
+        apagarTudo();
       }
     };
 
@@ -259,4 +248,59 @@ function lerLinha(form, def) {
   }
   if ('grupo' in item && !item.grupo) item.grupo = 'Outros';
   return item;
+}
+
+function trocarSenha() {
+  const campo = (id, rotulo, auto) => `<div data-campo><label class="rotulo" for="${id}">${rotulo}</label>
+    <input id="${id}" name="${id}" type="password" class="campo" autocomplete="${auto}" maxlength="64"></div>`;
+  const d = dialogo({
+    titulo: 'Trocar a senha',
+    largura: 'max-w-sm',
+    corpo: `<form class="grid gap-4" novalidate>
+      ${campo('atual', 'Senha atual', 'current-password')}
+      ${campo('nova', 'Senha nova', 'new-password')}
+      ${campo('repetir', 'Repita a senha nova', 'new-password')}
+      <button type="submit" class="btn-primario">Trocar a senha</button></form>`,
+  });
+  const f = d.querySelector('form');
+  f.atual.focus();
+  f.onsubmit = async (e) => {
+    e.preventDefault();
+    limparErros(f);
+    if (f.nova.value.length < 4) return erroNoCampo(f, 'nova', 'A senha precisa ter pelo menos 4 caracteres.');
+    if (f.nova.value !== f.repetir.value) return erroNoCampo(f, 'repetir', 'As duas senhas estão diferentes.');
+    const botao = f.querySelector('[type=submit]');
+    botao.disabled = true;
+    botao.textContent = 'Trocando…';
+    try {
+      await local.alterarConta({ senhaAtual: f.atual.value, senhaNova: f.nova.value });
+      d.close();
+      toast('Senha trocada. Use a senha nova da próxima vez que abrir o sistema.');
+    } catch (err) {
+      erroNoCampo(f, 'atual', err.message);
+      botao.disabled = false;
+      botao.textContent = 'Trocar a senha';
+    }
+  };
+}
+
+function apagarTudo() {
+  const d = dialogo({
+    titulo: 'Apagar tudo deste aparelho?',
+    largura: 'max-w-sm',
+    corpo: `<form class="grid gap-3" novalidate>
+      <p class="text-stone-700 dark:text-stone-300">O usuário e <strong>todos os dados</strong> serão apagados para sempre. Se quiser guardar alguma coisa, faça um backup antes.</p>
+      <div data-campo><label class="rotulo" for="confirmar-apagar">Para confirmar, digite APAGAR</label>
+      <input id="confirmar-apagar" name="texto" class="campo uppercase" autocomplete="off"></div>
+      <button type="submit" class="btn-perigo">Apagar tudo</button></form>`,
+  });
+  const f = d.querySelector('form');
+  f.texto.focus();
+  f.onsubmit = async (e) => {
+    e.preventDefault();
+    if (f.texto.value.trim().toUpperCase() !== 'APAGAR') return erroNoCampo(f, 'texto', 'Digite APAGAR para confirmar.');
+    await local.apagarTudo();
+    location.hash = '';
+    location.reload();
+  };
 }

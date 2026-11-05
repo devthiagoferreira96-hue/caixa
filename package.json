@@ -9,9 +9,6 @@
     "preview": "vite preview",
     "test": "node tests/regras.test.js"
   },
-  "dependencies": {
-    "@supabase/supabase-js": "^2.49.0"
-  },
   "devDependencies": {
     "@tailwindcss/vite": "^4.1.0",
     "tailwindcss": "^4.1.0",
