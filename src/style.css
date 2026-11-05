@@ -72,7 +72,7 @@
     @apply mb-1.5 block text-sm font-semibold text-stone-700 dark:text-stone-300;
   }
   .dica {
-    @apply mt-1.5 text-sm text-stone-500 dark:text-stone-400;
+    @apply mt-1.5 text-sm text-stone-600 dark:text-stone-400;
   }
   .erro-campo {
     @apply mt-1.5 text-sm font-medium text-red-700 dark:text-red-400;
@@ -90,7 +90,7 @@
   }
   .nav-link.ativo { @apply bg-brand-50 font-semibold text-brand-800 dark:bg-brand-950 dark:text-brand-200; }
   .nav-baixo {
-    @apply flex flex-col items-center gap-0.5 px-1 py-2 text-xs font-medium text-stone-500 dark:text-stone-400;
+    @apply flex flex-col items-center gap-0.5 px-1 py-2 text-xs font-medium text-stone-600 dark:text-stone-400;
   }
   .nav-baixo.ativo { @apply font-semibold text-brand-700 dark:text-brand-300; }
 

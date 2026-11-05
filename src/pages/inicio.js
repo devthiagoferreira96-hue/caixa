@@ -49,7 +49,7 @@ export default {
             ${contas.map((c) => {
               const v = saldos.get(c.id) || 0;
               return `<li class="rounded-xl border border-stone-200 p-3 dark:border-stone-800">
-                <p class="truncate text-sm text-stone-500 dark:text-stone-400">${esc(c.nome)}</p>
+                <p class="truncate text-sm text-stone-600 dark:text-stone-400">${esc(c.nome)}</p>
                 <p class="font-semibold whitespace-nowrap tabular-nums ${v < 0 ? 'valor-saida' : ''}">${brl(v)}</p></li>`;
             }).join('')}
           </ul>
@@ -67,7 +67,7 @@ export default {
         <section class="card" aria-labelledby="t-pagar">
           <div class="mb-1 flex items-center justify-between gap-2">
             <h2 id="t-pagar" class="card-titulo mb-0">Contas a pagar e receber</h2>
-            <span class="text-sm text-stone-500 dark:text-stone-400">atrasadas e próximos 7 dias</span>
+            <span class="text-sm text-stone-600 dark:text-stone-400">atrasadas e próximos 7 dias</span>
           </div>
           ${pendentes.length
             ? `<ul data-lista>${pendentes.map((l) => itemLancamento(l, { mostrarPrazo: true })).join('')}</ul>`
@@ -95,7 +95,7 @@ export default {
               <a href="#cartoes" class="-mx-2 flex items-center gap-3 rounded-lg px-2 py-3 transition hover:bg-stone-50 dark:hover:bg-stone-800/60">
                 <span class="flex size-9 items-center justify-center rounded-lg bg-stone-100 text-stone-600 dark:bg-stone-800 dark:text-stone-300">${icone('cartao', 'size-5')}</span>
                 <span class="min-w-0 flex-1"><span class="block truncate font-medium">${esc(c.nome)}</span>
-                <span class="block text-sm text-stone-500 dark:text-stone-400">vence ${vencimentoFatura(c, mesISO(store.mes)).split('-').reverse().slice(0, 2).join('/')}</span></span>
+                <span class="block text-sm text-stone-600 dark:text-stone-400">vence ${vencimentoFatura(c, mesISO(store.mes)).split('-').reverse().slice(0, 2).join('/')}</span></span>
                 <span class="text-right"><span class="block font-semibold tabular-nums">${brl(valor)}</span><span class="selo ${cls}">${txt}</span></span>
               </a></li>`;
           }).join('')}</ul>` : estadoVazio('Nenhum cartão cadastrado', 'Cadastre seus cartões em Ajustes.', '<a href="#ajustes" class="btn-sec">Ir para Ajustes</a>')}
@@ -104,7 +104,7 @@ export default {
         <section class="card" aria-labelledby="t-grafico">
           <h2 id="t-grafico" class="card-titulo mb-1">Gastos por categoria</h2>
           <p class="text-2xl font-bold tabular-nums">${brl(somaGrafico)}</p>
-          <p class="mb-3 text-sm text-stone-500 dark:text-stone-400">Caixa + cartões no mês. Toque numa barra para ver os detalhes.</p>
+          <p class="mb-3 text-sm text-stone-600 dark:text-stone-400">Caixa + cartões no mês. Toque numa barra para ver os detalhes.</p>
           ${categoriasGrafico.length ? barrasCategorias(gastos, categoriasGrafico) : estadoVazio('Nenhuma categoria no gráfico', 'Escolha quais categorias aparecem aqui em Ajustes > Categorias.')}
         </section>
       </div>

@@ -46,7 +46,7 @@ export function telaEntrar() {
             ${modo === 'entrar' ? '<button type="button" data-modo="recuperar" class="cursor-pointer p-2 text-stone-600 dark:text-stone-400">Esqueci minha senha</button>' : ''}
           </div>
         </div>
-        ${modoDemo ? '<p class="mt-4 text-center text-sm text-stone-500">Modo demonstração: use qualquer e-mail e senha.</p>' : ''}
+        ${modoDemo ? '<p class="mt-4 text-center text-sm text-stone-600 dark:text-stone-400">Modo demonstração: use qualquer e-mail e senha.</p>' : ''}
       </div>
     </main>`;
 

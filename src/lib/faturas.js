@@ -9,7 +9,10 @@ import { parseISO, toISO } from './format.js';
  */
 export function faturaDe(cartao, dataCompra, parcela = 0) {
   const d = parseISO(dataCompra);
-  let mes = d.getMonth() + (d.getDate() >= cartao.dia_fechamento ? 1 : 0);
+  // Em meses curtos, "fecha dia 31" vira o último dia do mês (30, 29 ou 28)
+  const ultimoDia = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
+  const fechamento = Math.min(cartao.dia_fechamento, ultimoDia);
+  let mes = d.getMonth() + (d.getDate() >= fechamento ? 1 : 0);
   // Quando o vencimento é "antes" do fechamento (ex.: fecha 25, vence 5), a fatura vence no mês seguinte
   if (cartao.dia_vencimento <= cartao.dia_fechamento) mes += 1;
   return toISO(new Date(d.getFullYear(), mes + parcela, 1));
