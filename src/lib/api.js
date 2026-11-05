@@ -267,3 +267,31 @@ export async function restaurarBackup(dados) {
   await carregarCadastros();
   return async () => { await local.substituir(antes); await carregarCadastros(); };
 }
+
+// ---------- Importar planilha do Excel
+/**
+ * Grava o plano montado por `montarPlano` (importar-planilha.js).
+ * Retorna `desfazer()`, que volta tudo como estava antes da importação.
+ */
+export async function importarPlanilha(plano) {
+  const antes = structuredClone(local.tabelas());
+  try {
+    for (const t of ['contas', 'cartoes', 'categorias', 'pessoas']) {
+      if (plano.novos[t].length) await inserir(t, plano.novos[t]);
+    }
+    for (const [id, { valor }] of plano.saldosIniciais) await alterar('contas', [id], { saldo_inicial: valor });
+    for (const m of plano.mudarTipo) await alterar('categorias', [m.id], { tipo: m.tipo });
+    if (plano.lancamentos.length) await inserir('lancamentos', plano.lancamentos);
+    if (plano.compras.length) {
+      await inserir('compras_cartao', plano.compras.map((c) => c.compra));
+      await inserir('parcelas', plano.compras.flatMap((c) => c.parcelas));
+    }
+  } catch (e) {
+    // se algo falhar no meio, volta como estava
+    await local.substituir(antes);
+    await carregarCadastros();
+    throw e;
+  }
+  await carregarCadastros();
+  return async () => { await local.substituir(antes); await carregarCadastros(); };
+}

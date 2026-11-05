@@ -5,6 +5,7 @@ import { salvarItem, excluirItem } from '../lib/api.js';
 import { local } from '../lib/local-db.js';
 import { desfazendo } from '../components/lancamento.js';
 import { abrirOpcoesBackup, restaurarComConfirmacao } from '../components/backup.js';
+import { importarDoExcel } from '../components/importar.js';
 import { icone, toast, confirmar, mascaraDinheiro, dialogo, erroNoCampo, limparErros } from '../lib/ui.js';
 import { lerPreferencias, salvarPreferencias } from '../lib/preferencias.js';
 import { abrirTour } from '../components/tour.js';
@@ -74,12 +75,17 @@ export default {
     const pref = lerPreferencias();
     el.innerHTML = `
     <div class="mx-auto grid max-w-3xl gap-3 animate-entrar">
-      ${secao('backup', 'Backup e exportar', 'baixar', `
+      ${secao('backup', 'Backup, importar e exportar', 'baixar', `
         <p class="text-sm text-stone-700 dark:text-stone-300">Seus dados ficam <strong>só neste aparelho</strong>. Faça um backup de vez em quando e guarde o arquivo fora dele (Drive, e-mail ou WhatsApp). Aqui também dá para gerar uma <strong>planilha do Excel</strong> ou um <strong>relatório em PDF</strong>.</p>
         <p class="mt-2 text-sm ${!local.ultimoBackup ? 'font-semibold text-amber-800 dark:text-amber-300' : 'text-stone-600 dark:text-stone-400'}">${local.ultimoBackup ? `Último backup: ${dataCompleta(local.ultimoBackup.slice(0, 10))}` : 'Você ainda não fez nenhum backup.'}</p>
         <div class="mt-4 flex flex-col gap-2 sm:flex-row">
           <button type="button" class="btn-primario" data-backup>${icone('baixar')} Backup, Excel ou PDF</button>
           <button type="button" class="btn-neutro" data-restaurar>${icone('enviar')} Restaurar um backup</button>
+        </div>
+        <div class="mt-4 rounded-xl border border-stone-200 p-3 dark:border-stone-700">
+          <p class="font-semibold">Já usa a planilha do caixa no Excel?</p>
+          <p class="mt-1 text-sm text-stone-600 dark:text-stone-400">Traga os lançamentos e as compras no cartão de cada mês (cada aba é um mês). Nada é apagado, e o que já estiver no sistema não é duplicado.</p>
+          <button type="button" class="btn-sec mt-3" data-importar>${icone('planilha')} Importar planilha do Excel</button>
         </div>`)}
 
       ${Object.entries(LISTAS).map(([tabela, def]) => secao(tabela, def.titulo, def.icone, `
@@ -167,6 +173,8 @@ export default {
         } catch (err) { toast(err.message, { tipo: 'erro' }); }
       } else if (e.target.closest('[data-backup]')) {
         if (await abrirOpcoesBackup()) ctx.atualizar();
+      } else if (e.target.closest('[data-importar]')) {
+        await importarDoExcel(ctx.atualizar);
       } else if (e.target.closest('[data-restaurar]')) {
         await restaurarComConfirmacao(ctx.atualizar);
       } else if (e.target.closest('[data-tour]')) {

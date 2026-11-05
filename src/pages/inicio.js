@@ -89,7 +89,7 @@ export default {
         <section class="card border-brand-200 bg-brand-50 dark:border-brand-900 dark:bg-brand-950" aria-labelledby="t-comecar">
           <h2 id="t-comecar" class="font-bold">Vamos começar?</h2>
           <ol class="mt-2 grid list-decimal gap-1 pl-5 text-sm text-stone-700 dark:text-stone-300">
-            <li>Em <a href="#ajustes" class="font-semibold underline">Ajustes</a>, informe quanto cada conta tem hoje (saldo inicial).</li>
+            <li>Já usa a planilha do Excel? Em <a href="#ajustes" class="font-semibold underline">Ajustes</a>, toque em <strong>Importar planilha do Excel</strong>. Se não, informe lá quanto cada conta tem hoje (saldo inicial).</li>
             <li>Ainda em Ajustes, confira os dias de fechamento e vencimento dos cartões.</li>
             <li>Toque em <a href="#novo" class="font-semibold underline">Novo lançamento</a> para registrar o primeiro gasto.</li>
           </ol>
