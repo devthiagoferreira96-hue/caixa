@@ -1,5 +1,5 @@
 // Peças de interface reutilizáveis: ícones, avisos (toast), janelas (dialog) e campo de valor
-import { esc } from './format.js';
+import { esc, DIGITOS_VALOR, valorMaximoTexto } from './format.js';
 
 const ICONES = {
   inicio: '<path d="M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/>',
@@ -116,11 +116,36 @@ export function confirmar(mensagem, { titulo = 'Tem certeza?', botao = 'Confirma
 }
 
 // ---------- Campo de dinheiro: a pessoa digita só números e ele formata (1234 -> 12,34)
+// Aceita no máximo DIGITOS_VALOR dígitos (R$ 99.999.999,99). O que passar disso é ignorado
+// (inclusive ao colar) e aparece um aviso embaixo do campo, lido também por leitores de tela.
 export function mascaraDinheiro(input) {
-  input.addEventListener('input', () => {
-    const digitos = input.value.replace(/\D/g, '').replace(/^0+/, '').slice(0, 11);
-    input.value = digitos ? (Number(digitos) / 100).toLocaleString('pt-BR', { minimumFractionDigits: 2 }) : '';
+  input.maxLength = DIGITOS_VALOR + Math.floor((DIGITOS_VALOR - 3) / 3) + 1; // dígitos + pontos + vírgula
+  const aviso = document.createElement('p');
+  aviso.className = 'dica hidden font-medium text-amber-800 dark:text-amber-300';
+  aviso.setAttribute('aria-live', 'polite');
+  (input.closest('[data-campo]') || input.parentElement).append(aviso);
+
+  const mostrarAviso = (mostrar) => {
+    aviso.textContent = mostrar ? `Valor máximo: ${valorMaximoTexto()} (${DIGITOS_VALOR} dígitos).` : '';
+    aviso.classList.toggle('hidden', !mostrar);
+  };
+  const formatar = (d) => (d ? (Number(d) / 100).toLocaleString('pt-BR', { minimumFractionDigits: 2 }) : '');
+
+  input.addEventListener('beforeinput', (e) => {
+    // bloqueia novos dígitos quando o limite já foi atingido (a não ser que haja texto selecionado)
+    const temSelecao = input.selectionStart !== input.selectionEnd;
+    const atuais = input.value.replace(/\D/g, '').replace(/^0+/, '').length;
+    if (e.inputType?.startsWith('insert') && !temSelecao && /\d/.test(e.data || '') && atuais >= DIGITOS_VALOR) {
+      e.preventDefault();
+      mostrarAviso(true);
+    }
   });
+  input.addEventListener('input', () => {
+    const digitos = input.value.replace(/\D/g, '').replace(/^0+/, '');
+    mostrarAviso(digitos.length > DIGITOS_VALOR);
+    input.value = formatar(digitos.slice(0, DIGITOS_VALOR));
+  });
+  input.addEventListener('blur', () => mostrarAviso(false));
 }
 
 // ---------- Mensagens de erro ao lado do campo (leitores de tela também anunciam)

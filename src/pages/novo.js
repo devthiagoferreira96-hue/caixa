@@ -1,5 +1,5 @@
 // Novo lançamento: saída, entrada ou compra no cartão
-import { brl, esc, hojeISO, lerValor, somarMeses, nomeMes, parseISO, dataCompleta } from '../lib/format.js';
+import { brl, esc, hojeISO, lerValor, somarMeses, nomeMes, parseISO, dataCompleta, VALOR_MAXIMO, valorMaximoTexto } from '../lib/format.js';
 import { store, cartoesAtivos, buscar } from '../lib/store.js';
 import { criarLancamentos, excluirLancamentos, criarCompra, excluirCompra, pessoaPorNome } from '../lib/api.js';
 import { faturaDe, vencimentoFatura, dividirParcelas } from '../lib/faturas.js';
@@ -176,6 +176,7 @@ async function salvarCompra(form, botao) {
   const categoria_id = Number(form.categoria_id.value) || null;
   let ok = true;
   if (!(total > 0)) { erroNoCampo(form, 'valor', 'Digite o valor total da compra.'); ok = false; }
+  else if (total > VALOR_MAXIMO) { erroNoCampo(form, 'valor', `O valor máximo é ${valorMaximoTexto()}.`); ok = false; }
   if (!descricao) { erroNoCampo(form, 'descricao', 'Escreva o que foi comprado.'); ok = false; }
   if (!categoria_id) { erroNoCampo(form, 'categoria_id', 'Escolha uma categoria.'); ok = false; }
   if (!form.data_compra.value) { erroNoCampo(form, 'data_compra', 'Escolha a data da compra.'); ok = false; }

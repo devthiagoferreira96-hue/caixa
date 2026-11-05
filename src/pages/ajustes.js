@@ -1,5 +1,5 @@
 // Ajustes: família e convite, contas, cartões, categorias, pessoas, aparência e sair
-import { esc, valorParaCampo, lerValor } from '../lib/format.js';
+import { esc, valorParaCampo, lerValor, VALOR_MAXIMO, valorMaximoTexto } from '../lib/format.js';
 import { store, categoriasPorGrupo } from '../lib/store.js';
 import { salvarItem, excluirItem, renomearFamilia, auth } from '../lib/api.js';
 import { icone, toast, confirmar, mascaraDinheiro } from '../lib/ui.js';
@@ -219,7 +219,11 @@ function lerLinha(form, def) {
   for (const c of def.campos) {
     const campo = form.elements[c.nome];
     if (c.tipo === 'marcar') item[c.nome] = campo.checked;
-    else if (c.tipo === 'dinheiro') item[c.nome] = (lerValor(campo.value) || 0) * (form.elements[`${c.nome}_negativo`].checked ? -1 : 1);
+    else if (c.tipo === 'dinheiro') {
+      const v = lerValor(campo.value) || 0;
+      if (v > VALOR_MAXIMO) throw new Error(`O valor máximo é ${valorMaximoTexto()}.`);
+      item[c.nome] = v * (form.elements[`${c.nome}_negativo`].checked ? -1 : 1);
+    }
     else if (c.tipo === 'dia') {
       const n = Number(campo.value);
       if (!(n >= 1 && n <= 31)) throw new Error('O dia precisa ser um número de 1 a 31.');

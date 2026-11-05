@@ -1,5 +1,5 @@
 // Campos do formulário de lançamento do caixa (usados em "Novo lançamento" e na edição)
-import { esc, hojeISO, valorParaCampo, lerValor } from '../lib/format.js';
+import { esc, hojeISO, valorParaCampo, lerValor, VALOR_MAXIMO, valorMaximoTexto } from '../lib/format.js';
 import { store, contasAtivas, categoriasPorGrupo, buscar } from '../lib/store.js';
 import { erroNoCampo } from '../lib/ui.js';
 
@@ -83,6 +83,7 @@ export function lerCamposCaixa(form, tipo) {
   let ok = true;
   const erro = (campo, msg) => { erroNoCampo(form, campo, msg); ok = false; };
   if (!(valor > 0)) erro('valor', 'Digite um valor maior que zero.');
+  else if (valor > VALOR_MAXIMO) erro('valor', `O valor máximo é ${valorMaximoTexto()}.`);
   if (!dados.descricao) erro('descricao', 'Escreva uma descrição curta, como "Conta de luz".');
   if (!dados.categoria_id) erro('categoria_id', 'Escolha uma categoria.');
   if (!dados.conta_id) erro('conta_id', 'Escolha a conta.');

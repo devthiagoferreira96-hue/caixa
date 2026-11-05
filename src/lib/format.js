@@ -69,4 +69,9 @@ export const lerValor = (s) => {
 export const valorParaCampo = (v) =>
   v ? Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '';
 
+// ---------- Limite dos campos de valor em R$ (também conferido no banco, ver supabase/schema.sql)
+export const DIGITOS_VALOR = 10; // até 10 dígitos: R$ 99.999.999,99
+export const VALOR_MAXIMO = 99_999_999.99;
+export const valorMaximoTexto = () => brl(VALOR_MAXIMO);
+
 export const porcentagem = (v) => `${v.toLocaleString('pt-BR', { maximumFractionDigits: 1 })}%`;
