@@ -34,3 +34,28 @@ export function itensDaCategoria(categoriaId, lancamentos, parcelas) {
 
 export const totalDoCartao = (parcelas, cartaoId) =>
   somar(parcelas.filter((p) => p.compra.cartao_id === cartaoId));
+
+/**
+ * Entradas, gastos e resultado separados por área (Casa, Fazenda, Empresa).
+ * `areaDe(categoria_id)` diz a área de cada categoria. Gastos = caixa + parcelas de cartão.
+ * Retorna { Casa: {entradas, gastos, resultado, ...}, Fazenda: {...}, ... } com todas as áreas de `areas`.
+ */
+export function resumoPorArea(lancamentos, parcelas, areaDe, areas = ['Casa']) {
+  const r = Object.fromEntries(areas.map((a) => [a, { entradas: 0, gastos: 0, gastosCaixa: 0, gastosCartao: 0, movimentos: 0 }]));
+  const em = (id) => (r[areaDe(id)] ||= { entradas: 0, gastos: 0, gastosCaixa: 0, gastosCartao: 0, movimentos: 0 });
+  entradas(lancamentos).forEach((l) => { const a = em(l.categoria_id); a.entradas += Number(l.valor); a.movimentos++; });
+  saidasReais(lancamentos).forEach((l) => { const a = em(l.categoria_id); a.gastosCaixa += Number(l.valor); a.movimentos++; });
+  parcelas.forEach((p) => { const a = em(p.compra.categoria_id); a.gastosCartao += Number(p.valor); a.movimentos++; });
+  for (const a of Object.values(r)) {
+    a.gastos = a.gastosCaixa + a.gastosCartao;
+    a.resultado = a.entradas - a.gastos;
+  }
+  return r;
+}
+
+/** Entradas de um conjunto de categorias, por categoria: Map(categoria_id → valor) */
+export function entradasPorCategoria(lancamentos) {
+  const m = new Map();
+  entradas(lancamentos).forEach((l) => m.set(l.categoria_id ?? null, (m.get(l.categoria_id ?? null) || 0) + Number(l.valor)));
+  return m;
+}

@@ -6,7 +6,7 @@ import { nomeCategoria } from '../lib/store.js';
 import { desfazendo } from '../components/lancamento.js';
 import { faturaDe, vencimentoFatura, dividirParcelas } from '../lib/faturas.js';
 import { icone, toast, mascaraDinheiro, erroNoCampo, limparErros, dialogo } from '../lib/ui.js';
-import { campoValor, campoDescricao, campoCategoria, camposCaixa, lerCamposCaixa } from '../components/form-lancamento.js';
+import { campoValor, campoDescricao, campoCategoria, camposCaixa, lerCamposCaixa, atualizarCategorias, erroDeTipo } from '../components/form-lancamento.js';
 
 let ultimoModo = 'saida';
 
@@ -38,7 +38,7 @@ export default {
       <div class="card grid gap-4">
         ${campoValor(null)}
         ${campoDescricao('', 'Ex.: Conta de luz')}
-        ${campoCategoria(null)}
+        ${campoCategoria(null, ultimoModo)}
 
         <div data-secao="caixa" class="grid gap-4">
           ${camposCaixa({})}
@@ -89,6 +89,7 @@ export default {
       const textoPago = el.querySelector('[data-texto-pago]');
       if (textoPago) textoPago.textContent = modo() === 'entrada' ? 'Já foi recebido' : 'Já foi pago';
       limparErros(form);
+      atualizarCategorias(form, modo());
       atualizarPrevia();
     };
 
@@ -182,6 +183,7 @@ async function salvarCompra(form, botao) {
   else if (total > VALOR_MAXIMO) { erroNoCampo(form, 'valor', `O valor máximo é ${valorMaximoTexto()}.`); ok = false; }
   if (!descricao) { erroNoCampo(form, 'descricao', 'Escreva o que foi comprado.'); ok = false; }
   if (!categoria_id) { erroNoCampo(form, 'categoria_id', 'Escolha uma categoria.'); ok = false; }
+  else if (erroDeTipo(categoria_id, 'cartao')) { erroNoCampo(form, 'categoria_id', erroDeTipo(categoria_id, 'cartao')); ok = false; }
   if (!form.data_compra.value) { erroNoCampo(form, 'data_compra', 'Escolha a data da compra.'); ok = false; }
   if (!ok) { form.querySelector('[aria-invalid]').focus(); return null; }
   if (!(await podeSalvarMesmoParecido({ tipo: 'cartao', valor: total, data: form.data_compra.value, categoria_id, descricao }))) return null;

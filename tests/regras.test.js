@@ -2,7 +2,7 @@
 // Rode com: npm test
 import { faturaDe, vencimentoFatura, dividirParcelas } from '../src/lib/faturas.js';
 import { somarMeses, lerValor, valorParaCampo, brl, esc, diasAte, quandoVence, somarDias, nomeMes } from '../src/lib/format.js';
-import { gastosPorCategoria, itensDaCategoria, saidasReais, totalDoCartao } from '../src/lib/calculos.js';
+import { gastosPorCategoria, itensDaCategoria, saidasReais, totalDoCartao, resumoPorArea, entradasPorCategoria } from '../src/lib/calculos.js';
 let ok=0, falhas=[];
 const t=(nome, obtido, esperado)=>{ const a=JSON.stringify(obtido), b=JSON.stringify(esperado); a===b?ok++:falhas.push(`${nome}: obtido ${a}, esperado ${b}`); };
 const MP={dia_fechamento:3,dia_vencimento:10}, VIRA={dia_fechamento:25,dia_vencimento:5}, F31={dia_fechamento:31,dia_vencimento:10}, IGUAL={dia_fechamento:10,dia_vencimento:10};
@@ -45,5 +45,15 @@ t('pagamento fatura nao conta',g.get(2),undefined);
 t('sem categoria',g.get(null),20.5);
 t('itens cat1',itensDaCategoria(1,ls,ps).length,2);
 t('total cartao',totalDoCartao(ps,7),30);
+// resultado por área (casa x fazenda)
+const area=(id)=>id===1?'Fazenda':'Casa';
+const ar=resumoPorArea(ls,ps,area,['Casa','Fazenda','Empresa']);
+t('fazenda entradas',ar.Fazenda.entradas,999);
+t('fazenda gastos (caixa+cartão)',ar.Fazenda.gastos,130);
+t('fazenda resultado',ar.Fazenda.resultado,869);
+t('casa gastos (sem pagamento de fatura)',ar.Casa.gastos,20.5);
+t('empresa vazia',ar.Empresa.movimentos,0);
+t('soma das áreas = geral',ar.Casa.resultado+ar.Fazenda.resultado+ar.Empresa.resultado,999-130-20.5);
+t('entradas por categoria',entradasPorCategoria(ls).get(1),999);
 console.log(`${ok} passaram, ${falhas.length} falharam`); falhas.forEach(f=>console.log(' FALHA',f));
 if (falhas.length) process.exit(1);

@@ -1,11 +1,12 @@
 // Campos do formulário de lançamento do caixa (usados em "Novo lançamento" e na edição)
 import { esc, hojeISO, valorParaCampo, lerValor, VALOR_MAXIMO, valorMaximoTexto } from '../lib/format.js';
-import { store, contasAtivas, categoriasPorGrupo, buscar } from '../lib/store.js';
+import { store, contasAtivas, categoriasPorGrupo, buscar, categoriaServe } from '../lib/store.js';
 import { erroNoCampo } from '../lib/ui.js';
 
-export const opcoesCategoria = (selecionada) =>
+/** Opções do campo Categoria. Com `tipo`, só as categorias que servem para ele (e sempre a já escolhida). */
+export const opcoesCategoria = (selecionada, tipo) =>
   `<option value="">Escolha uma categoria…</option>` +
-  Object.entries(categoriasPorGrupo())
+  Object.entries(categoriasPorGrupo(tipo, selecionada))
     .map(([grupo, cats]) => `<optgroup label="${esc(grupo)}">${cats
       .map((c) => `<option value="${c.id}" ${c.id === selecionada ? 'selected' : ''}>${esc(c.nome)}</option>`)
       .join('')}</optgroup>`)
@@ -31,11 +32,45 @@ export const campoDescricao = (valor, exemplo) => `
     <input id="f-descricao" name="descricao" class="campo" maxlength="120" autocomplete="off" placeholder="${esc(exemplo)}" value="${esc(valor || '')}">
   </div>`;
 
-export const campoCategoria = (selecionada) => `
+const DICA_CATEGORIA = {
+  saida: 'Mostrando as categorias de saída.',
+  cartao: 'Mostrando as categorias de saída.',
+  entrada: 'Mostrando as categorias de entrada, como Venda e Rendimentos.',
+};
+
+export const campoCategoria = (selecionada, tipo = 'saida') => `
   <div data-campo>
     <label class="rotulo" for="f-categoria">Categoria</label>
-    <select id="f-categoria" name="categoria_id" class="campo">${opcoesCategoria(selecionada)}</select>
+    <select id="f-categoria" name="categoria_id" class="campo" aria-describedby="dica-categoria">${opcoesCategoria(selecionada, tipo)}</select>
+    <p id="dica-categoria" class="dica" data-dica-categoria>${DICA_CATEGORIA[tipo]}</p>
   </div>`;
+
+/**
+ * Troca as opções de categoria quando muda o tipo (saída/entrada/cartão).
+ * Mantém a escolha se ela servir para o novo tipo; senão, limpa e avisa.
+ */
+export function atualizarCategorias(form, tipo) {
+  const campo = form.categoria_id;
+  const antes = campo.value;
+  const serve = !antes || categoriaServe(buscar('categorias', antes), tipo);
+  campo.innerHTML = opcoesCategoria(serve ? antes : null, tipo);
+  campo.value = serve ? antes : '';
+  const dica = form.querySelector('[data-dica-categoria]');
+  if (dica) {
+    dica.textContent = serve
+      ? DICA_CATEGORIA[tipo]
+      : `"${buscar('categorias', antes)?.nome}" não é de ${tipo === 'entrada' ? 'entrada' : 'saída'}. Escolha outra categoria.`;
+  }
+}
+
+/** Mensagem de erro se a categoria não servir para o tipo (ou null) */
+export function erroDeTipo(categoriaId, tipo) {
+  const c = buscar('categorias', categoriaId);
+  if (!c || categoriaServe(c, tipo)) return null;
+  return tipo === 'entrada'
+    ? `"${c.nome}" é uma categoria de saída. Escolha uma de entrada ou mude o tipo para Saída.`
+    : `"${c.nome}" é uma categoria de entrada. Escolha uma de saída ou mude o tipo para Entrada.`;
+}
 
 /** Campos de conta/vencimento/pessoa/pago. `l` = lançamento existente (edição) ou {} */
 export function camposCaixa(l = {}) {
@@ -86,6 +121,7 @@ export function lerCamposCaixa(form, tipo) {
   else if (valor > VALOR_MAXIMO) erro('valor', `O valor máximo é ${valorMaximoTexto()}.`);
   if (!dados.descricao) erro('descricao', 'Escreva uma descrição curta, como "Conta de luz".');
   if (!dados.categoria_id) erro('categoria_id', 'Escolha uma categoria.');
+  else if (erroDeTipo(dados.categoria_id, tipo)) erro('categoria_id', erroDeTipo(dados.categoria_id, tipo));
   if (!dados.conta_id) erro('conta_id', 'Escolha a conta.');
   if (!dados.vencimento) erro('vencimento', 'Escolha a data.');
   if (!ok) form.querySelector('[aria-invalid]')?.focus();

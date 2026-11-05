@@ -3,7 +3,7 @@ import { esc, brl, diaMes, diasAte, quandoVence, hojeISO } from '../lib/format.j
 import { buscar } from '../lib/store.js';
 import { icone, toast, dialogo, confirmar, mascaraDinheiro, limparErros } from '../lib/ui.js';
 import { atualizarLancamento, excluirLancamentos, lancamentosDoGrupo, pessoaPorNome } from '../lib/api.js';
-import { campoValor, campoDescricao, campoCategoria, camposCaixa, lerCamposCaixa } from './form-lancamento.js';
+import { campoValor, campoDescricao, campoCategoria, camposCaixa, lerCamposCaixa, atualizarCategorias } from './form-lancamento.js';
 
 /** Botão "Desfazer" padrão dos avisos: desfaz, avisa e redesenha a tela */
 export const desfazendo = (desfazer, atualizar) => ({
@@ -159,7 +159,7 @@ export function abrirEdicao(l, atualizar) {
         </fieldset>
         ${campoValor(l.valor)}
         ${campoDescricao(l.descricao, 'Ex.: Conta de luz')}
-        ${campoCategoria(l.categoria_id)}
+        ${campoCategoria(l.categoria_id, l.tipo)}
         ${camposCaixa(l)}
         ${rodapeDatas(l)}
         <div class="mt-2 flex flex-col-reverse gap-2 sm:flex-row sm:justify-between">
@@ -170,6 +170,7 @@ export function abrirEdicao(l, atualizar) {
   });
   const form = d.querySelector('form');
   mascaraDinheiro(form.valor);
+  form.addEventListener('change', (e) => e.target.name === 'tipo' && atualizarCategorias(form, form.tipo.value));
   d.querySelector('[data-excluir]').onclick = () => excluir(l, atualizar, d);
   form.onsubmit = async (e) => {
     e.preventDefault();

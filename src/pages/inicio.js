@@ -1,8 +1,8 @@
 // Tela inicial: saldos, resumo do mês, contas a pagar, faturas e gráfico por categoria
 import { brl, brlCurto, esc, mesISO, somarDias, nomeMes } from '../lib/format.js';
-import { store, contasAtivas, cartoesAtivos } from '../lib/store.js';
+import { store, contasAtivas, cartoesAtivos, areaDaCategoria, GRUPOS_SEPARADOS } from '../lib/store.js';
 import { saldosContas, lancamentosDoMes, parcelasDoMes, pendentesAte, pagamentosDeFatura } from '../lib/api.js';
-import { gastosPorCategoria, saidasReais, entradas, somar, totalDoCartao } from '../lib/calculos.js';
+import { gastosPorCategoria, totalDoCartao, resumoPorArea, entradasPorCategoria } from '../lib/calculos.js';
 import { itemLancamento, cliqueEmLancamento } from '../components/lancamento.js';
 import { barrasCategorias, abrirDetalheCategoria } from '../components/grafico.js';
 import { icone, estadoVazio } from '../lib/ui.js';
@@ -15,7 +15,8 @@ export default {
   usaMes: true,
   ajuda: `
     <p><strong>Saldo total</strong>: quanto vocês têm somando todas as contas. Só conta o que já foi pago ou recebido.</p>
-    <p><strong>Resumo do mês</strong>: o que entrou e o que saiu no mês escolhido no topo (gastos do caixa + parcelas dos cartões).</p>
+    <p><strong>Resumo da casa</strong>: o que entrou e o que saiu no mês escolhido no topo (gastos do caixa + parcelas dos cartões), <strong>sem</strong> as categorias dos grupos Fazenda e Empresa. Embaixo aparece o resultado geral, somando tudo.</p>
+    <p><strong>Fazenda</strong>: vendas menos despesas da fazenda no mês, mostrando se deu lucro ou prejuízo. A Empresa ganha um quadro igual quando tiver lançamentos no mês.</p>
     <p><strong>Contas a pagar</strong>: o que está atrasado ou vence nos próximos 7 dias. Quando pagar, toque no círculo.</p>
     <p><strong>Faturas do mês</strong>: quanto cada cartão vai cobrar. Toque para ver as compras.</p>
     <p><strong>Gastos por categoria</strong>: toque numa barra para ver tudo o que foi gasto naquela categoria.</p>`,
@@ -32,9 +33,11 @@ export default {
 
     const contas = contasAtivas();
     const total = contas.reduce((s, c) => s + (saldos.get(c.id) || 0), 0);
-    const totalEntradas = somar(entradas(lancamentos));
-    const totalSaidas = somar(saidasReais(lancamentos)) + somar(parcelas);
-    const resultado = totalEntradas - totalSaidas;
+    const areas = resumoPorArea(lancamentos, parcelas, areaDaCategoria, ['Casa', ...GRUPOS_SEPARADOS]);
+    const casa = areas.Casa;
+    const temSeparadas = GRUPOS_SEPARADOS.some((g) => areas[g].movimentos > 0);
+    const geral = Object.values(areas).reduce((s, a) => s + a.resultado, 0);
+    const entradasCat = entradasPorCategoria(lancamentos);
     const categoriasGrafico = store.categorias.filter((c) => c.no_grafico);
     const gastos = gastosPorCategoria(lancamentos, parcelas);
     const somaGrafico = categoriasGrafico.reduce((s, c) => s + (gastos.get(c.id) || 0), 0);
@@ -58,15 +61,16 @@ export default {
         </section>
 
         <section class="card" aria-labelledby="t-resumo">
-          <h2 id="t-resumo" class="card-titulo">Resumo de ${esc(nomeMes(store.mes).toLowerCase())}</h2>
-          <dl class="grid gap-2 sm:grid-cols-3">
-            ${[['Entrou', brl(totalEntradas), 'bg-brand-50 dark:bg-brand-950', 'valor-entrada'],
-               ['Saiu', brl(totalSaidas), 'bg-red-50 dark:bg-red-950/40', 'valor-saida'],
-               ['Resultado', brl(resultado), 'bg-stone-100 dark:bg-stone-800', resultado < 0 ? 'valor-saida' : '']]
-              .map(([rotulo, valor, fundo, cor]) => `<div class="flex flex-wrap items-baseline justify-between gap-x-3 rounded-xl p-3 sm:block ${fundo}">
-                <dt class="text-sm text-stone-600 dark:text-stone-400">${rotulo}</dt><dd class="font-semibold tabular-nums ${cor}">${valor}</dd></div>`).join('')}
-          </dl>
+          <h2 id="t-resumo" class="card-titulo mb-1">Resumo da casa em ${esc(nomeMes(store.mes).toLowerCase())}</h2>
+          <p class="mb-3 text-sm text-stone-600 dark:text-stone-400">Sem ${GRUPOS_SEPARADOS.join(' e ').toLowerCase()}.</p>
+          ${quadrosResultado(casa, { entrou: 'Entrou', saiu: 'Saiu' })}
+          ${temSeparadas ? `<p class="mt-3 flex flex-wrap items-baseline justify-between gap-x-3 border-t border-stone-100 pt-3 text-sm dark:border-stone-800" data-resultado-geral>
+            <span class="text-stone-600 dark:text-stone-400">Resultado geral (casa + ${GRUPOS_SEPARADOS.filter((g) => areas[g].movimentos > 0).join(' + ').toLowerCase()})</span>
+            <strong class="tabular-nums ${geral < 0 ? 'valor-saida' : ''}">${brl(geral)}</strong></p>` : ''}
         </section>
+
+        ${GRUPOS_SEPARADOS.filter((g) => store.categorias.some((c) => c.grupo === g) && (g === 'Fazenda' || areas[g].movimentos > 0))
+          .map((g) => quadroArea(g, areas[g], gastos, entradasCat)).join('')}
 
         <section class="card" aria-labelledby="t-pagar">
           <div class="mb-1 flex flex-wrap items-baseline justify-between gap-x-2">
@@ -123,6 +127,34 @@ export default {
     };
   },
 };
+
+/** Três quadrinhos: entrou, saiu e resultado (lucro/prejuízo) */
+function quadrosResultado(a, { entrou, saiu, lucro = false }) {
+  const rotuloResultado = lucro ? (a.resultado < 0 ? 'Prejuízo' : 'Lucro') : 'Resultado';
+  return `<dl class="grid gap-2 sm:grid-cols-3">
+    ${[[entrou, brl(a.entradas), 'bg-brand-50 dark:bg-brand-950', 'valor-entrada'],
+       [saiu, brl(a.gastos), 'bg-red-50 dark:bg-red-950/40', 'valor-saida'],
+       [rotuloResultado, brl(lucro ? Math.abs(a.resultado) : a.resultado), 'bg-stone-100 dark:bg-stone-800', a.resultado < 0 ? 'valor-saida' : a.resultado > 0 && lucro ? 'valor-entrada' : '']]
+      .map(([rotulo, valor, fundo, cor]) => `<div class="flex flex-wrap items-baseline justify-between gap-x-3 rounded-xl p-3 sm:block ${fundo}">
+        <dt class="text-sm text-stone-600 dark:text-stone-400">${rotulo}</dt><dd class="font-semibold tabular-nums ${cor}">${valor}</dd></div>`).join('')}
+  </dl>`;
+}
+
+/** Quadro de uma área separada (Fazenda, Empresa): entradas, despesas, lucro e despesas por categoria */
+function quadroArea(nome, a, gastos, entradasCat) {
+  const cats = store.categorias.filter((c) => c.grupo === nome);
+  const id = `t-area-${nome.toLowerCase()}`;
+  const origens = cats.filter((c) => entradasCat.get(c.id)).sort((x, y) => entradasCat.get(y.id) - entradasCat.get(x.id));
+  return `<section class="card" aria-labelledby="${id}" data-area="${esc(nome)}">
+    <h2 id="${id}" class="card-titulo mb-1">${esc(nome)} em ${esc(nomeMes(store.mes).toLowerCase())}</h2>
+    <p class="mb-3 text-sm text-stone-600 dark:text-stone-400">Fora do resumo da casa. Gastos do caixa + cartões.</p>
+    ${a.movimentos ? `
+      ${quadrosResultado(a, { entrou: nome === 'Fazenda' ? 'Vendas e entradas' : 'Entradas', saiu: 'Despesas', lucro: true })}
+      ${origens.length ? `<p class="mt-3 text-sm text-stone-600 dark:text-stone-400">Entradas: ${origens.map((c) => `${esc(c.nome)} <span class="font-semibold text-stone-900 tabular-nums dark:text-stone-100">${brl(entradasCat.get(c.id))}</span>`).join(' · ')}</p>` : ''}
+      ${a.gastos ? `<h3 class="mt-4 mb-1 text-sm font-semibold">Despesas por categoria</h3>${barrasCategorias(gastos, cats, { mostrarZeradas: false })}` : ''}`
+    : estadoVazio(`Nada lançado na ${nome.toLowerCase()} neste mês`, `Use as categorias do grupo ${nome}, como ${cats.slice(0, 2).map((c) => c.nome).join(' ou ')}.`)}
+  </section>`;
+}
 
 /** Aviso para fazer backup: se nunca fez (e já tem lançamentos) ou se o último tem mais de 30 dias */
 function lembreteBackup() {

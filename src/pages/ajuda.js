@@ -19,6 +19,13 @@ const TOPICOS = [
     <p>Escolha <strong>Cartão</strong>, digite o <strong>valor total</strong> e o número de parcelas. O sistema mostra em qual fatura a compra vai cair e cria todas as parcelas sozinho.</p>
     <p>A fatura é decidida pelo <strong>dia de fechamento</strong> do cartão, que você confere em <a href="#ajustes" class="font-semibold underline">Ajustes</a>.</p>
     <p>Na tela <a href="#cartoes" class="font-semibold underline">Cartões</a>, toque em <strong>Pagar fatura</strong> quando pagar. O valor sai do saldo da conta que você escolher, e as compras não são contadas duas vezes nos gráficos.</p>`],
+  ['etiqueta', 'Categorias de entrada e de saída', `
+    <p>Cada categoria tem um <strong>tipo</strong>: <strong>Saída</strong> (gastos), <strong>Entrada</strong> (como Venda e Rendimentos Bancários) ou <strong>Os dois</strong> (como Empréstimos e Ajuste Caixa, que podem entrar ou sair).</p>
+    <p>Ao lançar, só aparecem as categorias do tipo escolhido. Para mudar o tipo de uma categoria, vá em <a href="#ajustes" class="font-semibold underline">Ajustes > Categorias</a>.</p>`],
+  ['relatorio', 'Casa e Fazenda separadas no Início', `
+    <p>O <strong>Resumo da casa</strong> não conta as categorias dos grupos <strong>Fazenda</strong> e <strong>Empresa</strong>. Assim dá para ver quanto a casa gastou de verdade.</p>
+    <p>A Fazenda tem um quadro próprio: <strong>vendas menos despesas</strong>, dizendo se o mês deu lucro ou prejuízo, e as despesas por categoria. A Empresa ganha um quadro igual quando tiver lançamentos.</p>
+    <p>O <strong>resultado geral</strong>, somando tudo, aparece embaixo do Resumo da casa. Para uma categoria entrar ou sair da Fazenda, mude o <strong>grupo</strong> dela em Ajustes > Categorias.</p>`],
   ['relatorio', 'Gráficos e relatório', `
     <p>O gráfico do Início mostra as categorias da casa. Em Ajustes > Categorias, a opção <strong>No gráfico</strong> escolhe quais aparecem.</p>
     <p>O <a href="#relatorio" class="font-semibold underline">Relatório</a> mostra todas as categorias, separadas por grupo, os últimos 6 meses e os pagamentos por pessoa.</p>`],

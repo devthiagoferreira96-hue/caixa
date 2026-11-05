@@ -54,6 +54,11 @@ Depois de instalado, o sistema abre e funciona sem internet. Quando você public
 - **Sem a senha e sem o código** não há como abrir os dados: só um backup os traz de volta.
 - **Como funciona por dentro:** os dados são cifrados com uma chave aleatória. Essa chave fica guardada em duas "fechaduras", uma aberta pela senha e outra pelo código. Tudo acontece no aparelho, sem servidor (veja `src/lib/cofre.js`).
 
+## Casa, Fazenda e tipos de categoria
+
+- Cada categoria tem um **tipo** (saída, entrada ou os dois). O formulário de lançamento só mostra as categorias do tipo escolhido. Dados de versões anteriores recebem o tipo automaticamente (pelo nome e pelo uso).
+- As categorias dos grupos **Fazenda** e **Empresa** (`GRUPOS_SEPARADOS` em `src/lib/store.js`) ficam fora do *Resumo da casa* e ganham um quadro próprio no Início com vendas, despesas e lucro.
+
 ## Backup
 
 Como os dados ficam só no aparelho, **perder o aparelho é perder os dados**, a não ser que exista um backup.
