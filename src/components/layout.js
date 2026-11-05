@@ -31,7 +31,7 @@ export function montarLayout() {
 
     <div class="lg:pl-64">
       ${modoDemo ? `<div class="bg-amber-100 px-4 py-2 text-center text-sm text-amber-900 dark:bg-amber-900/50 dark:text-amber-100" role="note">
-        <strong>Modo demonstração:</strong> dados de exemplo, nada é salvo. Preencha o arquivo <code>src/config.js</code> com os dados do Supabase para usar de verdade.</div>` : ''}
+        <strong>Modo demonstração:</strong> dados de exemplo, nada é salvo. Configure o Supabase no arquivo <code>.env</code> para usar de verdade.</div>` : ''}
       <header class="sticky top-0 z-20 border-b border-transparent bg-stone-100/90 backdrop-blur dark:bg-stone-950/90">
         <div class="mx-auto flex max-w-6xl flex-wrap items-center gap-x-2 gap-y-1 px-4 py-3 lg:px-8 lg:py-5">
           <h1 id="titulo-pagina" tabindex="-1" class="min-w-0 flex-1 truncate text-xl font-bold outline-none lg:text-2xl"></h1>
