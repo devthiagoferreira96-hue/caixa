@@ -1,5 +1,5 @@
 // Conexão com o Supabase.
-// Sem as variáveis do arquivo .env, o sistema roda em MODO DEMONSTRAÇÃO (dados de exemplo na memória).
+// Sem as variáveis do arquivo .env, o sistema roda em MODO DEMONSTRAÇÃO (dados de exemplo guardados neste navegador).
 import { createClient } from '@supabase/supabase-js';
 import { criarDemo } from './demo-db.js';
 
