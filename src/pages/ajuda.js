@@ -55,7 +55,8 @@ const TOPICOS = [
       <li>Cada aba é um mês. Antes de importar, confira o mês e o ano de cada aba e desmarque as que não quiser.</li>
       <li>Do caixa: valor negativo vira saída e positivo vira entrada. STATUS "OK" fica como pago.</li>
       <li>Dos cartões: cada linha é a parcela daquela fatura. Parcelas de uma mesma compra em meses diferentes viram uma compra só, e as parcelas futuras são criadas.</li>
-      <li>Contas, cartões, categorias e pessoas que ainda não existem são criados. Categorias novas vão para o grupo "Outros".</li>
+      <li>Se a planilha tiver uma <strong>categoria, conta ou cartão que não existe no sistema</strong>, a importação para e mostra cada um, com as linhas onde aparece. Para cada um, escolha: <strong>criar</strong> com o mesmo nome, <strong>usar um que já existe</strong> (o sistema sugere o nome parecido, ex.: "Alimentacao" → "Alimentação/Produtos Limpeza") ou <strong>não importar</strong> essas linhas. O botão Importar só libera depois de tudo resolvido.</li>
+      <li>Pessoas que ainda não existem são criadas sozinhas.</li>
       <li>Pode importar de novo sem medo: o que já estiver no sistema é pulado.</li>
       <li>Se algo sair errado, toque em <strong>Desfazer</strong> logo depois de importar.</li>
     </ul>
