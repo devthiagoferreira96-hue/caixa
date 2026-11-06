@@ -6,8 +6,9 @@ import { local } from '../lib/local-db.js';
 import { desfazendo } from '../components/lancamento.js';
 import { abrirOpcoesBackup, restaurarComConfirmacao } from '../components/backup.js';
 import { importarDoExcel } from '../components/importar.js';
-import { icone, toast, confirmar, mascaraDinheiro, dialogo, erroNoCampo, limparErros } from '../lib/ui.js';
+import { icone, toast, confirmar, mascaraDinheiro, dialogo, erroNoCampo, limparErros, semRepetir } from '../lib/ui.js';
 import { htmlAparencia, ligarAparencia } from '../components/aparencia.js';
+import { chave } from '../lib/importar-planilha.js';
 import { abrirTour } from '../components/tour.js';
 import { mostrarCodigoRecuperacao } from '../components/recuperacao.js';
 
@@ -60,6 +61,7 @@ const LISTAS = {
 };
 
 const abertas = new Set(['backup']);
+const NOME_ITEM = { contas: 'uma conta chamada', cartoes: 'um cartão chamado', categorias: 'uma categoria chamada', pessoas: 'uma pessoa chamada' };
 
 export default {
   titulo: 'Ajustes',
@@ -117,7 +119,7 @@ export default {
     el.querySelectorAll('[data-dinheiro]').forEach(mascaraDinheiro);
     el.querySelectorAll('details').forEach((d) => d.addEventListener('toggle', () => (d.open ? abertas.add(d.dataset.secao) : abertas.delete(d.dataset.secao))));
 
-    el.onsubmit = async (e) => {
+    el.onsubmit = semRepetir(async (e) => {
       e.preventDefault();
       const form = e.target;
       const botao = form.querySelector('button[type=submit], button:not([type])');
@@ -139,6 +141,9 @@ export default {
         const tabela = form.dataset.tabela;
         const item = lerLinha(form, LISTAS[tabela]);
         if (!item.nome) throw new Error('Preencha o nome.');
+        // não deixa ter dois itens com o mesmo nome (sem diferenciar maiúscula ou acento)
+        const igual = store[tabela].find((x) => x.id !== item.id && chave(x.nome) === chave(item.nome));
+        if (igual) throw new Error(`Já existe ${NOME_ITEM[tabela]} "${igual.nome}". Use outro nome.`);
         const salvo = await salvarItem(tabela, item);
         toast(item.id ? `${item.nome} atualizado` : `${item.nome} adicionado`, { acao: desfazendo(salvo.desfazer, ctx.atualizar) });
         ctx.atualizar();
@@ -147,7 +152,7 @@ export default {
       } finally {
         botao && (botao.disabled = false);
       }
-    };
+    });
 
     el.onclick = async (e) => {
       const excluir = e.target.closest('[data-excluir]');
@@ -275,7 +280,7 @@ function trocarSenha() {
   });
   const f = d.querySelector('form');
   f.atual.focus();
-  f.onsubmit = async (e) => {
+  f.onsubmit = semRepetir(async (e) => {
     e.preventDefault();
     limparErros(f);
     if (f.nova.value.length < 4) return erroNoCampo(f, 'nova', 'A senha precisa ter pelo menos 4 caracteres.');
@@ -292,7 +297,7 @@ function trocarSenha() {
       botao.disabled = false;
       botao.textContent = 'Trocar a senha';
     }
-  };
+  });
 }
 
 /** Gera um código de recuperação novo (por exemplo, se perdeu o antigo ou alguém o viu) */
@@ -308,7 +313,7 @@ function novoCodigo() {
   });
   const f = d.querySelector('form');
   f.senha.focus();
-  f.onsubmit = async (e) => {
+  f.onsubmit = semRepetir(async (e) => {
     e.preventDefault();
     limparErros(f);
     const botao = f.querySelector('[type=submit]');
@@ -323,7 +328,7 @@ function novoCodigo() {
       botao.disabled = false;
       botao.textContent = 'Gerar código novo';
     }
-  };
+  });
 }
 
 function apagarTudo() {
@@ -338,11 +343,11 @@ function apagarTudo() {
   });
   const f = d.querySelector('form');
   f.texto.focus();
-  f.onsubmit = async (e) => {
+  f.onsubmit = semRepetir(async (e) => {
     e.preventDefault();
     if (f.texto.value.trim().toUpperCase() !== 'APAGAR') return erroNoCampo(f, 'texto', 'Digite APAGAR para confirmar.');
     await local.apagarTudo();
     location.hash = '';
     location.reload();
-  };
+  });
 }

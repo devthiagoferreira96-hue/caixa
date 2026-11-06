@@ -51,7 +51,7 @@ export function toast(mensagem, { tipo = 'ok', acao } = {}) {
   el.setAttribute('role', tipo === 'erro' ? 'alert' : 'status');
   // nomes enormes sem espaço deixariam o aviso com várias linhas: encurta só para exibir
   let texto = String(mensagem).replace(/\S{31,}/g, (p) => `${p.slice(0, 28)}…`);
-  if (texto.length > 160) texto = `${texto.slice(0, 157)}…`;
+  if (texto.length > 280) texto = `${texto.slice(0, 277)}…`; // só corta textos enormes (ex.: nomes digitados)
   el.innerHTML = `${icone(tipo === 'erro' ? 'alerta' : 'check')}<span class="min-w-0 flex-1">${esc(texto)}</span>`;
   if (texto !== String(mensagem)) el.title = mensagem;
   if (acao) {
@@ -194,3 +194,23 @@ export const estadoVazio = (titulo, texto, acaoHTML = '') => `
     <p class="max-w-sm text-sm text-stone-600 dark:text-stone-400">${texto}</p>
     ${acaoHTML ? `<div class="mt-2">${acaoHTML}</div>` : ''}
   </div>`;
+
+/**
+ * Evita salvar duas vezes com clique duplo (ou Enter repetido): enquanto o envio anterior
+ * não termina, os próximos são ignorados.
+ */
+export function semRepetir(fn) {
+  let ocupado = false;
+  return async function (e) {
+    if (ocupado) {
+      e?.preventDefault?.();
+      return undefined;
+    }
+    ocupado = true;
+    try {
+      return await fn.call(this, e);
+    } finally {
+      ocupado = false;
+    }
+  };
+}

@@ -24,6 +24,34 @@ let gravando = Promise.resolve();
 
 const VERIFICADOR_V1 = 'caixa-ok'; // usado só para abrir dados da versão anterior
 
+// Várias abas/janelas abertas (ou o app instalado + o navegador): cada uma guarda os dados na
+// memória e grava tudo de uma vez. Sem combinar, a última a gravar apagaria o que a outra fez.
+// Por isso, quem grava avisa as outras, e elas recarregam os dados antes de continuar.
+const ESTA_ABA = crypto.randomUUID();
+const canal = typeof BroadcastChannel === 'function' ? new BroadcastChannel('caixa-familia') : null;
+if (canal) {
+  canal.onmessage = (e) => {
+    if (e.data?.de === ESTA_ABA) return;
+    if (e.data?.tipo === 'mudou') recarregar();
+    if (e.data?.tipo === 'apagado') location.reload();
+  };
+}
+
+/** Lê de novo os dados gravados (quando outra aba mudou alguma coisa) */
+async function recarregar() {
+  if (!chave) return;
+  await gravando;
+  if (timer) await gravarAgora(); // algo desta aba ainda não gravado vai primeiro
+  try {
+    const salvo = await armazenamento.ler('dados');
+    if (marcaDe(salvo) === marcaAtual) return; // nada mudou
+    await carregarDados();
+    window.dispatchEvent(new Event('caixa:dados-externos'));
+  } catch (e) {
+    console.error('Não foi possível recarregar os dados', e);
+  }
+}
+
 function agendarGravacao() {
   clearTimeout(timer);
   timer = setTimeout(gravarAgora, 150);
@@ -32,11 +60,20 @@ function agendarGravacao() {
 /** Cifra e grava tudo no aparelho (as gravações acontecem uma de cada vez, na ordem) */
 function gravarAgora() {
   clearTimeout(timer);
+  timer = null;
   if (!chave) return gravando;
   const instantaneo = { tabelas: banco.tabelas, ultimoBackup: local.ultimoBackup };
   gravando = gravando
-    .then(async () => armazenamento.gravar('dados', await cifrar(chave, instantaneo)))
-    .catch((e) => console.error('Não foi possível salvar no aparelho', e));
+    .then(async () => {
+      const cifrado = await cifrar(chave, instantaneo);
+      await armazenamento.gravar('dados', cifrado);
+      marcaAtual = marcaDe(cifrado);
+      canal?.postMessage({ tipo: 'mudou', de: ESTA_ABA });
+    })
+    .catch((e) => {
+      console.error('Não foi possível salvar no aparelho', e);
+      window.dispatchEvent(new CustomEvent('caixa:erro-gravar', { detail: e }));
+    });
   return gravando;
 }
 
@@ -55,8 +92,13 @@ async function abrirFechadura(f, segredo) {
   }
 }
 
+// marca da última versão lida/gravada (o iv da cifra muda a cada gravação)
+let marcaAtual = null;
+const marcaDe = (salvo) => (salvo?.iv ? Array.from(salvo.iv).join(',') : null);
+
 async function carregarDados() {
   const salvo = await armazenamento.ler('dados');
+  marcaAtual = marcaDe(salvo);
   const dados = salvo ? await decifrar(chave, salvo) : {};
   banco.tabelas = { ...tabelasVazias(), ...(dados.tabelas || {}) };
   local.ultimoBackup = dados.ultimoBackup || null;
@@ -179,7 +221,10 @@ export const local = {
     this.bloquear();
     await armazenamento.apagar('dados');
     await armazenamento.apagar('conta');
+    canal?.postMessage({ tipo: 'apagado', de: ESTA_ABA });
   },
+
+  recarregar,
 
   gravarAgora,
   TABELAS,

@@ -12,12 +12,12 @@ async function abrirZip(bytes, quer) {
   for (let i = bytes.length - 22; i >= Math.max(0, bytes.length - 65557); i--) {
     if (v.getUint32(i, true) === 0x06054b50) { fim = i; break; }
   }
-  if (fim < 0) throw new Error('NAO_ZIP');
+  if (fim < 0) throw new Error('DANIFICADO'); // começa como .zip, mas o fim do arquivo sumiu
   const total = v.getUint16(fim + 10, true);
   let p = v.getUint32(fim + 16, true);
   const saida = new Map();
   for (let n = 0; n < total; n++) {
-    if (v.getUint32(p, true) !== 0x02014b50) throw new Error('NAO_ZIP');
+    if (v.getUint32(p, true) !== 0x02014b50) throw new Error('DANIFICADO');
     const metodo = v.getUint16(p + 10, true);
     const tamanho = v.getUint32(p + 20, true);
     const lenNome = v.getUint16(p + 28, true);
@@ -30,7 +30,9 @@ async function abrirZip(bytes, quer) {
     const inicio = local + 30 + v.getUint16(local + 26, true) + v.getUint16(local + 28, true);
     const dados = bytes.subarray(inicio, inicio + tamanho);
     if (metodo === 0) saida.set(nome, dados);
-    else if (metodo === 8) saida.set(nome, await descompactar(dados));
+    else if (metodo === 8) {
+      try { saida.set(nome, await descompactar(dados)); } catch { throw new Error('DANIFICADO'); }
+    }
     else throw new Error('FORMATO');
   }
   return saida;
@@ -59,6 +61,8 @@ function posicao(ref) {
  */
 export async function lerXlsx(arquivo) {
   const bytes = new Uint8Array(await arquivo.arrayBuffer());
+  if (bytes.length < 4) throw new Error('NAO_ZIP');
+  // formato OLE: Excel antigo (.xls) OU .xlsx protegido por senha (o Excel guarda assim quando tem senha)
   if (bytes[0] === 0xd0 && bytes[1] === 0xcf) throw new Error('XLS_ANTIGO');
   if (bytes[0] !== 0x50 || bytes[1] !== 0x4b) throw new Error('NAO_ZIP');
 
