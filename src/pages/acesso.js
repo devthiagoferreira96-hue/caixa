@@ -4,7 +4,7 @@ import { dadosIniciais } from '../lib/exemplo.js';
 import { escolherBackup } from '../components/backup.js';
 import { mostrarCodigoRecuperacao } from '../components/recuperacao.js';
 import { codigoValido } from '../lib/cofre.js';
-import { icone, erroNoCampo, limparErros, dialogo, toast } from '../lib/ui.js';
+import { icone, erroNoCampo, limparErros, dialogo, toast, semRepetir } from '../lib/ui.js';
 import { esc } from '../lib/format.js';
 
 const app = () => document.getElementById('app');
@@ -73,7 +73,7 @@ export function telaPrimeiroAcesso(aoEntrar, restaurando = null) {
     if (dados) telaPrimeiroAcesso(aoEntrar, dados);
   });
 
-  form.onsubmit = async (e) => {
+  form.onsubmit = semRepetir(async (e) => {
     e.preventDefault();
     limparErros(form);
     const usuario = form.usuario.value.trim();
@@ -92,7 +92,7 @@ export function telaPrimeiroAcesso(aoEntrar, restaurando = null) {
     await mostrarCodigoRecuperacao(codigo, { motivo: 'criado' });
     if (restaurando) toast('Backup restaurado');
     await aoEntrar();
-  };
+  });
 }
 
 // ---------- Ao abrir o sistema: pedir a senha
@@ -119,7 +119,7 @@ export function telaSenha(usuario, aoEntrar) {
   form.senha.focus();
   app().querySelector('[data-esqueci]').onclick = () => esqueciSenha(aoEntrar);
 
-  form.onsubmit = async (e) => {
+  form.onsubmit = semRepetir(async (e) => {
     e.preventDefault();
     const botao = form.querySelector('[type=submit]');
     if (!form.senha.value) { erro.textContent = 'Digite sua senha.'; erro.classList.remove('hidden'); return form.senha.focus(); }
@@ -138,7 +138,7 @@ export function telaSenha(usuario, aoEntrar) {
     form.senha.value = '';
     form.senha.setAttribute('aria-invalid', 'true');
     setTimeout(() => { botao.disabled = false; botao.textContent = 'Entrar'; form.senha.focus(); }, espera * 1000);
-  };
+  });
 }
 
 function esqueciSenha(aoEntrar) {
@@ -161,7 +161,7 @@ function esqueciSenha(aoEntrar) {
   const f = d.querySelector('form');
   ligarMostrarSenha(f);
   f.codigo.focus();
-  f.onsubmit = async (e) => {
+  f.onsubmit = semRepetir(async (e) => {
     e.preventDefault();
     limparErros(f);
     let ok = true;
@@ -183,7 +183,7 @@ function esqueciSenha(aoEntrar) {
     const espera = erros >= 5 ? 30 : 0;
     erroNoCampo(f, 'codigo', espera ? `Código incorreto. Aguarde ${espera} segundos para tentar de novo.` : 'Código incorreto. Confira as letras e números.');
     setTimeout(() => { botao.disabled = false; botao.textContent = 'Criar senha nova'; }, espera * 1000);
-  };
+  });
   f.querySelector('[data-sem-codigo]').onclick = () => { d.close(); semCodigo(aoEntrar); };
 }
 
@@ -218,12 +218,12 @@ function semCodigo(aoEntrar) {
     });
     const f = c.querySelector('form');
     f.texto.focus();
-    f.onsubmit = async (e) => {
+    f.onsubmit = semRepetir(async (e) => {
       e.preventDefault();
       if (f.texto.value.trim().toUpperCase() !== 'APAGAR') return erroNoCampo(f, 'texto', 'Digite APAGAR para confirmar.');
       await local.apagarTudo();
       c.close();
       telaPrimeiroAcesso(aoEntrar);
-    };
+    });
   };
 }

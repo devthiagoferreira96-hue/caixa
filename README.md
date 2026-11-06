@@ -67,6 +67,15 @@ Depois de instalado, o sistema abre e funciona sem internet. Quando você public
 
 *Ajustes > Aparência*: temas prontos (Verde Cofre, Azul Navy Contábil, Neutros com toque de cobre) ou 5 cores próprias (principal, gráficos, fundo, quadros, texto). `src/lib/temas.js` gera os tons da cor principal e os cinzas a partir dessas cores (OKLCH) e ajusta o que for preciso para manter contraste WCAG AA. As cores entram como variáveis CSS (`--color-brand-*`, `--color-stone-*`, `--color-fundo`, `--color-cartao`, `--color-texto`, `--color-destaque`).
 
+## Proteções contra erro
+
+- **Clique duplo** em Salvar não grava duas vezes (`semRepetir` em `lib/ui.js`).
+- **Mais de uma aba/janela aberta** (ou o app instalado + o navegador): quem grava avisa as outras (`BroadcastChannel`), que recarregam os dados antes de continuar; nada se perde.
+- **Backup editado ou danificado**: cada linha é conferida ao restaurar (`conferirTabelas` em `lib/api.js`); o que dá é corrigido, o resto fica de fora, e a pessoa é avisada antes de confirmar.
+- **Nomes repetidos** em contas, cartões, categorias e pessoas são recusados (sem diferenciar maiúscula ou acento).
+- **Aparelho sem espaço**: se não der para gravar, aparece um aviso pedindo backup.
+- **Arquivos de fora**: PDF, CSV, Word, planilha com senha, .xls antigo, arquivo cortado ou vazio são recusados com uma mensagem que diz o que fazer.
+
 ## Backup
 
 Como os dados ficam só no aparelho, **perder o aparelho é perder os dados**, a não ser que exista um backup.

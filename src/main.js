@@ -5,7 +5,8 @@ import { carregarCadastros } from './lib/api.js';
 import { local } from './lib/local-db.js';
 import { aplicarPreferencias } from './lib/preferencias.js';
 import { telaPrimeiroAcesso, telaSenha } from './pages/acesso.js';
-import { iniciarApp } from './router.js';
+import { iniciarApp, redesenharSeSeguro } from './router.js';
+import { toast } from './lib/ui.js';
 
 aplicarPreferencias();
 
@@ -42,5 +43,20 @@ document.addEventListener('visibilitychange', () => {
   else if (saiuEm && store.usuario && Date.now() - saiuEm > BLOQUEAR_APOS_MS) bloquear();
 });
 window.addEventListener('caixa:bloquear', bloquear);
+
+// Outra aba/janela mudou os dados: atualiza esta também
+window.addEventListener('caixa:dados-externos', async () => {
+  if (!store.usuario) return;
+  await carregarCadastros();
+  redesenharSeSeguro();
+});
+// Ao voltar para esta aba, confere se algo mudou (para navegadores sem aviso entre abas)
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible' && store.usuario) local.recarregar();
+});
+// Se o aparelho não deixar gravar (sem espaço, modo privado...), avisa em vez de perder em silêncio
+window.addEventListener('caixa:erro-gravar', () => {
+  toast('Não foi possível salvar neste aparelho. Verifique se há espaço livre e faça um backup agora.', { tipo: 'erro' });
+});
 
 iniciar();

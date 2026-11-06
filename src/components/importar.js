@@ -8,7 +8,8 @@ import { store } from '../lib/store.js';
 import { desfazendo } from './lancamento.js';
 
 const ERROS = {
-  XLS_ANTIGO: 'Esse arquivo é do Excel antigo (.xls). Abra no Excel e use "Salvar como" > "Pasta de Trabalho do Excel (.xlsx)".',
+  XLS_ANTIGO: 'Essa planilha tem senha ou é do Excel antigo (.xls). No Excel, tire a senha e use "Salvar como" > Pasta de Trabalho do Excel (.xlsx).',
+  DANIFICADO: 'A planilha parece danificada ou incompleta. Abra no Excel, salve de novo e tente outra vez.',
   NAO_ZIP: 'Esse arquivo não é uma planilha do Excel (.xlsx).',
   NAO_XLSX: 'Esse arquivo não é uma planilha do Excel (.xlsx).',
   FORMATO: 'Não consegui ler essa planilha. Abra no Excel e salve de novo como .xlsx.',

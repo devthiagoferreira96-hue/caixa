@@ -42,6 +42,21 @@ function navegar(primeiraVez) {
   window.scrollTo(0, 0);
 }
 
+/**
+ * Os dados mudaram em outra aba: redesenha a tela, a menos que a pessoa esteja no meio de algo
+ * (preenchendo um lançamento, com uma janela aberta ou digitando). Nesse caso a tela nova
+ * aparece na próxima navegação.
+ */
+export function redesenharSeSeguro() {
+  if (!telaAtual) return false;
+  const conteudo = document.getElementById('conteudo');
+  const digitando = conteudo?.contains(document.activeElement) && document.activeElement.matches('input, textarea, select');
+  if (telaAtual === TELAS.novo || document.querySelector('dialog[open]') || digitando) return false;
+  redesenharMes();
+  desenhar(true);
+  return true;
+}
+
 /** Desenha a tela atual. `silencioso` = sem o "carregando" (usado depois de uma ação) */
 async function desenhar(silencioso) {
   const el = document.getElementById('conteudo');

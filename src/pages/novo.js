@@ -5,7 +5,7 @@ import { criarLancamentos, excluirLancamentos, criarCompra, excluirCompra, pesso
 import { nomeCategoria } from '../lib/store.js';
 import { desfazendo } from '../components/lancamento.js';
 import { faturaDe, vencimentoFatura, dividirParcelas } from '../lib/faturas.js';
-import { icone, toast, mascaraDinheiro, erroNoCampo, limparErros, dialogo } from '../lib/ui.js';
+import { icone, toast, mascaraDinheiro, erroNoCampo, limparErros, dialogo, semRepetir } from '../lib/ui.js';
 import { campoValor, campoDescricao, campoCategoria, camposCaixa, lerCamposCaixa, atualizarCategorias, erroDeTipo } from '../components/form-lancamento.js';
 
 let ultimoModo = 'saida';
@@ -118,7 +118,7 @@ export default {
     form.addEventListener('input', (e) => e.target.name === 'valor' && atualizarPrevia());
     trocarModo();
 
-    form.onsubmit = async (e) => {
+    form.onsubmit = semRepetir(async (e) => {
       e.preventDefault();
       limparErros(form);
       const botao = form.querySelector('[type=submit]');
@@ -146,7 +146,7 @@ export default {
       } finally {
         botao.disabled = false;
       }
-    };
+    });
   },
 };
 

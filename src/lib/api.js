@@ -126,7 +126,8 @@ export async function excluirItem(tabela, id) {
 export async function pessoaPorNome(nome) {
   nome = nome.trim();
   if (!nome) return null;
-  const existente = store.pessoas.find((p) => p.nome.toLowerCase() === nome.toLowerCase());
+  const igual = (a) => a.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/\s+/g, ' ');
+  const existente = store.pessoas.find((p) => igual(p.nome) === igual(nome));
   return existente ? existente.id : (await salvarItem('pessoas', { nome, tipo: 'Outro' })).id;
 }
 
@@ -251,13 +252,103 @@ export function conteudoBackup() {
 export function lerBackup(textoDoArquivo) {
   let dados;
   try { dados = JSON.parse(textoDoArquivo); } catch { throw new Error('Esse arquivo não é um backup do Caixa da Família.'); }
-  if (dados?.app !== 'caixa-familia' || typeof dados.tabelas !== 'object') {
+  if (dados?.app !== 'caixa-familia' || !dados.tabelas || typeof dados.tabelas !== 'object' || Array.isArray(dados.tabelas)) {
     throw new Error('Esse arquivo não é um backup do Caixa da Família.');
   }
   for (const t of local.TABELAS) {
     if (dados.tabelas[t] !== undefined && !Array.isArray(dados.tabelas[t])) throw new Error('O arquivo de backup está danificado.');
   }
-  return dados;
+  const { tabelas, corrigidos, ignorados } = conferirTabelas(dados.tabelas);
+  const data = typeof dados.exportado_em === 'string' && !Number.isNaN(Date.parse(dados.exportado_em)) ? dados.exportado_em : null;
+  return { ...dados, exportado_em: data, usuario: typeof dados.usuario === 'string' ? dados.usuario.slice(0, 40) : '', tabelas, corrigidos, ignorados };
+}
+
+// ---------- Conferência de um backup (arquivo pode ter sido editado à mão ou estar danificado)
+const ISO = /^\d{4}-\d{2}-\d{2}$/;
+const dataValida = (v) => typeof v === 'string' && ISO.test(v) && !Number.isNaN(Date.parse(`${v}T12:00:00`));
+const numero = (v) => {
+  if (typeof v === 'number') return Number.isFinite(v) ? Math.round(v * 100) / 100 : null;
+  if (typeof v !== 'string') return null;
+  const t = v.replace(/[^\d,.-]/g, '');
+  const n = Number(t.includes(',') ? t.replace(/\./g, '').replace(',', '.') : t);
+  return Number.isFinite(n) ? Math.round(n * 100) / 100 : null;
+};
+const texto = (v, max = 120) => (v == null ? '' : String(v)).slice(0, max);
+
+/**
+ * Confere cada linha do backup: corrige o que dá (número em texto, nome vazio, id faltando)
+ * e deixa de fora o que não dá para usar (lançamento sem valor ou sem data, repetidos).
+ */
+export function conferirTabelas(entrada) {
+  let corrigidos = 0, ignorados = 0;
+  const saida = {};
+  const ids = new Set();
+  const comId = (linha) => {
+    if (!linha || typeof linha !== 'object' || Array.isArray(linha)) { ignorados++; return null; }
+    let id = typeof linha.id === 'string' && linha.id ? linha.id : null;
+    if (!id) { id = crypto.randomUUID(); corrigidos++; }
+    if (ids.has(id)) { ignorados++; return null; } // repetido
+    ids.add(id);
+    return { ...linha, id };
+  };
+  const nome = (l, padrao) => {
+    if (typeof l.nome === 'string' && l.nome.trim()) return l.nome.trim().slice(0, 60);
+    corrigidos++;
+    return padrao;
+  };
+  for (const t of local.TABELAS) saida[t] = [];
+  (entrada.contas || []).forEach((l0) => {
+    const l = comId(l0); if (!l) return;
+    const saldo = numero(l.saldo_inicial ?? 0);
+    if (l.saldo_inicial !== undefined && saldo !== l.saldo_inicial) corrigidos++;
+    saida.contas.push({ ...l, nome: nome(l, 'Conta sem nome'), saldo_inicial: saldo ?? 0, ativa: l.ativa !== false });
+  });
+  (entrada.cartoes || []).forEach((l0) => {
+    const l = comId(l0); if (!l) return;
+    const dia = (v, p) => (Number.isInteger(+v) && +v >= 1 && +v <= 31 ? +v : (corrigidos++, p));
+    saida.cartoes.push({ ...l, nome: nome(l, 'Cartão sem nome'), dia_fechamento: dia(l.dia_fechamento, 1), dia_vencimento: dia(l.dia_vencimento, 10), ativo: l.ativo !== false });
+  });
+  (entrada.categorias || []).forEach((l0) => {
+    const l = comId(l0); if (!l) return;
+    const tipo = ['saida', 'entrada', 'ambos'].includes(l.tipo) ? l.tipo : undefined;
+    saida.categorias.push({ ...l, nome: nome(l, 'Categoria sem nome'), grupo: texto(l.grupo || 'Outros', 40), ...(tipo ? { tipo } : { tipo: undefined }) });
+  });
+  (entrada.pessoas || []).forEach((l0) => {
+    const l = comId(l0); if (!l) return;
+    saida.pessoas.push({ ...l, nome: nome(l, 'Pessoa sem nome') });
+  });
+  const existe = (lista, id) => id == null || saida[lista].some((x) => x.id === id);
+  (entrada.lancamentos || []).forEach((l0) => {
+    const l = comId(l0); if (!l) return;
+    let valor = numero(l.valor);
+    if (valor !== null && valor < 0) { valor = -valor; corrigidos++; }
+    if (!valor || valor > 99_999_999.99 || !['entrada', 'saida'].includes(l.tipo) || !dataValida(l.vencimento)) { ignorados++; return; }
+    if (valor !== l.valor) corrigidos++;
+    const ref = (lista, id) => (existe(lista, id) ? id : (corrigidos++, null));
+    saida.lancamentos.push({
+      ...l, valor, descricao: texto(l.descricao) || 'Sem descrição', pago: l.pago === true,
+      data_pagamento: dataValida(l.data_pagamento) ? l.data_pagamento : null,
+      conta_id: ref('contas', l.conta_id), categoria_id: ref('categorias', l.categoria_id), pessoa_id: ref('pessoas', l.pessoa_id),
+      fatura_cartao_id: ref('cartoes', l.fatura_cartao_id) ?? null, fatura_mes: dataValida(l.fatura_mes) ? l.fatura_mes : null,
+    });
+  });
+  (entrada.compras_cartao || []).forEach((l0) => {
+    const l = comId(l0); if (!l) return;
+    const total = numero(l.valor_total);
+    if (!total || total < 0 || !existe('cartoes', l.cartao_id) || !l.cartao_id || !dataValida(l.data_compra)) { ignorados++; return; }
+    const n = Number.isInteger(+l.qtd_parcelas) && +l.qtd_parcelas >= 1 ? +l.qtd_parcelas : 1;
+    saida.compras_cartao.push({ ...l, valor_total: total, qtd_parcelas: n, descricao: texto(l.descricao) || 'Compra', categoria_id: existe('categorias', l.categoria_id) ? l.categoria_id : (corrigidos++, null) });
+  });
+  const compras = new Set(saida.compras_cartao.map((c) => c.id));
+  (entrada.parcelas || []).forEach((l0) => {
+    const l = comId(l0); if (!l) return;
+    const valor = numero(l.valor);
+    if (!compras.has(l.compra_id) || valor === null || valor < 0 || !dataValida(l.fatura_mes)) { ignorados++; return; }
+    saida.parcelas.push({ ...l, valor, numero: Number.isInteger(+l.numero) && +l.numero >= 1 ? +l.numero : 1 });
+  });
+  // tipo vazio de categoria: o sistema deduz pelo uso ao abrir (como nas versões antigas)
+  saida.categorias.forEach((c) => { if (c.tipo === undefined) delete c.tipo; });
+  return { tabelas: saida, corrigidos, ignorados };
 }
 
 /** Restaura um backup. Retorna `desfazer()`, que volta os dados de antes. */

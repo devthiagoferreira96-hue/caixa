@@ -4,7 +4,7 @@ import { store, cartoesAtivos, contasAtivas, nomeCategoria } from '../lib/store.
 import { parcelasEntre, pagamentosDeFatura, excluirCompra, criarLancamentos, excluirLancamentos, atualizarLancamento } from '../lib/api.js';
 import { vencimentoFatura } from '../lib/faturas.js';
 import { totalDoCartao } from '../lib/calculos.js';
-import { icone, toast, dialogo, confirmar, estadoVazio } from '../lib/ui.js';
+import { icone, toast, dialogo, confirmar, estadoVazio, semRepetir } from '../lib/ui.js';
 import { opcoesConta } from '../components/form-lancamento.js';
 import { desfazendo } from '../components/lancamento.js';
 
@@ -145,7 +145,7 @@ function pagarFatura(cartao, total, mes, ctx, agendado) {
       </form>`,
   });
   const form = d.querySelector('form');
-  form.onsubmit = async (e) => {
+  form.onsubmit = semRepetir(async (e) => {
     e.preventDefault();
     form.querySelector('[type=submit]').disabled = true;
     try {
@@ -172,5 +172,5 @@ function pagarFatura(cartao, total, mes, ctx, agendado) {
       toast(err.message, { tipo: 'erro' });
       form.querySelector('[type=submit]').disabled = false;
     }
-  };
+  });
 }

@@ -1,7 +1,7 @@
 // Uma linha de lançamento (usada no Início e no Extrato) + edição/exclusão
 import { esc, brl, diaMes, diasAte, quandoVence, hojeISO } from '../lib/format.js';
 import { buscar } from '../lib/store.js';
-import { icone, toast, dialogo, confirmar, mascaraDinheiro, limparErros } from '../lib/ui.js';
+import { icone, toast, dialogo, confirmar, mascaraDinheiro, limparErros, semRepetir } from '../lib/ui.js';
 import { atualizarLancamento, excluirLancamentos, lancamentosDoGrupo, pessoaPorNome } from '../lib/api.js';
 import { campoValor, campoDescricao, campoCategoria, camposCaixa, lerCamposCaixa, atualizarCategorias } from './form-lancamento.js';
 
@@ -172,7 +172,7 @@ export function abrirEdicao(l, atualizar) {
   mascaraDinheiro(form.valor);
   form.addEventListener('change', (e) => e.target.name === 'tipo' && atualizarCategorias(form, form.tipo.value));
   d.querySelector('[data-excluir]').onclick = () => excluir(l, atualizar, d);
-  form.onsubmit = async (e) => {
+  form.onsubmit = semRepetir(async (e) => {
     e.preventDefault();
     limparErros(form);
     const dados = lerCamposCaixa(form, form.tipo.value);
@@ -193,5 +193,5 @@ export function abrirEdicao(l, atualizar) {
       toast(err.message, { tipo: 'erro' });
       botao.disabled = false;
     }
-  };
+  });
 }

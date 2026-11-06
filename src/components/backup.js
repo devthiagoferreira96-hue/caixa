@@ -171,9 +171,13 @@ export function escolherBackup() {
 export async function restaurarComConfirmacao(aoTerminar) {
   const dados = await escolherBackup();
   if (!dados) return;
-  const qtd = dados.tabelas.lancamentos?.length || 0;
+  const qtd = dados.tabelas.lancamentos.length;
+  const problemas = [
+    dados.corrigidos ? `${dados.corrigidos} ${dados.corrigidos === 1 ? 'informação foi corrigida' : 'informações foram corrigidas'}` : '',
+    dados.ignorados ? `${dados.ignorados} ${dados.ignorados === 1 ? 'item danificado ficou de fora' : 'itens danificados ficaram de fora'}` : '',
+  ].filter(Boolean).join(' e ');
   const ok = await confirmar(
-    `O backup de ${dataCompleta(dados.exportado_em.slice(0, 10))} tem ${qtd} lançamentos. Ele vai SUBSTITUIR todos os dados que estão no sistema agora.`,
+    `O backup${dados.exportado_em ? ` de ${dataCompleta(dados.exportado_em.slice(0, 10))}` : ''} tem ${qtd} lançamentos. Ele vai SUBSTITUIR todos os dados que estão no sistema agora.${problemas ? ` Atenção: o arquivo tinha problemas (${problemas}).` : ''}`,
     { titulo: 'Restaurar este backup?', botao: 'Restaurar', perigo: true },
   );
   if (!ok) return;
