@@ -133,7 +133,7 @@ export default {
 function quadrosResultado(a, { entrou, saiu, lucro = false }) {
   const rotuloResultado = lucro ? (a.resultado < 0 ? 'Prejuízo' : 'Lucro') : 'Resultado';
   return `<dl class="grid gap-2 sm:grid-cols-3">
-    ${[[entrou, brl(a.entradas), 'bg-brand-50 dark:bg-brand-950', 'valor-entrada'],
+    ${[[entrou, brl(a.entradas), 'bg-emerald-50 dark:bg-emerald-950/40', 'valor-entrada'],
        [saiu, brl(a.gastos), 'bg-red-50 dark:bg-red-950/40', 'valor-saida'],
        [rotuloResultado, brl(lucro ? Math.abs(a.resultado) : a.resultado), 'bg-stone-100 dark:bg-stone-800', a.resultado < 0 ? 'valor-saida' : a.resultado > 0 && lucro ? 'valor-entrada' : '']]
       .map(([rotulo, valor, fundo, cor]) => `<div class="flex flex-wrap items-baseline justify-between gap-x-3 rounded-xl p-3 sm:block ${fundo}">

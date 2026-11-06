@@ -7,7 +7,7 @@ import { desfazendo } from '../components/lancamento.js';
 import { abrirOpcoesBackup, restaurarComConfirmacao } from '../components/backup.js';
 import { importarDoExcel } from '../components/importar.js';
 import { icone, toast, confirmar, mascaraDinheiro, dialogo, erroNoCampo, limparErros } from '../lib/ui.js';
-import { lerPreferencias, salvarPreferencias } from '../lib/preferencias.js';
+import { htmlAparencia, ligarAparencia } from '../components/aparencia.js';
 import { abrirTour } from '../components/tour.js';
 import { mostrarCodigoRecuperacao } from '../components/recuperacao.js';
 
@@ -68,11 +68,10 @@ export default {
     <p>Toque no nome de cada seção para abrir.</p>
     <p><strong>Backup e exportar</strong>: escolha entre o <strong>backup completo</strong> (guarda tudo e é o único que restaura os dados), uma <strong>planilha do Excel</strong> ou um <strong>relatório em PDF</strong> do mês, do ano ou de tudo.</p>
     <p><strong>Contas, Cartões, Categorias e Pessoas</strong>: mude qualquer campo e toque em <strong>Salvar</strong> na mesma linha. Para incluir um item novo, use a última linha de cada lista.</p>
-    <p><strong>Aparência</strong>: modo escuro e letras maiores.</p>
+    <p><strong>Aparência</strong>: modo claro ou escuro, temas de cores prontos, suas próprias cores e letras maiores.</p>
     <p><strong>Usuário e senha</strong>: troque seu nome ou sua senha, gere um novo código de recuperação ou apague tudo deste aparelho.</p>`,
 
   async render(el, ctx) {
-    const pref = lerPreferencias();
     el.innerHTML = `
     <div class="mx-auto grid max-w-3xl gap-3 animate-entrar">
       ${secao('backup', 'Backup, importar e exportar', 'baixar', `
@@ -95,16 +94,7 @@ export default {
         <ul>${linha(tabela, def, def.novo)}</ul>
         ${def.dicaExcluir ? `<p class="dica mt-3">${def.dicaExcluir}</p>` : ''}`)).join('')}
 
-      ${secao('aparencia', 'Aparência', 'paleta', `
-        <fieldset><legend class="rotulo">Tema</legend>
-          <div class="grid grid-cols-3 gap-2">
-            ${[['auto', 'Automático'], ['claro', 'Claro'], ['escuro', 'Escuro']].map(([v, t]) => `
-              <label class="opcao-modo"><input type="radio" name="tema" value="${v}" class="sr-only" ${pref.tema === v ? 'checked' : ''}>${t}</label>`).join('')}
-          </div></fieldset>
-        <label class="mt-4 flex cursor-pointer items-center justify-between gap-3 rounded-xl border border-stone-200 p-3 dark:border-stone-700">
-          <span><span class="block font-semibold">Letras maiores</span><span class="text-sm text-stone-600 dark:text-stone-400">Aumenta o tamanho de todo o texto.</span></span>
-          <input type="checkbox" data-texto-grande class="size-6 accent-brand-600" ${pref.textoGrande ? 'checked' : ''}>
-        </label>`)}
+      ${secao('aparencia', 'Aparência', 'paleta', htmlAparencia())}
 
       ${secao('conta', 'Usuário e senha', 'cadeado', `
         <form data-meu-nome class="flex flex-col gap-2 sm:flex-row sm:items-end" novalidate>
@@ -188,10 +178,7 @@ export default {
       }
     };
 
-    el.onchange = (e) => {
-      if (e.target.name === 'tema') salvarPreferencias({ tema: e.target.value });
-      if (e.target.matches('[data-texto-grande]')) salvarPreferencias({ textoGrande: e.target.checked });
-    };
+    ligarAparencia(el, ctx.atualizar);
   },
 };
 
