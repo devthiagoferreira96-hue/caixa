@@ -2,6 +2,7 @@
 import { esc, nomeMes, inicioMes } from '../lib/format.js';
 import { store } from '../lib/store.js';
 import { icone } from '../lib/ui.js';
+import { iconeAnimado, ligarIconesAnimados } from './icones-animados.js';
 
 const MENU = [
   ['inicio', 'Início', 'inicio'],
@@ -21,11 +22,11 @@ export function montarLayout() {
         <span class="flex size-10 items-center justify-center rounded-xl bg-brand-600 text-sm font-bold text-white" aria-hidden="true">R$</span>
         <div class="min-w-0"><p class="font-bold">Caixa da Família</p><p class="truncate text-sm text-stone-600 dark:text-stone-400" data-saudacao>Olá, ${esc(store.usuario)}</p></div>
       </div>
-      <a href="#novo" data-nav="novo" class="btn-primario mb-4 w-full">${icone('mais')} Novo lançamento</a>
+      <a href="#novo" data-nav="novo" data-anima class="btn-primario mb-4 w-full">${iconeAnimado('mais')} Novo lançamento</a>
       <nav aria-label="Menu principal"><ul class="grid gap-1">
-        ${MENU.map(([rota, nome, ic]) => `<li><a href="#${rota}" data-nav="${rota}" class="nav-link">${icone(ic)}${nome}</a></li>`).join('')}
+        ${MENU.map(([rota, nome, ic]) => `<li><a href="#${rota}" data-nav="${rota}" data-anima class="nav-link">${iconeAnimado(ic)}<span>${nome}</span></a></li>`).join('')}
       </ul></nav>
-      <button type="button" data-bloquear class="nav-link mt-auto w-full cursor-pointer">${icone('cadeado')}Bloquear</button>
+      <button type="button" data-bloquear data-anima class="nav-link mt-auto w-full cursor-pointer">${iconeAnimado('cadeado')}<span>Bloquear</span></button>
     </aside>
 
     <div class="lg:pl-64">
@@ -33,9 +34,9 @@ export function montarLayout() {
         <div class="mx-auto flex max-w-6xl flex-wrap items-center gap-x-2 gap-y-1 px-4 py-3 lg:px-8 lg:py-5">
           <h1 id="titulo-pagina" tabindex="-1" class="min-w-0 flex-1 truncate text-xl font-bold outline-none lg:text-2xl"></h1>
           <div id="seletor-mes" class="order-last w-full sm:order-none sm:w-auto"></div>
-          <button type="button" id="btn-ajuda" class="btn-icone" aria-label="Ajuda desta tela" title="Ajuda desta tela">${icone('ajuda')}</button>
-          <a href="#ajustes" class="btn-icone lg:hidden" aria-label="Ajustes" title="Ajustes">${icone('ajustes')}</a>
-          <button type="button" data-bloquear class="btn-icone lg:hidden" aria-label="Bloquear o sistema" title="Bloquear">${icone('cadeado')}</button>
+          <button type="button" id="btn-ajuda" data-anima class="btn-icone" aria-label="Ajuda desta tela" title="Ajuda desta tela">${iconeAnimado('ajuda')}</button>
+          <a href="#ajustes" data-anima class="btn-icone lg:hidden" aria-label="Ajustes" title="Ajustes">${iconeAnimado('ajustes')}</a>
+          <button type="button" data-bloquear data-anima class="btn-icone lg:hidden" aria-label="Bloquear o sistema" title="Bloquear">${iconeAnimado('cadeado')}</button>
         </div>
       </header>
       <main id="conteudo" tabindex="-1" class="mx-auto max-w-6xl px-4 pt-1 pb-32 outline-none lg:px-8 lg:pb-12"></main>
@@ -45,12 +46,14 @@ export function montarLayout() {
       <ul class="mx-auto grid max-w-lg grid-cols-5 items-end">
         ${navBaixo('inicio', 'Início', 'inicio')}
         ${navBaixo('extrato', 'Extrato', 'extrato')}
-        <li class="flex justify-center"><a href="#novo" data-nav="novo" class="-mt-6 flex size-16 items-center justify-center rounded-full bg-brand-600 text-white shadow-lg ring-4 ring-white transition active:scale-95 dark:ring-stone-900" aria-label="Novo lançamento">${icone('mais', 'size-8')}</a></li>
+        <li class="flex justify-center"><a href="#novo" data-nav="novo" data-anima class="-mt-6 flex size-16 items-center justify-center rounded-full bg-brand-600 text-white shadow-lg ring-4 ring-white transition active:scale-95 dark:ring-stone-900" aria-label="Novo lançamento">${iconeAnimado('mais', 'size-8')}</a></li>
         ${navBaixo('cartoes', 'Cartões', 'cartao')}
         ${navBaixo('relatorio', 'Relatório', 'relatorio')}
       </ul>
     </nav>
     <div id="toasts" class="pointer-events-none fixed inset-x-0 bottom-24 z-[60] flex flex-col items-center gap-2 px-4 lg:bottom-6 lg:pl-64"></div>`;
+
+  ligarIconesAnimados();
 
   // Bloquear: volta para a tela de senha
   document.querySelectorAll('[data-bloquear]').forEach((b) => (b.onclick = () => window.dispatchEvent(new Event('caixa:bloquear'))));
@@ -63,7 +66,7 @@ export function montarLayout() {
 }
 
 const navBaixo = (rota, nome, ic) =>
-  `<li><a href="#${rota}" data-nav="${rota}" class="nav-baixo">${icone(ic, 'size-6')}${nome}</a></li>`;
+  `<li><a href="#${rota}" data-nav="${rota}" data-anima class="nav-baixo">${iconeAnimado(ic, 'size-6')}<span>${nome}</span></a></li>`;
 
 export function marcarMenu(rota) {
   document.querySelectorAll('[data-nav]').forEach((a) => {

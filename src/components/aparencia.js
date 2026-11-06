@@ -62,6 +62,11 @@ export function htmlAparencia() {
     <p class="dica mt-2">No modo escuro o fundo continua escuro; a cor principal e a dos gráficos seguem o tema.</p>
 
     <label class="mt-6 flex cursor-pointer items-center justify-between gap-3 rounded-xl border border-stone-200 p-3 dark:border-stone-700">
+      <span><span class="block font-semibold">Ícones animados</span><span class="text-sm text-stone-600 dark:text-stone-400">Os desenhos do menu se mexem de leve ao passar o dedo ou o mouse.</span></span>
+      <input type="checkbox" data-animacoes class="size-6 accent-brand-600" ${p.animacoes !== false ? 'checked' : ''}>
+    </label>
+
+    <label class="mt-3 flex cursor-pointer items-center justify-between gap-3 rounded-xl border border-stone-200 p-3 dark:border-stone-700">
       <span><span class="block font-semibold">Letras maiores</span><span class="text-sm text-stone-600 dark:text-stone-400">Aumenta o tamanho de todo o texto.</span></span>
       <input type="checkbox" data-texto-grande class="size-6 accent-brand-600" ${p.textoGrande ? 'checked' : ''}>
     </label></div>`;
@@ -147,6 +152,7 @@ export function ligarAparencia(pagina, atualizar) {
     }
     if (e.target.name === 'tema') salvarPreferencias({ tema: e.target.value });
     if (e.target.matches('[data-texto-grande]')) salvarPreferencias({ textoGrande: e.target.checked });
+    if (e.target.matches('[data-animacoes]')) salvarPreferencias({ animacoes: e.target.checked });
   });
   mostrarAvisos(coresDasPreferencias(lerPreferencias()));
 }
