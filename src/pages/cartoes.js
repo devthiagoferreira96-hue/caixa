@@ -85,7 +85,7 @@ export default {
             <ul class="grid grid-cols-3 gap-2 text-center">${futuros.map(({ m, v }) => `
               <li class="rounded-xl bg-stone-100 p-2 dark:bg-stone-800">
                 <span class="block text-xs text-stone-600 dark:text-stone-400">${nomeMesCurto(m)}</span>
-                <span class="mx-auto my-1 block h-1.5 rounded-full bg-stone-200 dark:bg-stone-700" aria-hidden="true"><span class="block h-full rounded-full bg-brand-500" style="width:${(v / maior) * 100}%"></span></span>
+                <span class="mx-auto my-1 block h-1.5 rounded-full bg-stone-200 dark:bg-stone-700" aria-hidden="true"><span class="block h-full rounded-full bg-destaque" style="width:${(v / maior) * 100}%"></span></span>
                 <span class="block text-xs font-semibold tabular-nums sm:text-sm" title="${brl(v)}">${brlCurto(v)}</span>
               </li>`).join('')}</ul>
           </div>

@@ -69,8 +69,15 @@ const TOPICOS = [
     <p><strong>Android (Chrome):</strong> abra o sistema, toque nos três pontinhos ⋮ e em <strong>Adicionar à tela inicial</strong>.</p>
     <p><strong>iPhone (Safari):</strong> toque no botão de compartilhar e em <strong>Adicionar à Tela de Início</strong>.</p>
     <p>Ele vai abrir como um aplicativo, sem a barra do navegador, e funciona mesmo sem internet.</p>`],
-  ['paleta', 'Letras maiores e modo escuro', `
-    <p>Em <a href="#ajustes" class="font-semibold underline">Ajustes > Aparência</a> dá para aumentar o tamanho das letras e escolher o tema claro ou escuro.</p>`],
+  ['paleta', 'Cores, modo escuro e letras maiores', `
+    <p>Em <a href="#ajustes" class="font-semibold underline">Ajustes > Aparência</a>:</p>
+    <ul class="list-disc pl-5">
+      <li><strong>Modo</strong>: claro, escuro ou automático (segue o celular).</li>
+      <li><strong>Cores</strong>: escolha um tema pronto (Verde Cofre, Azul Navy Contábil ou Neutros com toque de cobre) ou toque em <strong>Minhas cores</strong> para escolher a cor principal, a dos gráficos, o fundo da tela, o fundo dos quadros e a do texto.</li>
+      <li>Se alguma combinação ficar difícil de ler, o sistema ajusta o tom sozinho e avisa. Entradas continuam verdes e saídas vermelhas em qualquer tema.</li>
+      <li><strong>Letras maiores</strong>: aumenta todo o texto.</li>
+    </ul>
+    <p>As cores ficam salvas só neste aparelho.</p>`],
 ];
 
 export default {

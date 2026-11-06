@@ -86,7 +86,7 @@ let contadorDialogos = 0;
 export function dialogo({ titulo, corpo, largura = 'max-w-lg', obrigatorio = false }) {
   const id = `dlg-${++contadorDialogos}`;
   const d = document.createElement('dialog');
-  d.className = `m-auto w-[calc(100%-1.5rem)] ${largura} max-h-[90dvh] overflow-y-auto rounded-2xl bg-white p-0 text-stone-900 shadow-2xl dark:bg-stone-900 dark:text-stone-100`;
+  d.className = `m-auto w-[calc(100%-1.5rem)] ${largura} max-h-[90dvh] overflow-y-auto rounded-2xl bg-cartao p-0 text-texto shadow-2xl dark:bg-stone-900 dark:text-stone-100`;
   d.setAttribute('aria-labelledby', id);
   d.innerHTML = `
     <div class="flex items-center justify-between gap-3 px-5 pt-4">

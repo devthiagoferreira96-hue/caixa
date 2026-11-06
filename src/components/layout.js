@@ -16,7 +16,7 @@ export function montarLayout() {
   document.getElementById('app').innerHTML = `
     <a href="#conteudo" data-pular class="sr-only z-[70] focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:rounded-xl focus:bg-brand-700 focus:px-4 focus:py-3 focus:font-semibold focus:text-white">Pular para o conteúdo</a>
 
-    <aside class="fixed inset-y-0 left-0 z-30 hidden w-64 flex-col border-r border-stone-200 bg-white p-4 lg:flex dark:border-stone-800 dark:bg-stone-900">
+    <aside class="fixed inset-y-0 left-0 z-30 hidden w-64 flex-col border-r border-stone-200 bg-cartao p-4 lg:flex dark:border-stone-800 dark:bg-stone-900">
       <div class="flex items-center gap-3 px-2 pb-6">
         <span class="flex size-10 items-center justify-center rounded-xl bg-brand-600 text-sm font-bold text-white" aria-hidden="true">R$</span>
         <div class="min-w-0"><p class="font-bold">Caixa da Família</p><p class="truncate text-sm text-stone-600 dark:text-stone-400" data-saudacao>Olá, ${esc(store.usuario)}</p></div>
@@ -29,7 +29,7 @@ export function montarLayout() {
     </aside>
 
     <div class="lg:pl-64">
-      <header class="sticky top-0 z-20 border-b border-transparent bg-stone-100/90 pt-[env(safe-area-inset-top)] backdrop-blur dark:bg-stone-950/90">
+      <header class="sticky top-0 z-20 border-b border-transparent bg-fundo/90 pt-[env(safe-area-inset-top)] backdrop-blur dark:bg-stone-950/90">
         <div class="mx-auto flex max-w-6xl flex-wrap items-center gap-x-2 gap-y-1 px-4 py-3 lg:px-8 lg:py-5">
           <h1 id="titulo-pagina" tabindex="-1" class="min-w-0 flex-1 truncate text-xl font-bold outline-none lg:text-2xl"></h1>
           <div id="seletor-mes" class="order-last w-full sm:order-none sm:w-auto"></div>
@@ -41,7 +41,7 @@ export function montarLayout() {
       <main id="conteudo" tabindex="-1" class="mx-auto max-w-6xl px-4 pt-1 pb-32 outline-none lg:px-8 lg:pb-12"></main>
     </div>
 
-    <nav aria-label="Menu principal" class="fixed inset-x-0 bottom-0 z-30 border-t border-stone-200 bg-white pb-[env(safe-area-inset-bottom)] lg:hidden dark:border-stone-800 dark:bg-stone-900">
+    <nav aria-label="Menu principal" class="fixed inset-x-0 bottom-0 z-30 border-t border-stone-200 bg-cartao pb-[env(safe-area-inset-bottom)] lg:hidden dark:border-stone-800 dark:bg-stone-900">
       <ul class="mx-auto grid max-w-lg grid-cols-5 items-end">
         ${navBaixo('inicio', 'Início', 'inicio')}
         ${navBaixo('extrato', 'Extrato', 'extrato')}

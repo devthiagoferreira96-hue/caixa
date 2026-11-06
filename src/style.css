@@ -18,6 +18,14 @@
   --color-brand-900: #123a2e;
   --color-brand-950: #0b241d;
 
+  /* cores do tema (trocadas em Ajustes > Aparência, ver lib/temas.js) */
+  --color-fundo: #f6fbf7;
+  --color-cartao: #ffffff;
+  --color-texto: #0e3b2e;
+  --color-destaque: #5fb88a;
+  --color-entrada: #047857;
+  --color-saida: #b91c1c;
+
   --animate-entrar: entrar 0.25s ease-out both;
 }
 
@@ -29,7 +37,7 @@
   html { -webkit-tap-highlight-color: transparent; }
   html.texto-grande { font-size: 112.5%; }
   body {
-    @apply bg-stone-100 text-stone-900 antialiased dark:bg-stone-950 dark:text-stone-100;
+    @apply bg-fundo text-texto antialiased dark:bg-stone-950 dark:text-stone-100;
     /* palavras enormes sem espaço (digitadas pelo usuário) quebram em vez de vazar da tela */
     overflow-wrap: anywhere;
   }
@@ -49,7 +57,7 @@
 
 @layer components {
   .card {
-    @apply rounded-2xl border border-stone-200 bg-white p-4 sm:p-5 dark:border-stone-800 dark:bg-stone-900;
+    @apply rounded-2xl border border-stone-200 bg-cartao p-4 sm:p-5 dark:border-stone-800 dark:bg-stone-900;
   }
   .card-titulo {
     @apply mb-3 text-sm font-semibold text-stone-600 dark:text-stone-400;
@@ -79,7 +87,7 @@
     @apply mt-1.5 text-sm text-stone-600 dark:text-stone-400;
   }
   .erro-campo {
-    @apply mt-1.5 text-sm font-medium text-red-700 dark:text-red-400;
+    @apply mt-1.5 text-sm font-medium text-saida dark:text-red-400;
   }
   .selo {
     @apply inline-block rounded-full px-2 py-0.5 text-xs font-semibold whitespace-nowrap;
@@ -103,8 +111,9 @@
   }
   .check.ligado { @apply border-brand-600 bg-brand-600; }
 
-  .valor-saida { @apply text-red-700 dark:text-red-400; }
-  .valor-entrada { @apply text-brand-700 dark:text-brand-400; }
+  .valor-saida { @apply text-saida dark:text-red-400; }
+  /* entrada sempre verde e saída sempre vermelha, em qualquer tema (tom ajustado ao fundo em lib/temas.js) */
+  .valor-entrada { @apply text-entrada dark:text-emerald-400; }
 
   .opcao-modo {
     @apply flex cursor-pointer flex-col items-center gap-1 rounded-xl border-2 border-stone-200 p-3 text-center text-sm font-semibold transition hover:border-brand-300 has-checked:border-brand-600 has-checked:bg-brand-50 has-focus-visible:outline-2 has-focus-visible:outline-brand-500 dark:border-stone-700 dark:has-checked:bg-brand-950;
