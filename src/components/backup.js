@@ -5,6 +5,7 @@ import { store } from '../lib/store.js';
 import { toast, confirmar, dialogo, icone } from '../lib/ui.js';
 import { hojeISO, dataCompleta, esc } from '../lib/format.js';
 import { periodos } from '../lib/exportar-dados.js';
+import { BASES_RELATORIO } from '../lib/calculos.js';
 // importados direto (sem carregar depois) para que o modo offline já tenha tudo guardado
 import { gerarExcel } from '../lib/exportar-excel.js';
 import { gerarPDF } from '../lib/exportar-pdf.js';
@@ -13,7 +14,7 @@ import { gerarPDF } from '../lib/exportar-pdf.js';
  * Entrega um arquivo: no celular abre o "Compartilhar" (WhatsApp, Drive, e-mail...);
  * no computador baixa o arquivo. Retorna false se a pessoa cancelou.
  */
-async function entregar(arquivo, titulo) {
+export async function entregar(arquivo, titulo) {
   if (navigator.canShare?.({ files: [arquivo] }) && matchMedia('(pointer: coarse)').matches) {
     try {
       await navigator.share({ files: [arquivo], title: titulo });
@@ -51,8 +52,8 @@ const FORMATOS = {
   excel: {
     extensao: 'xlsx',
     tipo: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-    nome: 'Planilha',
-    gerar: gerarExcel,
+    nome: 'Backup em Excel',
+    gerar: (p, partes) => gerarExcel(p, partes),
   },
   pdf: {
     extensao: 'pdf',
@@ -62,14 +63,22 @@ const FORMATOS = {
   },
 };
 
-/** Gera a planilha ou o PDF do período escolhido */
-export async function exportar(formato, periodoId) {
+/** Gera a planilha ou o PDF do período escolhido. `base` = vencimento, competencia ou pagamento (ver BASES_RELATORIO) */
+export async function exportar(formato, periodoId, base = 'vencimento', partes = {}) {
   const f = FORMATOS[formato];
-  const p = periodos().find((x) => x.id === periodoId) || periodos()[0];
-  const sufixo = p.id === 'mes' ? p.inicio.slice(0, 7) : p.id === 'ano' ? p.inicio.slice(0, 4) : `completo-${hojeISO()}`;
-  const nome = `caixa-familia-${sufixo}.${f.extensao}`;
+  const excel = formato === 'excel';
+  const p = { ...(periodos().find((x) => x.id === periodoId) || periodos()[0]), base: excel ? 'vencimento' : base };
+  const sufixo = (p.id === 'mes' ? p.inicio.slice(0, 7) : p.id === 'ano' ? p.inicio.slice(0, 4) : `completo-${hojeISO()}`)
+    + (!excel && base !== 'vencimento' ? `-por-${base}` : '');
+  const nome = `caixa-familia-${excel ? 'planilhas-' : ''}${sufixo}.${f.extensao}`;
   try {
-    const bytes = await f.gerar(p);
+    let bytes;
+    try {
+      bytes = await f.gerar(p, partes);
+    } catch (e) {
+      if (e.message === 'VAZIO') { toast('Não há nada lançado nesse período para colocar na planilha.', { tipo: 'erro' }); return false; }
+      throw e;
+    }
     const arquivo = new File([bytes], nome, { type: f.tipo });
     if (!(await entregar(arquivo, `${f.nome} do Caixa da Família`))) return false;
     toast(`${f.nome} gerado: ${nome}`);
@@ -81,7 +90,7 @@ export async function exportar(formato, periodoId) {
   }
 }
 
-let ultimaEscolha = { formato: 'backup', periodo: 'mes' };
+let ultimaEscolha = { formato: 'backup', periodo: 'mes', base: 'vencimento', partes: { caixa: true, producao: true, conta: true } };
 
 /**
  * Janela com as opções: backup completo, planilha do Excel ou PDF (com o período).
@@ -91,7 +100,7 @@ export function abrirOpcoesBackup() {
   return new Promise((resolver) => {
     const opcoes = [
       ['backup', 'escudo', 'Backup completo', 'Guarda tudo. É o único arquivo que traz os dados de volta (celular novo, senha esquecida).', 'Recomendado'],
-      ['excel', 'planilha', 'Planilha do Excel', 'Abre no Excel ou no Google Planilhas: lançamentos, cartões e gastos por categoria.'],
+      ['excel', 'planilha', 'Backup em Excel', 'No formato das suas planilhas (NOVO_CAIXA, CONTROLE ANUAL e Conta corrente). Abre no Excel e pode ser importado de volta.'],
       ['pdf', 'documento', 'Relatório em PDF', 'Para ler, imprimir ou mandar para alguém: resumo, categorias e lista de lançamentos.'],
     ];
     const d = dialogo({
@@ -113,6 +122,19 @@ export function abrirOpcoesBackup() {
           <select id="exp-periodo" name="periodo" class="campo">
             ${periodos(store.mes).map((p) => `<option value="${p.id}" ${p.id === ultimaEscolha.periodo ? 'selected' : ''}>${esc(p.nome)}</option>`).join('')}
           </select>
+          <fieldset class="mt-4 grid gap-2" data-partes-excel>
+            <legend class="rotulo">O que colocar na planilha</legend>
+            ${[['caixa', 'Caixa (uma aba por mês, como o NOVO_CAIXA)'], ['producao', 'Produção da resina (CONTROLE ANUAL e SAFRAS)'], ['conta', 'Conta corrente do arrendamento']]
+              .map(([v, t]) => `<label class="flex min-h-10 cursor-pointer items-center gap-3 text-sm"><input type="checkbox" class="size-5 accent-brand-600" name="parte_${v}" ${ultimaEscolha.partes[v] ? 'checked' : ''}>${t}</label>`).join('')}
+            <p class="dica">Para guardar tudo e poder importar de volta, escolha o período <strong>Tudo o que já foi lançado</strong>.</p>
+          </fieldset>
+          <div data-base-bloco>
+          <label class="rotulo mt-4" for="exp-base">Organizar por</label>
+          <select id="exp-base" name="base" class="campo" aria-describedby="exp-base-dica">
+            ${Object.entries(BASES_RELATORIO).map(([v, b]) => `<option value="${v}" ${v === ultimaEscolha.base ? 'selected' : ''}>${esc(b.nome)}</option>`).join('')}
+          </select>
+          <p id="exp-base-dica" class="dica" data-base-dica></p>
+          </div>
           <p class="dica mt-2">Planilha e PDF são para consultar. Para guardar e poder restaurar, use o <strong>Backup completo</strong>.</p>
         </div>
         <div class="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
@@ -125,7 +147,10 @@ export function abrirOpcoesBackup() {
     const atualizar = () => {
       const formato = form.formato.value;
       d.querySelector('[data-periodo-bloco]').hidden = formato === 'backup';
-      d.querySelector('[data-gerar-texto]').textContent = { backup: 'Gerar backup', excel: 'Gerar planilha', pdf: 'Gerar PDF' }[formato];
+      d.querySelector('[data-base-dica]').textContent = BASES_RELATORIO[form.base.value].explica;
+      d.querySelector('[data-partes-excel]').hidden = formato !== 'excel';
+      d.querySelector('[data-base-bloco]').hidden = formato !== 'pdf';
+      d.querySelector('[data-gerar-texto]').textContent = { backup: 'Gerar backup', excel: 'Gerar backup em Excel', pdf: 'Gerar PDF' }[formato];
     };
     form.addEventListener('change', atualizar);
     atualizar();
@@ -133,10 +158,12 @@ export function abrirOpcoesBackup() {
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
       const botao = d.querySelector('[data-gerar]');
-      ultimaEscolha = { formato: form.formato.value, periodo: form.periodo.value };
+      const partes = { caixa: form.parte_caixa.checked, producao: form.parte_producao.checked, conta: form.parte_conta.checked };
+      if (form.formato.value === 'excel' && !Object.values(partes).some(Boolean)) { toast('Marque pelo menos uma parte para colocar na planilha.', { tipo: 'erro' }); return; }
+      ultimaEscolha = { formato: form.formato.value, periodo: form.periodo.value, base: form.base.value, partes };
       botao.disabled = true;
       botao.setAttribute('aria-busy', 'true');
-      const ok = ultimaEscolha.formato === 'backup' ? await fazerBackup() : await exportar(ultimaEscolha.formato, ultimaEscolha.periodo);
+      const ok = ultimaEscolha.formato === 'backup' ? await fazerBackup() : await exportar(ultimaEscolha.formato, ultimaEscolha.periodo, ultimaEscolha.base, ultimaEscolha.partes);
       botao.disabled = false;
       botao.removeAttribute('aria-busy');
       if (ok) {

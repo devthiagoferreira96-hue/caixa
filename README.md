@@ -63,6 +63,12 @@ Depois de instalado, o sistema abre e funciona sem internet. Quando você public
 
 *Ajustes > Backup, importar e exportar > Importar planilha do Excel*. Lê o `.xlsx` no modelo do `NOVO_CAIXA.xlsx` (uma aba por mês; caixa nas colunas A–J e um bloco por cartão), no próprio aparelho (`src/lib/ler-xlsx.js` + `DecompressionStream`). As colunas são achadas pelo título. Mostra uma prévia (mês/ano de cada aba, cadastros novos, avisos), pula o que já existe e pode ser desfeita. Regras em `src/lib/importar-planilha.js`.
 
+A importação reconhece sozinha cada aba e manda para o lugar certo (`importarQualquerPlanilha` em `src/components/importar.js`). O mesmo botão aparece em Ajustes, na Produção e na Conta corrente.
+- **Caixa** (modelo NOVO_CAIXA): a REFERENCIA vira a observação, e a PARCELA vai para o campo da parcela. "FATURA <cartão>" vira pagamento de fatura, mesmo quando o cartão só aparece no bloco da própria planilha. Valor com sinal contrário no bloco do cartão vira reembolso.
+- **Produção da resina** (CONTROLE ANUAL FAZENDA, abas SAFRAS): os blocos `DATA | TBS | PESO - KG` de cada produtor e safra (agosto a julho) viram cargas, uma por dia, com o kg de cada produtor. Regras em `src/modulos/resina/importar-safras.js`. Linhas repetidas entre as abas entram uma vez só. Nos blocos de duas pessoas ("PEDRO E PAULO"), a linha com o nome ao lado vai para quem está escrito, e a linha sem nome é dividida meio a meio. A aba de resumo (Tbs por mês × ano) não é importada. Aceita meio tambor (28,5).
+- **Conta corrente**: quando a carga já veio das SAFRAS (mesmo dia, produtor e Tbs), a conta corrente completa essa carga (conta, preço, nota e %) em vez de criar outra.
+- Quando o arquivo tem mais de um tipo de aba (o backup em Excel), a importação pergunta o que trazer e abre as conferências na ordem Caixa → Produção → Conta corrente.
+
 ## Temas de cores
 
 *Ajustes > Aparência*: temas prontos (Verde Cofre, Azul Navy Contábil, Neutros com toque de cobre) ou 5 cores próprias (principal, gráficos, fundo, quadros, texto). `src/lib/temas.js` gera os tons da cor principal e os cinzas a partir dessas cores (OKLCH) e ajusta o que for preciso para manter contraste WCAG AA. As cores entram como variáveis CSS (`--color-brand-*`, `--color-stone-*`, `--color-fundo`, `--color-cartao`, `--color-texto`, `--color-destaque`).
@@ -76,12 +82,36 @@ Depois de instalado, o sistema abre e funciona sem internet. Quando você public
 - **Aparelho sem espaço**: se não der para gravar, aparece um aviso pedindo backup.
 - **Arquivos de fora**: PDF, CSV, Word, planilha com senha, .xls antigo, arquivo cortado ou vazio são recusados com uma mensagem que diz o que fazer.
 
+## Módulo Resina (produção e cargas)
+
+Módulo opcional, ligado em Ajustes > Módulos. Fica em `src/modulos/resina/` e não mexe no Caixa: usa tabelas próprias (`resina_*`) no mesmo arquivo cifrado e no mesmo backup.
+
+- **Cadastros**: produtores (cor e % de arrendamento), motoristas, caminhões (placa e quantos Tbs cabem), preço do kg por data e fazenda.
+- **Carga**: número automático (C-2026-0001), pesagem na fazenda e/ou na chegada (com a diferença em kg, % e R$), Tbs e % de arrendamento por produtor, kg calculado pelos Tbs ou digitado, e a carreta animada.
+- **Produção**: totais do mês e quanto cada produtor produziu.
+- **Insumos**: em *Cadastros > Produtos (insumos)* ficam os produtos usados na coleta, com unidade e valor unitário. Na tela **Insumos**, cada entrega a um produtor tem data, conta (CNPJ/CPF), nota e vários produtos (quantidade, valor unitário e valor total; quem só sabe o total digita o total e o unitário é calculado).
+- **Insumos × produção** (na tela Produção, por mês ou pelo ano inteiro): compara o gasto com insumos e a resina entregue por cada produtor. O número principal é o **insumo por kg de resina**, comparado com a média de todos. Gera alerta quem fica 25% ou mais acima da média (pode ser desperdício ou resina que não chegou nas cargas) e quem recebeu insumo sem entregar resina. Os insumos são descontados do produtor, então a tabela mostra a parte do produtor menos os insumos, e o consumo de cada produto por tonelada.
+- **Conta corrente do arrendamento**: segue a planilha *Conta corrente arrendo* da empresa. Há uma conta para cada cadastro em *Cadastros > Contas* (o CNPJ da empresa e o CPF da proprietária), e cada carga escolhe a sua, junto com a **nota** e o **destino**.
+  - Cada produtor de cada carga vira uma linha. O **débito** é o arrendamento, ou seja, o que a proprietária tem para receber. **UNI.** é o valor de um tambor (média de kg por tambor × preço do kg), então débito = tambores × UNI. × % arrendo.
+  - Os **insumos** também entram como débito, porque são descontados do produtor.
+  - **Crédito** é o que já foi recebido, lançado na própria tela (*Lançar recebimento*). Dá para filtrar por produtor.
+  - O **saldo** vem desde a primeira carga. Negativo quer dizer que ainda falta receber.
+  - **Exportar Excel** gera o mês com as mesmas 13 colunas da planilha da empresa: débito negativo e saldo em fórmula (`saldo anterior + crédito + débito`).
+  - **Ligado ao Caixa:** o recebimento (crédito) pode entrar também como **entrada** numa conta do Caixa, e a compra de insumos como **saída** de uma conta ou **compra no cartão**. O que vai para o Caixa guarda de onde veio (`resina_movimento_id` / `resina_entrega_id`): mudar ou excluir na Resina refaz ou exclui no Caixa (`src/modulos/resina/ligacao-caixa.js`). O Início do Caixa mostra o **arrendamento a receber** de cada conta (CNPJ/CPF).
+  - **Importar planilha** lê a planilha da empresa (as colunas são achadas pelo título). Quando as colunas de número estão vazias, lê o texto da descrição: `CARGA 57 TBS = 11.480 KG X R$ 4,60 X 55%` vira carga, `125 KG PASTA` vira insumo e o resto (PIX etc.) vira lançamento. Antes de gravar, mostra cada linha como foi entendida: dá para escolher o produtor, crédito ou débito, digitar o valor que falta, juntar produtos ao cadastro ou desmarcar a linha. Linhas seguidas da mesma carga viram uma carga com vários produtores. O que já está no sistema não é importado de novo, e dá para desfazer a importação inteira.
+- Quem já usava o sistema recebe as tabelas novas vazias; nenhum cadastro do Caixa é criado de novo ou apagado. Backups antigos (sem a resina) continuam restaurando normalmente.
+
 ## Backup
 
 Como os dados ficam só no aparelho, **perder o aparelho é perder os dados**, a não ser que exista um backup.
 
 - **Fazer backup:** *Ajustes > Backup e exportar > Backup, Excel ou PDF > Backup completo*. No celular, abre o *Compartilhar* (Drive, e-mail ou WhatsApp); no computador, baixa um arquivo `.json`.
-- **Exportar:** na mesma janela dá para gerar uma **planilha do Excel (.xlsx)** (abas Resumo, Lançamentos, Cartões e Por categoria, com filtros e totais) ou um **relatório em PDF**, do mês aberto, do ano ou de tudo. Os dois arquivos são montados no próprio aparelho, sem internet e sem bibliotecas externas (`src/lib/exportar-*.js`, `zip.js`). Servem para consultar: só o `.json` restaura os dados.
+- **Exportar:** na mesma janela dá para gerar o **backup em Excel (.xlsx)** ou um **relatório em PDF**, do mês aberto, do ano ou de tudo. O backup em Excel é **um arquivo só**, com as abas no formato das planilhas da família e da empresa, e pode ser importado de volta:
+  - o Caixa, com uma aba por mês como no NOVO_CAIXA (`src/lib/planilha-caixa.js`), com saldo anterior, resumo por conta e categoria em fórmulas e um bloco por cartão;
+  - CONTROLE ANUAL e SAFRAS, como no CONTROLE ANUAL FAZENDA;
+  - uma CONTA CORRENTE por conta, como na Conta corrente arrendo (`src/modulos/resina/planilhas-resina.js`).
+
+  Dá para escolher só algumas partes. O que esses formatos não têm (recorrência, desconto/juros, competência, pessoa da compra no cartão, cadastros como motoristas e caminhões) só volta pelo `.json`, que continua sendo o backup completo.
 - **Restaurar:** em *Ajustes > Restaurar um backup* ou, num aparelho novo, em *Já tenho um arquivo de backup* na primeira tela. A restauração tem *Desfazer*.
 - O Início mostra um lembrete quando você ainda não fez backup ou quando o último tem mais de 30 dias.
 - O arquivo de backup **não tem senha**: guarde-o num lugar só seu.
@@ -92,7 +122,9 @@ Como os dados ficam só no aparelho, **perder o aparelho é perder os dados**, a
 npm test
 ```
 
-Roda os testes das regras de negócio (em qual fatura cai cada compra, divisão de parcelas, datas e somas).
+Roda os testes das regras de negócio (em qual fatura cai cada compra, divisão de parcelas, datas, somas, repetições "sempre", fatura com adiantamento e reembolso, cargas e conta corrente).
+
+Os testes de navegador ficam em `testes-navegador/` (veja o `LEIA-ME.md` de lá).
 
 ---
 
@@ -120,6 +152,7 @@ src/
     preferencias.js        tema escuro e letras maiores
   components/              peças usadas em várias telas (layout, gráficos, backup…)
   pages/                   uma tela por arquivo (acesso, início, extrato, novo…)
+  modulos/resina/          módulo Resina: tabelas, contas, carreta animada e telas
 tests/                     testes das regras (npm test)
 ```
 
@@ -128,8 +161,8 @@ tests/                     testes das regras (npm test)
 | Tabela | O que guarda | Na planilha |
 |---|---|---|
 | `lancamentos` | entradas e saídas do caixa, contas a pagar, pagamentos de fatura | colunas A:K |
-| `compras_cartao` + `parcelas` | compras no crédito e cada parcela na fatura certa | colunas Q:AP |
-| `contas` | Espécie, MMP, Nubank… com saldo inicial | bloco de saldos (M:N) |
+| `compras_cartao` + `parcelas` | compras no crédito e cada parcela na fatura certa. `tipo: 'estorno'` = reembolso (parcela negativa, abate a fatura); `recorrente` = assinatura (todo mês ou, com `recorrente_intervalo: 12`, todo ano); `pessoa_id` opcional | colunas Q:AP |
+| `contas` | Espécie, Conta corrente, Nubank… com saldo inicial | bloco de saldos (M:N) |
 | `categorias` | categorias, grupo e se aparecem no gráfico do Início | lista de categorias |
 | `pessoas` | funcionários, prestadores, família | coluna PESSOA |
 

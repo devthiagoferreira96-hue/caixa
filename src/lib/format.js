@@ -1,4 +1,5 @@
 // Funções pequenas de formatação de dinheiro e datas (padrão brasileiro)
+import { ehFormula, tentarFormula } from './formula.js';
 
 // Espaço comum entre "R$" e o número: em telas estreitas o "R$" pode ir para uma linha
 // e o número para a outra, mas o número nunca é cortado no meio (ver .tabular-nums no CSS).
@@ -69,6 +70,7 @@ export const quandoVence = (s) => {
 
 // "1.234,56" -> 1234.56
 export const lerValor = (s) => {
+  if (ehFormula(s)) return tentarFormula(s).valor ?? NaN; // "=3*4,50" (fórmula ainda não resolvida no campo)
   let t = String(s ?? '').replace(/[R$\s]/g, '');
   if (!t) return NaN;
   if (t.includes(',')) t = t.replace(/\./g, '').replace(',', '.');

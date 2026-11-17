@@ -2,13 +2,25 @@
 import { brl, brlCurto, esc, mesISO, somarDias, nomeMes } from '../lib/format.js';
 import { store, contasAtivas, cartoesAtivos, areaDaCategoria, GRUPOS_SEPARADOS } from '../lib/store.js';
 import { saldosContas, lancamentosDoMes, parcelasDoMes, pendentesAte, pagamentosDeFatura } from '../lib/api.js';
-import { gastosPorCategoria, totalDoCartao, resumoPorArea, entradasPorCategoria } from '../lib/calculos.js';
+import { gastosPorCategoria, totalDoCartao, resumoPorArea, entradasPorCategoria, situacaoFatura } from '../lib/calculos.js';
 import { itemLancamento, cliqueEmLancamento } from '../components/lancamento.js';
 import { barrasCategorias, abrirDetalheCategoria } from '../components/grafico.js';
 import { icone, estadoVazio } from '../lib/ui.js';
 import { local } from '../lib/local-db.js';
 import { fazerBackup } from '../components/backup.js';
 import { vencimentoFatura } from '../lib/faturas.js';
+import { resinaAtiva, todasAsCargas, lerMovimentos, insumosEntre } from '../modulos/resina/dados.js';
+import { aReceberPorConta } from '../modulos/resina/calculos.js';
+
+/** Arrendamento a receber da Resina (só quando o módulo está ligado e há contas CNPJ/CPF) */
+async function resumoResina() {
+  const titulares = store.resina_titulares.filter((t) => t.ativo !== false);
+  if (!resinaAtiva() || !titulares.length) return null;
+  const [{ cargas, itensPorCarga }, movimentos, insumos] = await Promise.all([todasAsCargas(), lerMovimentos(), insumosEntre('0000-01-01', '9999-12-31')]);
+  if (!cargas.length && !movimentos.length && !insumos.length) return null;
+  return aReceberPorConta(cargas, itensPorCarga, movimentos, insumos, titulares.map((t) => t.id), somarDias(1))
+    .map((r) => ({ ...r, nome: titulares.find((t) => t.id === r.titular_id).nome }));
+}
 
 export default {
   titulo: 'Início',
@@ -22,12 +34,13 @@ export default {
     <p><strong>Gastos por categoria</strong>: toque numa barra para ver tudo o que foi gasto naquela categoria.</p>`,
 
   async render(el, ctx) {
-    const [saldos, lancamentos, parcelas, pendentes, pagamentos] = await Promise.all([
+    const [saldos, lancamentos, parcelas, pendentes, pagamentos, resina] = await Promise.all([
       saldosContas(),
       lancamentosDoMes(),
       parcelasDoMes(),
       pendentesAte(somarDias(7)),
       pagamentosDeFatura(),
+      resumoResina().catch(() => null),
     ]);
     if (!ctx.aindaAtual()) return;
 
@@ -41,8 +54,6 @@ export default {
     const categoriasGrafico = store.categorias.filter((c) => c.no_grafico);
     const gastos = gastosPorCategoria(lancamentos, parcelas);
     const somaGrafico = categoriasGrafico.reduce((s, c) => s + (gastos.get(c.id) || 0), 0);
-    const pagos = new Set(pagamentos.filter((p) => p.pago).map((p) => p.fatura_cartao_id));
-    const agendados = new Set(pagamentos.filter((p) => !p.pago).map((p) => p.fatura_cartao_id));
     const semNada = !lancamentos.length && !parcelas.length;
 
     el.innerHTML = `
@@ -60,6 +71,12 @@ export default {
             }).join('')}
           </ul>
         </section>
+
+        ${temSeparadas ? `<section class="card" aria-labelledby="t-total">
+          <h2 id="t-total" class="card-titulo mb-1">Total do mês: casa + ${GRUPOS_SEPARADOS.filter((g) => areas[g].movimentos > 0).join(' + ').toLowerCase()}</h2>
+          <p class="mb-3 text-sm text-stone-600 dark:text-stone-400">Soma dos resumos abaixo em ${esc(nomeMes(store.mes).toLowerCase())}.</p>
+          ${quadrosResultado(Object.values(areas).reduce((t, a) => ({ entradas: t.entradas + a.entradas, gastos: t.gastos + a.gastos, resultado: t.resultado + a.resultado }), { entradas: 0, gastos: 0, resultado: 0 }), { entrou: 'Entrou (tudo)', saiu: 'Saiu (tudo)' })}
+        </section>` : ''}
 
         <section class="card" aria-labelledby="t-resumo">
           <h2 id="t-resumo" class="card-titulo mb-1">Resumo da casa em ${esc(nomeMes(store.mes).toLowerCase())}</h2>
@@ -96,11 +113,14 @@ export default {
           </ol>
         </section>` : ''}
 
+        ${resina ? cartaoResina(resina) : ''}
+
         <section class="card" aria-labelledby="t-faturas">
           <h2 id="t-faturas" class="card-titulo">Faturas de ${esc(nomeMes(store.mes).toLowerCase())}</h2>
           ${cartoesAtivos().length ? `<ul>${cartoesAtivos().map((c) => {
             const valor = totalDoCartao(parcelas, c.id);
-            const [cls, txt] = !valor ? ['selo-neutro', 'Sem compras'] : pagos.has(c.id) ? ['selo-ok', 'Paga'] : agendados.has(c.id) ? ['selo-aberto', 'Agendada'] : ['selo-aberto', 'Em aberto'];
+            const sit = situacaoFatura(valor, pagamentos.filter((p) => p.fatura_cartao_id === c.id));
+            const [cls, txt] = { sem: ['selo-neutro', 'Sem compras'], credito: ['selo-ok', 'Crédito'], paga: ['selo-ok', 'Paga'], agendada: ['selo-aberto', 'Agendada'], parcial: ['selo-aberto', `Falta ${brl(sit.falta)}`], aberta: ['selo-aberto', 'Em aberto'] }[sit.estado];
             return `<li class="border-t border-stone-100 first:border-t-0 dark:border-stone-800">
               <a href="#cartoes" class="flex items-center gap-3 rounded-lg px-1 py-3 transition hover:bg-stone-50 dark:hover:bg-stone-800/60">
                 <span class="flex size-9 items-center justify-center rounded-lg bg-stone-100 text-stone-600 dark:bg-stone-800 dark:text-stone-300">${icone('cartao', 'size-5')}</span>
@@ -166,5 +186,24 @@ function lembreteBackup() {
     <h2 id="t-backup" class="flex items-center gap-2 font-bold text-amber-900 dark:text-amber-100">${icone('alerta')} ${dias === null ? 'Faça seu primeiro backup' : `Último backup há ${dias} dias`}</h2>
     <p class="mt-1 text-sm text-amber-900 dark:text-amber-100">Os dados ficam só neste aparelho. Se ele for perdido ou formatado, só o backup traz tudo de volta.</p>
     <button type="button" class="btn-primario mt-3" data-backup>${icone('baixar')} Fazer backup agora</button>
+  </section>`;
+}
+
+/** Quadro "Resina: arrendamento a receber", com o saldo de cada conta (CNPJ/CPF) até hoje */
+function cartaoResina(contas) {
+  const total = contas.reduce((s, c) => s + c.aReceber, 0);
+  return `<section class="card" aria-labelledby="t-resina">
+    <div class="flex items-start justify-between gap-2">
+      <h2 id="t-resina" class="card-titulo mb-0">Resina: arrendamento a receber</h2>
+      <a href="#conta-corrente" class="shrink-0 text-sm font-semibold text-brand-700 underline underline-offset-2 dark:text-brand-400">Conta corrente</a>
+    </div>
+    <p class="mt-2 text-2xl font-bold tabular-nums">${brl(total)}</p>
+    <p class="text-sm text-stone-600 dark:text-stone-400">Arrendamento e insumos descontados, menos o que já foi recebido, até hoje.</p>
+    <ul class="mt-3">${contas.map((c) => `<li class="flex items-center justify-between gap-3 border-t border-stone-100 py-2.5 dark:border-stone-800">
+      <span class="min-w-0 truncate font-medium">${esc(c.nome)}</span>
+      <span class="shrink-0 text-right tabular-nums">${c.aReceber ? `<span class="font-semibold">${brl(c.aReceber)}</span> <span class="selo selo-aberto">Falta receber</span>`
+        : c.saldo > 0.004 ? `<span class="font-semibold">${brl(c.saldo)}</span> <span class="selo selo-ok">Recebido a mais</span>` : '<span class="selo selo-ok">Em dia</span>'}</span>
+    </li>`).join('')}</ul>
+    <p class="mt-2 text-sm text-stone-600 dark:text-stone-400">Recebimentos lançados na conta corrente com "lançar também no Caixa" entram como entrada nas contas acima.</p>
   </section>`;
 }

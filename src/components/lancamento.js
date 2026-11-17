@@ -2,8 +2,8 @@
 import { esc, brl, diaMes, diasAte, quandoVence, hojeISO } from '../lib/format.js';
 import { buscar } from '../lib/store.js';
 import { icone, toast, dialogo, confirmar, mascaraDinheiro, limparErros, semRepetir } from '../lib/ui.js';
-import { atualizarLancamento, excluirLancamentos, lancamentosDoGrupo, pessoaPorNome } from '../lib/api.js';
-import { campoValor, campoDescricao, campoCategoria, camposCaixa, lerCamposCaixa, atualizarCategorias } from './form-lancamento.js';
+import { atualizarLancamento, excluirLancamentos, lancamentosDoGrupo, lancamentosDaDivisao, pessoaPorNome, pararRecorrencia } from '../lib/api.js';
+import { campoValor, campoDescricao, campoCategoria, camposCaixa, lerCamposCaixa, ligarCamposCaixa, atualizarCategorias } from './form-lancamento.js';
 
 /** Botão "Desfazer" padrão dos avisos: desfaz, avisa e redesenha a tela */
 export const desfazendo = (desfazer, atualizar) => ({
@@ -30,10 +30,17 @@ export function itemLancamento(l, { mostrarPrazo = false } = {}) {
   const entrada = l.tipo === 'entrada';
   const [classeSelo, textoSelo] = situacao(l);
   const detalhes = [
-    l.fatura_cartao_id ? 'Pagamento de fatura' : buscar('categorias', l.categoria_id)?.nome,
+    l.fatura_cartao_id ? (l.adiantamento ? 'Adiantamento de fatura' : 'Pagamento de fatura') : buscar('categorias', l.categoria_id)?.nome,
     buscar('contas', l.conta_id)?.nome,
     buscar('pessoas', l.pessoa_id)?.nome,
     l.parcela && `parcela ${l.parcela}`,
+    l.recorrente && (Number(l.recorrente_intervalo) === 12 ? 'todo ano' : 'todo mês'),
+    l.divisao && 'pagamento dividido',
+    (l.resina_movimento_id || l.resina_entrega_id) && 'veio da Resina',
+    l.competencia && l.competencia.slice(0, 7) !== l.vencimento.slice(0, 7) && `competência ${l.competencia.slice(5, 7)}/${l.competencia.slice(0, 4)}`,
+    l.pago && l.data_pagamento && l.data_pagamento !== l.vencimento && `${entrada ? 'recebido' : 'pago'} em ${diaMes(l.data_pagamento)}`,
+    Number(l.desconto) > 0 && `desconto ${brl(l.desconto)}`,
+    Number(l.juros) > 0 && `juros ${brl(l.juros)}`,
   ].filter(Boolean);
   const verbo = entrada ? 'recebido' : 'pago';
   return `
@@ -46,6 +53,7 @@ export function itemLancamento(l, { mostrarPrazo = false } = {}) {
       aria-label="Abrir “${esc(l.descricao)}” para ver ou editar">
       <span class="line-clamp-2 font-medium">${esc(l.descricao)}</span>
       <span class="line-clamp-2 text-sm text-stone-600 dark:text-stone-400">${diaMes(l.vencimento)}${mostrarPrazo && !l.pago ? ` · ${quandoVence(l.vencimento)}` : ''} · ${detalhes.map(esc).join(' · ')}</span>
+      ${l.observacao ? `<span class="line-clamp-1 text-sm italic text-stone-600 dark:text-stone-400" title="${esc(l.observacao)}">Obs.: ${esc(l.observacao)}</span>` : ''}
     </button>
     <div class="text-right @max-[15.5rem]:flex @max-[15.5rem]:basis-full @max-[15.5rem]:flex-wrap @max-[15.5rem]:items-center @max-[15.5rem]:gap-2 @max-[15.5rem]:pl-12 @max-[15.5rem]:text-left">
       <span class="block text-sm font-semibold tabular-nums sm:text-base ${entrada ? 'valor-entrada' : 'valor-saida'}">${entrada ? '+' : '−'} ${brl(l.valor)}</span>
@@ -105,12 +113,13 @@ export async function cliqueEmLancamento(e, lista, atualizar) {
 
 async function excluir(l, atualizar, d) {
   let ids = [l.id];
+  let todos = false;
   if (l.grupo) {
     const escolha = await new Promise((resolver) => {
       const j = dialogo({
         titulo: 'Este lançamento se repete',
         largura: 'max-w-sm',
-        corpo: `<p class="text-stone-600 dark:text-stone-300">Quer excluir só este mês ou este e os próximos?</p>
+        corpo: `<p class="text-stone-600 dark:text-stone-300">Quer excluir só este ${Number(l.recorrente_intervalo) === 12 ? 'ano' : 'mês'} ou este e os próximos?${l.recorrente ? ' "Este e os próximos" também para a repetição: o sistema não lança mais.' : ''}</p>
           <div class="mt-5 grid gap-2">
             <button class="btn-perigo" data-r="todos">Este e os próximos</button>
             <button class="btn-neutro" data-r="um">Só este</button>
@@ -122,12 +131,39 @@ async function excluir(l, atualizar, d) {
       j.addEventListener('close', () => resolver(r));
     });
     if (!escolha) return;
-    if (escolha === 'todos') ids = (await lancamentosDoGrupo(l.grupo, l.vencimento)).map((x) => x.id);
+    todos = escolha === 'todos';
+    if (todos) ids = (await lancamentosDoGrupo(l.grupo, l.vencimento)).map((x) => x.id);
+  } else if (l.divisao) {
+    const partes = await lancamentosDaDivisao(l.divisao);
+    const escolha = partes.length < 2 ? 'um' : await new Promise((resolver) => {
+      const j = dialogo({
+        titulo: 'Pagamento dividido',
+        largura: 'max-w-sm',
+        corpo: `<p class="text-stone-600 dark:text-stone-300">“${esc(l.descricao)}” foi dividido entre ${partes.length} contas. Quer excluir todas as partes ou só esta (${brl(l.valor)} em ${esc(buscar('contas', l.conta_id)?.nome || 'conta')})?</p>
+          <div class="mt-5 grid gap-2">
+            <button class="btn-perigo" data-r="todos">Todas as partes (${brl(partes.reduce((s, x) => s + Number(x.valor), 0))})</button>
+            <button class="btn-neutro" data-r="um">Só esta parte</button>
+            <button class="btn-sec" data-r="">Cancelar</button>
+          </div>`,
+      });
+      let r = '';
+      j.addEventListener('click', (ev) => { const b = ev.target.closest('[data-r]'); if (b) { r = b.dataset.r; j.close(); } });
+      j.addEventListener('close', () => resolver(r));
+    });
+    if (!escolha) return;
+    if (escolha === 'todos') ids = partes.map((x) => x.id);
+    else if (partes.length < 2 && !(await confirmar(`“${l.descricao}” será excluído.`, { botao: 'Excluir', perigo: true }))) return;
   } else if (!(await confirmar(`“${l.descricao}” será excluído.`, { botao: 'Excluir', perigo: true }))) {
     return;
   }
   try {
-    const desfazer = await excluirLancamentos(ids);
+    let desfazer = await excluirLancamentos(ids);
+    // "este e os próximos" numa repetição "sempre": encerra a repetição (os meses que ficaram não voltam a se repetir)
+    if (todos && l.recorrente) {
+      const voltarExcluidos = desfazer;
+      const voltarRepeticao = await pararRecorrencia(l.grupo);
+      desfazer = async () => { await voltarExcluidos(); await voltarRepeticao(); };
+    }
     d?.close();
     toast(ids.length > 1 ? `${ids.length} lançamentos excluídos` : `“${l.descricao}” excluído`, { acao: desfazendo(desfazer, atualizar) });
     atualizar();
@@ -152,12 +188,14 @@ export function abrirEdicao(l, atualizar) {
     titulo: 'Editar lançamento',
     corpo: `
       <form class="grid gap-4" novalidate>
+        ${l.resina_movimento_id || l.resina_entrega_id ? `<p class="rounded-xl bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:bg-amber-900/30 dark:text-amber-100">${icone('alerta', 'mr-1 inline size-4 align-[-3px]')}Este lançamento veio da Resina (${l.resina_movimento_id ? 'recebimento da <a href="#conta-corrente" class="font-semibold underline">Conta corrente</a>' : 'compra de <a href="#insumos" class="font-semibold underline">Insumos</a>'}). Se mudar lá, ele é refeito aqui. Mudanças feitas só aqui não voltam para a Resina.</p>` : ''}
         <fieldset class="grid grid-cols-2 gap-2">
           <legend class="sr-only">Tipo</legend>
           <label class="opcao-modo"><input type="radio" name="tipo" value="saida" class="sr-only" ${l.tipo === 'saida' ? 'checked' : ''}>${icone('saida')} Saída</label>
           <label class="opcao-modo"><input type="radio" name="tipo" value="entrada" class="sr-only" ${l.tipo === 'entrada' ? 'checked' : ''}>${icone('entrada')} Entrada</label>
         </fieldset>
-        ${campoValor(l.valor)}
+        ${l.divisao ? '<p class="rounded-xl bg-amber-50 p-3 text-sm text-amber-900 dark:bg-amber-900/40 dark:text-amber-100">Este lançamento é uma parte de um pagamento dividido entre contas. O que você mudar aqui vale só para esta parte.</p>' : ''}
+        ${campoValor(l.valor_original ?? l.valor)}
         ${campoDescricao(l.descricao, 'Ex.: Conta de luz')}
         ${campoCategoria(l.categoria_id, l.tipo)}
         ${camposCaixa(l)}
@@ -170,7 +208,18 @@ export function abrirEdicao(l, atualizar) {
   });
   const form = d.querySelector('form');
   mascaraDinheiro(form.valor);
-  form.addEventListener('change', (e) => e.target.name === 'tipo' && atualizarCategorias(form, form.tipo.value));
+  ligarCamposCaixa(form);
+  const textosDoTipo = () => {
+    const entrada = form.tipo.value === 'entrada';
+    form.querySelector('[data-texto-pago]').textContent = entrada ? 'Já foi recebido' : 'Já foi pago';
+    form.querySelector('[data-rotulo-pagamento]').textContent = entrada ? 'Data do recebimento' : 'Data do pagamento';
+  };
+  textosDoTipo();
+  form.addEventListener('change', (e) => {
+    if (e.target.name !== 'tipo') return;
+    atualizarCategorias(form, form.tipo.value);
+    textosDoTipo();
+  });
   d.querySelector('[data-excluir]').onclick = () => excluir(l, atualizar, d);
   form.onsubmit = semRepetir(async (e) => {
     e.preventDefault();
@@ -181,11 +230,7 @@ export function abrirEdicao(l, atualizar) {
     botao.disabled = true;
     try {
       const { pessoaNome, ...resto } = dados;
-      const r = await atualizarLancamento(l.id, {
-        ...resto,
-        pessoa_id: await pessoaPorNome(pessoaNome),
-        data_pagamento: resto.pago ? l.data_pagamento || hojeISO() : null,
-      });
+      const r = await atualizarLancamento(l.id, { ...resto, pessoa_id: await pessoaPorNome(pessoaNome) });
       d.close();
       toast(`Alterações em “${resto.descricao}” salvas`, { acao: desfazendo(r.desfazer, atualizar) });
       atualizar();

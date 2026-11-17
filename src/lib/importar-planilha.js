@@ -278,6 +278,8 @@ export function montarPlano(abas, escolhas, resolucoes = {}) {
     .map((a) => ({ ...a, mes: escolhas[a.nome].mes, ano: escolhas[a.nome].ano }))
     .sort((a, b) => a.ano - b.ano || a.mes - b.mes);
   const primeira = usadas[0];
+  // nomes dos cartões que têm bloco na planilha (para reconhecer o pagamento da fatura antes de ler o bloco)
+  const cartoesDaPlanilha = [...new Set(usadas.flatMap((a) => a.titulos.blocos.map((b) => b.cartao).filter(Boolean)))];
 
   // mesmo mês em duas abas: pode ser cópia
   const vistos = new Map();
@@ -329,22 +331,38 @@ export function montarPlano(abas, escolhas, resolucoes = {}) {
         const dataPgto = pago ? lerData(cel(r, caixa.pagamento), ref) || venc : null;
         const parc = cel(r, caixa.parcela);
         const textoParcela = lerParcela(parc)?.texto || (typeof parc === 'number' ? '' : limpo(parc));
-        const extra = [limpo(cel(r, caixa.referencia)), textoParcela && `(${textoParcela})`].filter(Boolean);
-        const descricao = [desc || cat || 'Sem descrição', ...extra].join(' ').slice(0, 120);
+        // REFERENCIA vira a observação do lançamento; PARCELA ("11/12") fica no campo da parcela
+        const referencia = limpo(cel(r, caixa.referencia));
+        const descricao = (desc || cat || 'Sem descrição').slice(0, 120);
 
-        // pagamento de fatura de cartão (ex.: categoria "Fatura Nubank" ou "Cartão Thays")
+        // pagamento de fatura de cartão (ex.: categoria "Fatura Nubank" ou "Cartão Mercado Pago")
         const textoTodo = chave(`${cat} ${desc}`);
-        const cartaoPago = tipo === 'saida' && /FATURA|CARTAO/.test(textoTodo) && !store.categorias.some((c) => chave(c.nome) === chave(cat))
-          ? [...store.cartoes, ...criados.values()].filter((c) => 'dia_fechamento' in c).find((c) => textoTodo.includes(chave(c.nome).replace(/^CARTAO/, '')))
+        let cartaoPago = tipo === 'saida' && /FATURA|CARTAO/.test(textoTodo) && !store.categorias.some((c) => chave(c.nome) === chave(cat))
+          ? [...store.cartoes, ...criados.values()].filter((c) => 'dia_fechamento' in c).find((c) => textoTodo.includes(chave(c.nome).replace(/^CARTAO/, ''))) || null
           : null;
+        // cartão que ainda não existe no sistema, mas tem bloco na planilha (ex.: "FATURA CARTÃO MARIA" e o bloco "CARTÃO MARIA")
+        if (!cartaoPago && tipo === 'saida' && /FATURA/.test(textoTodo) && !store.categorias.some((c) => chave(c.nome) === chave(cat))) {
+          const doBloco = cartoesDaPlanilha.find((n) => semCartao(n) && textoTodo.includes(semCartao(n)));
+          if (doBloco) {
+            const c = cartao(doBloco, onde);
+            if (fora(c)) continue;
+            cartaoPago = c;
+          }
+        }
 
         const catItem = cartaoPago ? null : categoria(cat, tipo, onde);
         if (fora(catItem)) continue;
+        // "Fatura 12/2026" na REFERENCIA diz de qual fatura é o pagamento (planilha gerada pelo sistema)
+        const mesFatura = /(\d{1,2})\/(\d{4})/.exec(referencia);
+        const faturaMes = cartaoPago && mesFatura && /FATURA/.test(chave(referencia)) && +mesFatura[1] >= 1 && +mesFatura[1] <= 12
+          ? iso(+mesFatura[2], +mesFatura[1], 1) : mesISO;
         const item = {
           id: crypto.randomUUID(), tipo, valor: Math.abs(v), descricao, vencimento: venc, pago, data_pagamento: dataPgto,
           conta_id: contaItem.id, pessoa_id: pessoa(cel(r, caixa.pessoa))?.id ?? null, origem: 'planilha',
           categoria_id: catItem?.id ?? null,
-          ...(cartaoPago ? { fatura_cartao_id: cartaoPago.id, fatura_mes: mesISO } : {}),
+          observacao: cartaoPago || !referencia ? null : referencia.slice(0, 500),
+          parcela: textoParcela ? textoParcela.slice(0, 20) : null,
+          ...(cartaoPago ? { fatura_cartao_id: cartaoPago.id, fatura_mes: faturaMes, ...(/ADIANTAMENTO/.test(textoTodo) ? { adiantamento: true } : {}) } : {}),
         };
         if (repetido(jaTemLanc, kLanc(item))) { repetidos++; continue; }
         if (cartaoPago) faturas++;
@@ -389,15 +407,16 @@ export function montarPlano(abas, escolhas, resolucoes = {}) {
         if ([b.data - 1, b.data, b.categoria, b.descricao].some((i) => i >= 0 && TOTAL.test(chave(r[i])))) continue;
         const v = (lerNumero(bruto) ?? 0) * sinal;
         if (!v) { aviso(a, l, `compra "${desc || cat}" no ${cartaoItem.nome} está sem valor e não foi importada.`); continue; }
-        if (v < 0) { aviso(a, l, `"${desc || cat}" no ${cartaoItem.nome} tem valor negativo (estorno) e não foi importado. Lance como entrada se precisar.`); continue; }
         const catItem = categoria(cat, 'saida', { aba: a.nome, linha: l + 1, texto: desc || cat });
         if (fora(catItem)) continue;
-        const { numero, total } = lerParcela(cel(r, b.parcela)) || { numero: 1, total: 1 };
+        const estorno = v < 0; // sinal contrário ao das compras: reembolso/estorno (abate a fatura)
+        const { numero, total } = (!estorno && lerParcela(cel(r, b.parcela))) || { numero: 1, total: 1 };
         // sem data da compra: considera o dia 1º do mês da 1ª parcela
         const dataCompra = lerData(cel(r, b.data), ref, { antesDe: true }) || somarMeses(mesISO, -(numero - 1));
+        const textoRef = limpo(cel(r, b.referencia));
         linhasCartao.push({
-          aba: a.nome, cartao: cartaoItem, numero, total, valor: v, fatura: mesISO, data: dataCompra,
-          descricao: [desc || cat || 'Compra no cartão', limpo(cel(r, b.referencia))].filter(Boolean).join(' ').slice(0, 120),
+          aba: a.nome, cartao: cartaoItem, numero, total, valor: v, fatura: mesISO, data: dataCompra, estorno,
+          descricao: [desc || cat || (estorno ? 'Reembolso' : 'Compra no cartão'), chave(textoRef) === 'REEMBOLSO' ? '' : textoRef].filter(Boolean).join(' ').slice(0, 120),
           categoria: catItem, sub: limpo(cel(r, b.sub)) || null,
         });
         resumoAbas.get(a.nome).cartao++;
@@ -408,7 +427,7 @@ export function montarPlano(abas, escolhas, resolucoes = {}) {
   // ----- junta as parcelas da mesma compra (que aparecem em meses diferentes) e completa as que faltam
   const grupos = [];
   for (const x of linhasCartao) {
-    const k = [x.cartao.id, x.data, chave(x.descricao), x.total].join('|');
+    const k = [x.cartao.id, x.data, chave(x.descricao), x.total, x.estorno ? 'E' : ''].join('|');
     const g = x.total > 1 && grupos.find((y) => y.k === k && !y.parcelas.has(x.numero));
     if (g) g.parcelas.set(x.numero, x);
     else grupos.push({ k, x, parcelas: new Map([[x.numero, x]]) });
@@ -427,7 +446,9 @@ export function montarPlano(abas, escolhas, resolucoes = {}) {
     const compra = {
       id: crypto.randomUUID(), cartao_id: x.cartao.id, data_compra: x.data, descricao: x.descricao,
       categoria_id: x.categoria?.id ?? null, subcategoria: x.sub, qtd_parcelas: x.total, origem: 'planilha',
-      valor_total: Math.round(parcelas.reduce((s, p) => s + p.valor, 0) * 100) / 100,
+      // reembolso: a parcela fica negativa e o total positivo (como no Novo lançamento)
+      valor_total: Math.abs(Math.round(parcelas.reduce((s, p) => s + p.valor, 0) * 100) / 100),
+      tipo: x.estorno ? 'estorno' : 'compra',
     };
     if (repetido(jaTemCompra, kCompra(compra))) { repetidos++; continue; }
     compras.push({ compra, parcelas: parcelas.map((p) => ({ ...p, compra_id: compra.id })), completadas: x.total - g.parcelas.size });

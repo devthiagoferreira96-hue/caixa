@@ -3,7 +3,10 @@
 import { faturaDe, vencimentoFatura, dividirParcelas } from '../src/lib/faturas.js';
 import { somarMeses, lerValor, valorParaCampo, brl, esc, diasAte, quandoVence, somarDias, nomeMes } from '../src/lib/format.js';
 import { PALETAS, calcularTema, contraste, oklch, hexDe, coresDasPreferencias } from '../src/lib/temas.js';
-import { gastosPorCategoria, itensDaCategoria, saidasReais, totalDoCartao, resumoPorArea, entradasPorCategoria } from '../src/lib/calculos.js';
+import { calcularCarga, diferencaDePeso, precoNaData, proximoNumero, codigoCarga, resumoDasCargas, linhasContaCorrente, extratoContaCorrente, comparativoInsumos, totalDoInsumo, aReceberPorConta } from '../src/modulos/resina/calculos.js';
+import { numeroBR, dataDaCelula, lerPlanilhaConta, entenderLinha, produtorDaLinha, produtoParecido, montarImportacao } from '../src/modulos/resina/importar-conta.js';
+import { proximasDatas, completarLancamentos, completarAssinaturas, limiteRecorrencia, mesesEntre } from '../src/lib/recorrencia.js';
+import { gastosPorCategoria, itensDaCategoria, saidasReais, totalDoCartao, resumoPorArea, entradasPorCategoria, situacaoFatura, dividirAjustes } from '../src/lib/calculos.js';
 let ok=0, falhas=[];
 const t=(nome, obtido, esperado)=>{ const a=JSON.stringify(obtido), b=JSON.stringify(esperado); a===b?ok++:falhas.push(`${nome}: obtido ${a}, esperado ${b}`); };
 const MP={dia_fechamento:3,dia_vencimento:10}, VIRA={dia_fechamento:25,dia_vencimento:5}, F31={dia_fechamento:31,dia_vencimento:10}, IGUAL={dia_fechamento:10,dia_vencimento:10};
@@ -73,5 +76,264 @@ const ruim=calcularTema({principal:'#FFFF00',destaque:'#FFFF00',fundo:'#FFFFFF',
 t('cores ruins: texto ajustado',contraste(ruim.variaveis['--color-texto'],'#FFFFFF')>=4.5,true);
 t('cores ruins: avisos',ruim.avisos.length,3);
 t('preferência inválida volta ao padrão',coresDasPreferencias({paleta:'personalizada',cores:{principal:'azul'}}),PALETAS.verde.cores);
+
+// módulo Resina: carga, kg por Tbs, kg digitado, arrendamento e diferença de peso
+{
+  const carga = { preco_kg: 5.1, peso_fazenda: 3130, peso_chegada: 3085, peso_base: 'chegada' };
+  const itens = [{ produtor_id: 'a', tbs: 12, arrendamento: 45 }, { produtor_id: 'b', tbs: 9, arrendamento: 40 }];
+  const r = calcularCarga(carga, itens);
+  t('resina: peso que vale (chegada)', r.peso, 3085);
+  t('resina: soma dos kg = peso', Math.round(r.totais.kg * 100) / 100, 3085);
+  t('resina: kg do produtor pelos Tbs', Math.round(r.itens[0].kg * 100) / 100, Math.round(3085 * 12 / 21 * 100) / 100);
+  t('resina: valor = kg × preço', r.itens[0].valor, Math.round(3085 * 12 / 21 * 5.1 * 100) / 100);
+  t('resina: arrendamento 45%', r.itens[0].arrendamento, Math.round(r.itens[0].valor * 0.45 * 100) / 100);
+  t('resina: produtor + arrendamento = valor', Math.round((r.itens[0].produtor + r.itens[0].arrendamento) * 100) / 100, r.itens[0].valor);
+  t('resina: total = soma das partes', Math.round((r.totais.produtor + r.totais.arrendamento) * 100) / 100, r.totais.valor);
+  t('resina: diferença em kg', r.diferenca.kg, -45);
+  t('resina: diferença em reais', r.diferenca.valor, 229.5);
+  t('resina: diferença em %', Math.round(r.diferenca.pct * 100) / 100, -1.44);
+  t('resina: peso da fazenda quando marcado', calcularCarga({ ...carga, peso_base: 'fazenda' }, itens).peso, 3130);
+  t('resina: sem avisos', r.avisos, []);
+  // kg digitado à mão: o resto do peso vai para os outros
+  const m = calcularCarga(carga, [{ ...itens[0], kg_manual: 2000 }, itens[1]]);
+  t('resina: kg manual fica', m.itens[0].kg, 2000);
+  t('resina: resto para os outros', m.itens[1].kg, 1085);
+  t('resina: manual marcado', m.itens[0].manual, true);
+  t('resina: manual passa do peso', calcularCarga(carga, [{ ...itens[0], kg_manual: 4000 }, itens[1]]).avisos[0].tipo, 'manual-passa');
+  t('resina: todos manuais com soma diferente', calcularCarga(carga, [{ ...itens[0], kg_manual: 1000 }, { ...itens[1], kg_manual: 1000 }]).avisos[0].tipo, 'soma-diferente');
+  t('resina: todos manuais batendo', calcularCarga(carga, [{ ...itens[0], kg_manual: 2000 }, { ...itens[1], kg_manual: 1085 }]).avisos, []);
+  t('resina: sem peso', calcularCarga({ preco_kg: 5, peso_base: 'chegada' }, itens).avisos[0].tipo, 'sem-peso');
+  t('resina: sem peso, kg zerado', calcularCarga({ preco_kg: 5, peso_base: 'chegada' }, itens).totais.kg, 0);
+  t('resina: um peso só, sem diferença', diferencaDePeso({ peso_fazenda: 100, peso_chegada: null }), null);
+  t('resina: sem itens', calcularCarga(carga, []).totais, { tbs: 0, kg: 0, valor: 0, arrendamento: 0, produtor: 0 });
+  t('resina: 0% e 100% de arrendamento', calcularCarga(carga, [{ produtor_id: 'a', tbs: 1, arrendamento: 0 }, { produtor_id: 'b', tbs: 1, arrendamento: 100 }]).itens.map((i) => i.produtor === i.valor ? 'tudo' : i.produtor === 0 ? 'nada' : 'parte'), ['tudo', 'nada']);
+  // preço do kg por data e número das cargas
+  const precos = [{ inicio: '2026-01-01', valor_kg: 4.8 }, { inicio: '2026-09-15', valor_kg: 5.1 }];
+  t('resina: preço antes de mudar', precoNaData(precos, '2026-09-14').valor_kg, 4.8);
+  t('resina: preço no dia que muda', precoNaData(precos, '2026-09-15').valor_kg, 5.1);
+  t('resina: sem preço antes do primeiro', precoNaData(precos, '2025-12-31'), null);
+  const cargas = [{ data: '2026-03-01', numero: 7 }, { data: '2025-12-30', numero: 40 }];
+  t('resina: próximo número do ano', proximoNumero(cargas, '2026-11-11'), 8);
+  t('resina: ano novo começa do 1', proximoNumero(cargas, '2027-01-02'), 1);
+  t('resina: código da carga', codigoCarga({ data: '2026-11-11', numero: 43 }), 'C-2026-0043');
+  // resumo do mês por produtor
+  const res = resumoDasCargas([{ id: 1, ...carga }, { id: 2, ...carga, peso_fazenda: null }], new Map([[1, itens], [2, [itens[0]]]]));
+  t('resina: total de Tbs no mês', res.total.tbs, 33);
+  t('resina: Tbs do produtor no mês', res.produtores.find((p) => p.produtor_id === 'a').tbs, 24);
+  t('resina: cargas do produtor', res.produtores.find((p) => p.produtor_id === 'b').cargas, 1);
+  t('resina: só conta diferença onde tem as duas pesagens', res.total.comDiferenca, 1);
+}
+
+// módulo Resina: conta corrente do arrendamento (uma linha por produtor; débito = a receber)
+{
+  const c1 = { id: 'c1', numero: 1, data: '2026-10-20', titular_id: 'cnpj', preco_kg: 5, peso_chegada: 2000, peso_base: 'chegada', nota: '123', destino: 'Usina X' };
+  const c2 = { id: 'c2', numero: 2, data: '2026-11-05', titular_id: 'cnpj', preco_kg: 5, peso_chegada: 1000, peso_base: 'chegada' };
+  const c3 = { id: 'c3', numero: 3, data: '2026-11-06', titular_id: 'cpf', preco_kg: 5, peso_chegada: 1000, peso_base: 'chegada' };
+  const itens = new Map([
+    ['c1', [{ produtor_id: 'a', tbs: 6, arrendamento: 40 }, { produtor_id: 'b', tbs: 4, arrendamento: 50 }]],
+    ['c2', [{ produtor_id: 'a', tbs: 5, arrendamento: 40 }]],
+    ['c3', [{ produtor_id: 'b', tbs: 5, arrendamento: 50 }]],
+  ]);
+  const movs = [
+    { id: 'm1', titular_id: 'cnpj', tipo: 'credito', data: '2026-11-05', valor: 1500, criado_em: '2026-11-05T10:00' },
+    { id: 'm2', titular_id: 'cpf', tipo: 'credito', data: '2026-11-10', valor: 99, criado_em: '2026-11-10T10:00' },
+  ];
+  const linhas = linhasContaCorrente([c2, c1, c3], itens, movs, 'cnpj');
+  t('conta: uma linha por produtor e só da conta', linhas.length, 4);
+  t('conta: em ordem de data (carga antes do lançamento no mesmo dia)', linhas.map((l) => l.carga_id || l.movimento.id), ['c1', 'c1', 'c2', 'm1']);
+  const a1 = linhas[0];
+  t('conta: kg do produtor', a1.kg, 1200);
+  t('conta: média kg por tambor', a1.media, 200);
+  t('conta: UNI. = valor de um tambor', a1.uni, 1000);
+  t('conta: % arrendo é a porcentagem', a1.pct, 40);
+  t('conta: débito = tambores × UNI. × %', a1.debito, 6 * 1000 * 0.4);
+  t('conta: nota e destino da carga', [a1.nota, a1.destino], ['123', 'Usina X']);
+  const ext = extratoContaCorrente(linhas, '2026-11-01', '2026-12-01');
+  t('conta: saldo anterior (só outubro, a receber)', ext.saldoAnterior, -(2400 + 2000));
+  t('conta: débitos do mês', ext.debito, 2000);
+  t('conta: créditos do mês', ext.credito, 1500);
+  t('conta: saldo linha a linha', ext.linhas.map((l) => l.saldo), [-6400, -4900]);
+  t('conta: saldo final', ext.saldoFinal, -4900);
+  t('conta: saldo final = anterior + créditos − débitos', ext.saldoFinal, ext.saldoAnterior + ext.credito - ext.debito);
+  const soA = extratoContaCorrente(linhas, '2026-11-01', '2026-12-01', 'a');
+  t('conta: filtro por produtor', [soA.saldoAnterior, soA.debito, soA.credito], [-2400, 2000, 0]);
+  t('conta: CPF separado do CNPJ', extratoContaCorrente(linhasContaCorrente([c1, c2, c3], itens, movs, 'cpf'), '2026-11-01', '2026-12-01').saldoFinal, -2500 + 99);
+  t('conta: mês sem movimento mantém o saldo', extratoContaCorrente(linhas, '2026-12-01', '2027-01-01').saldoFinal, -4900);
+}
+
+// módulo Resina: insumos × produção (quem gasta mais insumo por kg de resina)
+{
+  t('insumo: total = quantidade × unitário', totalDoInsumo({ quantidade: 3, valor_unitario: 12.5 }), 37.5);
+  t('insumo: total digitado vale', totalDoInsumo({ quantidade: 3, valor_unitario: 3.3333, valor_total: 10 }), 10);
+  const produtores = [
+    { produtor_id: 'a', cargas: 2, tbs: 20, kg: 4000, valor: 20000, arrendamento: 8000, produtor: 12000 },
+    { produtor_id: 'b', cargas: 1, tbs: 10, kg: 1000, valor: 5000, arrendamento: 2500, produtor: 2500 },
+  ];
+  const insumos = [
+    { produtor_id: 'a', produto_id: 'pasta', quantidade: 20, valor_unitario: 50 },  // 1000
+    { produtor_id: 'b', produto_id: 'pasta', quantidade: 10, valor_unitario: 50 },  // 500
+    { produtor_id: 'b', produto_id: 'saco', quantidade: 100, valor_unitario: 5 },   // 500
+    { produtor_id: 'c', produto_id: 'saco', quantidade: 10, valor_unitario: 5 },    // 50, sem resina
+  ];
+  const c = comparativoInsumos(produtores, insumos);
+  const L = (id) => c.linhas.find((l) => l.produtor_id === id);
+  t('comp: gasto por produtor', [L('a').gasto, L('b').gasto, L('c').gasto], [1000, 1000, 50]);
+  t('comp: insumo por kg', [L('a').custoPorKg, L('b').custoPorKg], [0.25, 1]);
+  t('comp: média ponderada (só de quem entregou)', c.total.custoPorKg, 2000 / 5000);
+  t('comp: b muito acima da média', [L('b').alerta, Math.round(L('b').vsMedia * 100)], ['acima', 150]);
+  t('comp: a abaixo da média, sem alerta', L('a').alerta, null);
+  t('comp: usou insumo sem entregar resina', L('c').alerta, 'sem-producao');
+  t('comp: insumo em % do valor', L('b').pctDoValor, 20);
+  t('comp: parte do produtor − insumos', [L('a').liquidoProdutor, L('b').liquidoProdutor, L('c').liquidoProdutor], [11000, 1500, -50]);
+  t('comp: consumo por produto', [L('b').porProduto.get('pasta').quantidade, L('b').porProduto.get('saco').gasto], [10, 500]);
+  t('comp: quem entregou mais vem primeiro', c.linhas.map((l) => l.produtor_id), ['a', 'b', 'c']);
+  t('comp: sem insumos não dá alerta', comparativoInsumos(produtores, []).linhas.map((l) => l.alerta), [null, null]);
+}
+
+// módulo Resina: insumos entram na conta corrente como débito do produtor
+{
+  const ins = [{ id: 'i1', data: '2026-11-05', produtor_id: 'a', produto_id: 'pasta', titular_id: 'cnpj', quantidade: 10, valor_unitario: 12, valor_total: 120, criado_em: '1' },
+    { id: 'i2', data: '2026-11-05', produtor_id: 'a', produto_id: 'pasta', titular_id: 'cpf', quantidade: 1, valor_unitario: 5, criado_em: '2' }];
+  const ls = linhasContaCorrente([], new Map(), [], 'cnpj', ins);
+  t('conta: insumo vira débito na conta dele', ls.map((l) => [l.tipo, l.debito, l.credito]), [['insumo', 120, 0]]);
+  t('conta: insumo de outra conta fica de fora', linhasContaCorrente([], new Map(), [], 'cpf', ins).map((l) => l.debito), [5]);
+  t('conta: saldo com insumo', extratoContaCorrente(ls, '2026-11-01', '2026-12-01').saldoFinal, -120);
+}
+
+// módulo Resina: importar a planilha "Conta corrente arrendo"
+{
+  t('import: número brasileiro', [numeroBR('11.480'), numeroBR('3803,5'), numeroBR('R$ 4,60'), numeroBR('-1.234,56'), numeroBR(''), numeroBR(7)], [11480, 3803.5, 4.6, -1234.56, null, 7]);
+  t('import: datas', [dataDaCelula(46049), dataDaCelula('27/01/26'), dataDaCelula('2026-01-27'), dataDaCelula('31/02/2026'), dataDaCelula('')], ['2026-01-27', '2026-01-27', '2026-01-27', null, null]);
+  const cab = ['DATA', 'DESCRIÇÃO', 'NOTA', 'DESTINO CARGA', 'TAMBORES', '% ARRENDO', 'QUANTIDADE', 'UNI.', 'MÉDIA', 'R$ UNITARIO', 'CRÉDITO', 'DÉBITO', 'SALDO'];
+  const abas = [{ nome: 'P', linhas: [['CONTA CORRENTE'], cab,
+    [46049, '125 KG PASTA', 'NF 150 - VENC. 26/02', null, null, null, null, null, null, null, null, -500, 0],
+    [46051, 'CARGA 57 TBS = 11.480 KG X R$ 4,60 X 55%', 'P.R. RENATO', null, 57],
+    [46056, 'PIX VIA IN RESINAS', null, null, null, null, null, null, null, null, 2000],
+    [46120, 'CARGA 62 TBS = 12.580 KG - SENDO 32 CARLOS E 30 NOSSO'],
+    [46120, 'CARGA 32 TBS X 202,90 MEDIA X R$ 4,50 X 100% (NF 4,40 RECEBIDO A 4,50)', 'P.R. RENATO', null, 32],
+    [46120, 'CARGA 30 TBS X 202,90 MEDIA X R$ 4,50 X 55%', 'P.R. RENATO', null, 30],
+    [46250, '1 MIL SAQUINHOS SEM CONFECÇÃO'], [46250, '6,3KG ARAME'], [46250, '50% MÃO DE OBRA SAQUINHOS - PARTE MARIA'],
+    [46260, '2 KG ARAME - BEATRIZ PAGOU - 50% PARTE MARIA', null, null, null, null, null, null, null, null, null, -80],
+    [46315, 'CARGA 21 TBS X 202,08 MÉDIA X R$ 7,20 X 55%', null, null, 20],
+    [null, 'TOTAL'],
+  ] }];
+  const lidas = lerPlanilhaConta(abas);
+  t('import: acha a aba e as linhas', [lidas.length, lidas[0].linhas.length], [1, 11]);
+  const L = lidas[0].linhas.map(entenderLinha);
+  t('import: tipos', L.map((l) => l.tipo), ['insumo', 'carga', 'movimento', 'anotacao', 'carga', 'carga', 'insumo', 'insumo', 'movimento', 'insumo', 'carga']);
+  t('import: insumo com valor do débito', [L[0].quantidade, L[0].unidade, L[0].produto, L[0].valor, L[0].unitario, L[0].nota], [125, 'kg', 'PASTA', 500, 4, 'NF 150 - VENC. 26/02']);
+  t('import: carga com kg total', [L[1].tbs, L[1].kg, L[1].preco, L[1].pct], [57, 11480, 4.6, 55]);
+  t('import: carga com média', [L[4].kg, L[4].pct, L[4].preco], [6492.8, 100, 4.5]);
+  t('import: PIX com crédito na coluna', [L[2].tipoMov, L[2].valor], ['credito', 2000]);
+  t('import: "1 MIL" e "6,3KG"', [L[6].quantidade, L[6].unidade, L[6].produto, L[7].quantidade, L[7].produto], [1000, 'un', 'SAQUINHOS SEM CONFECÇÃO', 6.3, 'ARAME']);
+  t('import: "50% mão de obra" é lançamento', [L[8].tipo, L[8].tipoMov], ['movimento', '']);
+  t('import: observação depois do traço', [L[9].produto, L[9].obs, L[9].valor], ['ARAME', 'BEATRIZ PAGOU - 50% PARTE MARIA', 80]);
+  t('import: tambores diferentes viram aviso', [L[10].tbs, L[10].avisos.length], [20, 1]);
+  const prods = [{ id: 'j', nome: 'Carlos' }, { id: 'n', nome: 'Nosso' }, { id: 'a', nome: 'Beatriz Souza' }];
+  t('import: acha o produtor no texto', [produtorDaLinha(L[3], prods), produtorDaLinha(L[9], prods), produtorDaLinha(L[1], prods)], [null, 'a', null]);
+  t('import: produto parecido do cadastro', [produtoParecido('PASTA', [{ id: 'x', nome: 'Pasta' }])?.id, produtoParecido('Sacos', [{ id: 's', nome: 'saco' }])?.id, produtoParecido('Arame', [])], ['x', 's', null]);
+
+  const porLinha = Object.fromEntries(L.map((l) => [l.n, { produtor_id: l.tipo === 'movimento' ? null : 'n' }]));
+  porLinha[L[4].n].produtor_id = 'j';
+  const vazio = { cargas: [], itensPorCarga: new Map(), insumos: [], movimentos: [], produtos: [{ id: 'px', nome: 'Pasta', unidade: 'kg' }] };
+  const p = montarImportacao(L, { titular_id: 'cnpj', porLinha, produtos: {} }, vazio);
+  t('import: junta as linhas da mesma carga', p.cargas.map((c) => c.itens.map((i) => `${i.produtor_id}${i.tbs}@${i.arrendamento}`).join('+')), ['n57@55', 'j32@100+n30@55', 'n20@55']);
+  t('import: peso da carga juntada', p.cargas[1].carga.peso_chegada, 12579.8);
+  const conta = calcularCarga(p.cargas[1].carga, p.cargas[1].itens);
+  t('import: cada produtor fica com a média dele', conta.itens.map((i) => Math.round(i.kg * 10) / 10), [6492.8, 6087]);
+  t('import: insumos com valor entram, sem valor ficam pendentes', [p.insumos.length, p.pendentes.filter((x) => x.falta === 'valor').length], [2, 2]);
+  t('import: usa o produto do cadastro e só cria os usados', [p.insumos[0].produto_id, p.produtosNovos.map((x) => x.nome)], ['px', ['Arame']]);
+  t('import: PIX sem crédito/débito espera a escolha', p.pendentes.filter((x) => x.falta === 'tipo').length, 1);
+  t('import: total', [p.movimentos.length, p.total], [1, 6]);
+
+  // escolher crédito/débito e valor na conferência
+  porLinha[L[8].n] = { tipoMov: 'debito', valor: 150 };
+  const p2 = montarImportacao(L, { titular_id: 'cnpj', porLinha, produtos: {} }, vazio);
+  t('import: escolha da pessoa vale', p2.movimentos.map((m) => [m.tipo, m.valor]), [['credito', 2000], ['debito', 150]]);
+  porLinha[L[2].n] = { incluir: false };
+  t('import: linha desmarcada fica de fora', montarImportacao(L, { titular_id: 'cnpj', porLinha, produtos: {} }, vazio).puladas.length, 1);
+
+  // importar de novo não duplica
+  porLinha[L[2].n] = {};
+  const ja = {
+    ...vazio,
+    cargas: [{ id: 'c', data: '2026-01-29', titular_id: 'cnpj', preco_kg: 4.6 }], itensPorCarga: new Map([['c', [{ tbs: 57, arrendamento: 55 }]]]),
+    movimentos: [{ data: '2026-08-16', titular_id: 'cnpj', tipo: 'debito', valor: 150, descricao: '50% MÃO DE OBRA SAQUINHOS - PARTE MARIA' }],
+    insumos: [{ data: '2026-01-27', titular_id: 'cnpj', produtor_id: 'n', produto_id: 'px', quantidade: 125 }],
+  };
+  const p3 = montarImportacao(L, { titular_id: 'cnpj', porLinha, produtos: {} }, ja);
+  t('import: não repete o que já está no sistema', [p3.repetidas.length, p3.cargas.length, p3.insumos.length, p3.movimentos.length], [3, 2, 1, 1]);
+}
+
+// Caixa: repetição "sempre" (todo mês / todo ano) e assinaturas no cartão
+{
+  t('rec: meses entre datas', [mesesEntre('2026-01-31', '2026-03-05'), mesesEntre('2026-11-10', '2027-02-01')], [2, 3]);
+  t('rec: limite = 12 meses à frente', limiteRecorrencia(new Date(2026, 10, 17)), '2027-12-01');
+  t('rec: próximas datas mensais (dia 31)', proximasDatas('2026-01-31', '2026-01-31', '2026-05-01').map((x) => x.data), ['2026-02-28', '2026-03-31', '2026-04-30']);
+  t('rec: próximas datas anuais', proximasDatas('2026-03-10', '2026-03-10', '2029-01-01', 12).map((x) => x.data), ['2027-03-10', '2028-03-10']);
+  t('rec: continua de onde parou', proximasDatas('2026-01-05', '2026-03-05', '2026-06-01').map((x) => [x.indice, x.data]), [[3, '2026-04-05'], [4, '2026-05-05']]);
+  const base = { tipo: 'saida', valor: 100, descricao: 'Internet', categoria_id: 'c', conta_id: 'k', pessoa_id: null, grupo: 'g', recorrente: true, recorrente_base: '2026-11-10' };
+  const ls = [{ ...base, id: '1', vencimento: '2026-11-10', recorrente_ate: '2026-12-10' }, { ...base, id: '2', vencimento: '2026-12-10', recorrente_ate: '2026-12-10' }];
+  const r = completarLancamentos(ls, '2027-03-01');
+  t('rec: completa os meses que faltam', r.novos.map((n) => n.vencimento), ['2027-01-10', '2027-02-10']);
+  t('rec: novos ficam em aberto e no mesmo grupo', [r.novos[0].pago, r.novos[0].grupo, r.novos[0].valor, r.novos[0].recorrente], [false, 'g', 100, true]);
+  t('rec: guarda até onde foi', r.atualizar.get('g'), '2027-02-10');
+  // mês excluído com "só este" não volta (recorrente_ate já passou dele)
+  const semDez = [{ ...ls[0], recorrente_ate: '2027-02-10' }];
+  t('rec: mês excluído não volta', completarLancamentos(semDez, '2027-03-01').novos.length, 0);
+  t('rec: parada não completa', completarLancamentos(ls.map((l) => ({ ...l, recorrente: false })), '2027-06-01').novos.length, 0);
+  const anual = [{ ...base, id: '3', grupo: 'a', vencimento: '2026-03-10', recorrente_base: '2026-03-10', recorrente_ate: '2026-03-10', recorrente_intervalo: 12 }];
+  t('rec: anual completa um por ano', completarLancamentos(anual, '2028-06-01').novos.map((n) => n.vencimento), ['2027-03-10', '2028-03-10']);
+  const compra = { id: 'x', recorrente: true, valor_total: 39.9, recorrente_base: '2026-11-01', recorrente_ate: '2026-12-01' };
+  const ps = new Map([['x', [{ fatura_mes: '2026-11-01' }, { fatura_mes: '2026-12-01' }]]]);
+  const a = completarAssinaturas([compra], ps, '2027-03-01');
+  t('rec: assinatura completa as faturas', a.novas.map((p) => [p.numero, p.valor, p.fatura_mes]), [[3, 39.9, '2027-01-01'], [4, 39.9, '2027-02-01']]);
+  t('rec: assinatura atualiza a compra', a.atualizar.get('x'), { recorrente_ate: '2027-02-01', qtd_parcelas: 4 });
+  t('rec: assinatura cancelada não completa', completarAssinaturas([{ ...compra, recorrente: false }], ps, '2027-06-01').novas.length, 0);
+}
+
+// Caixa: fatura com adiantamento e reembolso
+{
+  t('fatura: sem compras', situacaoFatura(0, []).estado, 'sem');
+  t('fatura: em aberto', situacaoFatura(500, []).estado, 'aberta');
+  const adi = situacaoFatura(500, [{ valor: 200, pago: true, adiantamento: true }]);
+  t('fatura: adiantada em parte', [adi.estado, adi.pago, adi.falta], ['parcial', 200, 300]);
+  t('fatura: adiantamento + restante = paga', situacaoFatura(500, [{ valor: 200, pago: true }, { valor: 300, pago: true }]).estado, 'paga');
+  t('fatura: agendada', situacaoFatura(500, [{ valor: 500, pago: false }]).estado, 'agendada');
+  t('fatura: reembolso maior que as compras', situacaoFatura(-40, []).estado, 'credito');
+  const parcelas = [{ valor: 300, compra: { cartao_id: 'c', categoria_id: 'm' } }, { valor: -50, compra: { cartao_id: 'c', categoria_id: 'm', tipo: 'estorno' } }];
+  t('fatura: reembolso abate o total', totalDoCartao(parcelas, 'c'), 250);
+  t('fatura: reembolso abate a categoria', gastosPorCategoria([], parcelas).get('m'), 250);
+}
+// ---------- Pagamento dividido entre contas, desconto/juros e competência na repetição
+{
+  const soma = (l, c) => Math.round(l.reduce((s, x) => s + Number(x[c] || 0), 0) * 100) / 100;
+  const sem = dividirAjustes([{ conta_id: 'a', valor: 60 }, { conta_id: 'b', valor: 40 }], { desconto: null, juros: null });
+  t('dividir: sem desconto/juros não marca nada', sem.map((p) => [p.desconto, p.juros, p.valor_original]), [[null, null, null], [null, null, null]]);
+  const d = dividirAjustes([{ conta_id: 'a', valor: 60 }, { conta_id: 'b', valor: 30 }], { desconto: 10, juros: null });
+  t('dividir: desconto na proporção', d.map((p) => p.desconto), [6.67, 3.33]);
+  t('dividir: soma do desconto confere', soma(d, 'desconto'), 10);
+  t('dividir: original = parte + desconto − juros', d.map((p) => p.valor_original), [66.67, 33.33]);
+  t('dividir: soma dos originais = total original', soma(d, 'valor_original'), 100);
+  const j = dividirAjustes([{ conta_id: 'a', valor: 0.1 }, { conta_id: 'b', valor: 0.1 }, { conta_id: 'c', valor: 0.1 }], { desconto: null, juros: 0.1 });
+  t('dividir: juros em centavos sem sobrar', soma(j, 'juros'), 0.1);
+  t('dividir: parte sem juros fica null', j.map((p) => p.juros), [0.03, 0.03, 0.04]);
+  const comp = { tipo: 'saida', valor: 50, descricao: 'Luz', grupo: 'L', recorrente: true, recorrente_base: '2026-11-10', recorrente_ate: '2026-11-10', competencia: '2026-10-01', observacao: 'cód. 123' };
+  const rc = completarLancamentos([{ ...comp, id: 'x', vencimento: '2026-11-10' }], '2027-02-01');
+  t('rec: competência anda junto', rc.novos.map((n) => n.competencia), ['2026-11-01', '2026-12-01']);
+  t('rec: observação acompanha', rc.novos.map((n) => n.observacao), ['cód. 123', 'cód. 123']);
+  t('rec: sem competência continua null', completarLancamentos([{ ...comp, competencia: null, id: 'y', vencimento: '2026-11-10' }], '2027-01-01').novos[0].competencia, null);
+}
+
+// Ligação Resina → Caixa: arrendamento a receber por conta (Início)
+{
+  const c = { id: 'c1', data: '2026-11-02', numero: 1, titular_id: 'cnpj', preco_kg: 5, peso_base: 'chegada', peso_chegada: 1000 };
+  const itens = new Map([['c1', [{ produtor_id: 'a', tbs: 5, arrendamento: 40 }]]]);
+  const movs = [{ id: 'm', data: '2026-11-05', titular_id: 'cnpj', tipo: 'credito', valor: 500, criado_em: '1' }];
+  const ins = [{ id: 'i', data: '2026-11-03', titular_id: 'cnpj', produtor_id: 'a', quantidade: 2, valor_unitario: 50, criado_em: '1' }];
+  const r = aReceberPorConta([c], itens, movs, ins, ['cnpj', 'cpf'], '2026-11-18');
+  t('ligação: a receber = arrendamento + insumos − recebido', r.map((x) => [x.titular_id, x.aReceber]), [['cnpj', 2000 + 100 - 500], ['cpf', 0]]);
+  t('ligação: só até a data', aReceberPorConta([c], itens, movs, ins, ['cnpj'], '2026-11-03')[0].aReceber, 2000);
+}
 console.log(`${ok} passaram, ${falhas.length} falharam`); falhas.forEach(f=>console.log(' FALHA',f));
 if (falhas.length) process.exit(1);

@@ -1,7 +1,7 @@
 // Ponto de partida: primeiro acesso (criar usuário) ou tela de senha, depois abre o sistema
 import './style.css';
 import { store } from './lib/store.js';
-import { carregarCadastros } from './lib/api.js';
+import { carregarCadastros, manterRecorrencias } from './lib/api.js';
 import { local } from './lib/local-db.js';
 import { aplicarPreferencias } from './lib/preferencias.js';
 import { telaPrimeiroAcesso, telaSenha } from './pages/acesso.js';
@@ -24,23 +24,31 @@ async function iniciar() {
 async function abrirSistema() {
   store.usuario = local.usuario;
   await carregarCadastros();
+  // contas "sempre" e assinaturas no cartão: completa os próximos meses
+  try { await manterRecorrencias(); } catch (e) { console.error(e); }
   iniciarApp();
 }
 
-/** Bloqueia o sistema: esquece a chave da memória e volta para a tela de senha */
-export function bloquear() {
+/** Bloqueia o sistema: grava o que faltar, esquece a chave da memória e volta para a tela de senha */
+export async function bloquear() {
+  try { await local.gravarAgora(); } catch { /* segue bloqueando */ }
   local.bloquear();
   location.hash = '';
   location.reload();
 }
 
-// Pede a senha de novo quando o app fica em segundo plano por mais de 1 minuto
-// (no celular, "fechar" o app muitas vezes só o deixa em segundo plano)
-const BLOQUEAR_APOS_MS = 60_000;
-let saiuEm = null;
+// Pede a senha de novo só depois de 30 minutos sem uso (sem tocar, digitar ou rolar a tela).
+// O tempo com o app em segundo plano também conta (no celular, "fechar" o app muitas vezes só o deixa em segundo plano).
+const BLOQUEAR_APOS_MS = 30 * 60_000;
+let ultimoUso = Date.now();
+const usou = () => { ultimoUso = Date.now(); };
+for (const ev of ['pointerdown', 'keydown', 'wheel', 'touchstart', 'scroll']) window.addEventListener(ev, usou, { passive: true, capture: true });
+const conferirInatividade = () => {
+  if (store.usuario && Date.now() - ultimoUso > BLOQUEAR_APOS_MS) bloquear();
+};
+setInterval(conferirInatividade, 30_000);
 document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState === 'hidden') saiuEm = Date.now();
-  else if (saiuEm && store.usuario && Date.now() - saiuEm > BLOQUEAR_APOS_MS) bloquear();
+  if (document.visibilityState === 'visible') conferirInatividade();
 });
 window.addEventListener('caixa:bloquear', bloquear);
 

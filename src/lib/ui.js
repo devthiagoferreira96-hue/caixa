@@ -1,5 +1,6 @@
 // Peças de interface reutilizáveis: ícones, avisos (toast), janelas (dialog) e campo de valor
-import { esc, DIGITOS_VALOR, valorMaximoTexto } from './format.js';
+import { esc, brl, valorParaCampo, DIGITOS_VALOR, VALOR_MAXIMO, valorMaximoTexto } from './format.js';
+import { ehFormula, tentarFormula, OPERADORES } from './formula.js';
 
 const ICONES = {
   inicio: '<path d="M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/>',
@@ -35,6 +36,13 @@ const ICONES = {
   escudo: '<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>',
   baixar: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/>',
   enviar: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/>',
+  insumo: '<path d="M14 2v6a2 2 0 0 0 .245.96l5.51 10.08A2 2 0 0 1 18 22H6a2 2 0 0 1-1.755-2.96l5.51-10.08A2 2 0 0 0 10 8V2"/><path d="M6.453 15h11.094M8.5 2h7"/>',
+  tambor: '<ellipse cx="12" cy="5" rx="8" ry="2.5"/><path d="M4 5v14c0 1.4 3.6 2.5 8 2.5s8-1.1 8-2.5V5M4 10.5c0 1.4 3.6 2.5 8 2.5s8-1.1 8-2.5M4 15.5c0 1.4 3.6 2.5 8 2.5s8-1.1 8-2.5"/>',
+  caminhao: '<path d="M14 18V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v11a1 1 0 0 0 1 1h2M15 18H9M19 18h2a1 1 0 0 0 1-1v-3.65a1 1 0 0 0-.22-.62l-3.48-4.35A1 1 0 0 0 17.52 8H14"/><circle cx="17" cy="18" r="2"/><circle cx="7" cy="18" r="2"/>',
+  balanca: '<path d="M12 3v18M7 21h10M5 7h14M5 7l-3 7a3 3 0 0 0 6 0zM19 7l-3 7a3 3 0 0 0 6 0z"/>',
+  arvore: '<path d="M12 22v-5M12 2l-6 8h3l-4 6h14l-4-6h3z"/>',
+  dinheiro: '<rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2.5"/><path d="M6 12h.01M18 12h.01"/>',
+  cadastros: '<rect width="8" height="4" x="8" y="2" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2M12 11h4M12 16h4M8 11h.01M8 16h.01"/>',
   calendario: '<rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/>',
 };
 
@@ -130,34 +138,104 @@ export function confirmar(mensagem, { titulo = 'Tem certeza?', botao = 'Confirma
 // ---------- Campo de dinheiro: a pessoa digita só números e ele formata (1234 -> 12,34)
 // Aceita no máximo DIGITOS_VALOR dígitos (R$ 99.999.999,99). O que passar disso é ignorado
 // (inclusive ao colar) e aparece um aviso embaixo do campo, lido também por leitores de tela.
+// Também aceita conta como no Excel, sem precisar de "=" (ex.: 3*4,50 ou 3x4,50): a conta é feita
+// ao sair do campo ou apertar Enter, e o campo fica com o resultado (13,50).
 export function mascaraDinheiro(input) {
-  input.maxLength = DIGITOS_VALOR + Math.floor((DIGITOS_VALOR - 3) / 3) + 1; // dígitos + pontos + vírgula
+  const TAMANHO_NUMERO = DIGITOS_VALOR + Math.floor((DIGITOS_VALOR - 3) / 3) + 1; // dígitos + pontos + vírgula
+  const TAMANHO_FORMULA = 100;
+  input.maxLength = TAMANHO_NUMERO;
+  const area = input.closest('[data-campo]') || input.parentElement;
   const aviso = document.createElement('p');
   aviso.className = 'dica hidden font-medium text-amber-800 dark:text-amber-300';
   aviso.setAttribute('aria-live', 'polite');
-  (input.closest('[data-campo]') || input.parentElement).append(aviso);
+  const conta = document.createElement('p'); // mostra a fórmula e o resultado
+  conta.className = 'dica hidden tabular-nums';
+  conta.setAttribute('aria-live', 'polite');
+  area.append(conta, aviso);
 
-  const mostrarAviso = (mostrar) => {
-    aviso.textContent = mostrar ? `Valor máximo: ${valorMaximoTexto()} (${DIGITOS_VALOR} dígitos).` : '';
-    aviso.classList.toggle('hidden', !mostrar);
+  const mostrar = (el, texto) => {
+    el.textContent = texto || '';
+    el.classList.toggle('hidden', !texto);
   };
+  const mostrarAviso = (sim) => mostrar(aviso, sim ? `Valor máximo: ${valorMaximoTexto()} (${DIGITOS_VALOR} dígitos).` : '');
   const formatar = (d) => (d ? (Number(d) / 100).toLocaleString('pt-BR', { minimumFractionDigits: 2 }) : '');
 
+  /** Faz a conta da fórmula. Retorna false se ela tiver erro (o campo continua com a fórmula). */
+  const resolverFormula = () => {
+    if (!ehFormula(input.value)) return true;
+    const formula = input.value.trim();
+    const { valor, erro } = tentarFormula(formula);
+    const problema = erro
+      || (!(valor > 0) && `O resultado deu ${brl(valor)}. O valor precisa ser maior que zero.`)
+      || (valor > VALOR_MAXIMO && `O resultado passa do valor máximo (${valorMaximoTexto()}).`);
+    if (problema) {
+      mostrar(conta, '');
+      mostrar(aviso, `Conta: ${problema}`);
+      return false;
+    }
+    input.maxLength = TAMANHO_NUMERO;
+    input.value = valorParaCampo(valor);
+    input.dispatchEvent(new Event('input', { bubbles: true })); // atualiza prévias que escutam o campo
+    mostrar(aviso, '');
+    mostrar(conta, `${formula} = ${brl(valor)}`);
+    return true;
+  };
+
+  // "digitado" guarda o número como a pessoa digitou (ex.: "3"), enquanto o campo mostra
+  // formatado em centavos ("0,03"). Se ela digitar um sinal (3*), a conta começa com "3", e não "0,03".
+  // Se o campo mudou por outro caminho (limpo pelo sistema, edição no meio), vale o que aparece no campo.
+  let digitado = input.value;
+  const soDigitos = (t) => String(t ?? '').replace(/\D/g, '').replace(/^0+/, '');
+  const coerente = () => digitado != null && formatar(soDigitos(digitado)) === input.value;
+  const noFim = () => input.selectionStart === input.value.length && input.selectionEnd === input.value.length;
+
   input.addEventListener('beforeinput', (e) => {
+    if (ehFormula(input.value)) return; // já é conta: sem máscara nem limite de dígitos
+    if (!coerente()) digitado = input.value;
+    const dado = e.data || '';
+    const temSinal = dado === '=' || [...dado].some((c) => OPERADORES.includes(c));
+    if (e.inputType === 'insertText' && temSinal) {
+      if (!noFim()) return; // sinal no meio do número: entra como está e o campo vira conta
+      e.preventDefault();
+      input.maxLength = TAMANHO_FORMULA;
+      input.value = (dado.startsWith('=') ? '' : digitado) + dado;
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      return;
+    }
     // bloqueia novos dígitos quando o limite já foi atingido (a não ser que haja texto selecionado)
     const temSelecao = input.selectionStart !== input.selectionEnd;
-    const atuais = input.value.replace(/\D/g, '').replace(/^0+/, '').length;
-    if (e.inputType?.startsWith('insert') && !temSelecao && /\d/.test(e.data || '') && atuais >= DIGITOS_VALOR) {
+    const atuais = soDigitos(input.value).length;
+    if (e.inputType?.startsWith('insert') && !temSelecao && /\d/.test(dado) && atuais >= DIGITOS_VALOR) {
       e.preventDefault();
       mostrarAviso(true);
+      return;
     }
+    if (e.inputType === 'insertText' && /^[\d,]$/.test(dado) && noFim()) digitado += dado;
+    else if (e.inputType === 'deleteContentBackward' && noFim()) digitado = digitado.slice(0, -1);
+    else digitado = null;
   });
-  input.addEventListener('input', () => {
+  input.addEventListener('input', (e) => {
+    if (ehFormula(input.value)) {
+      input.maxLength = TAMANHO_FORMULA;
+      mostrar(aviso, '');
+      const { valor } = tentarFormula(input.value);
+      mostrar(conta, valor !== undefined ? `= ${brl(valor)}` : 'Conta: use + - * / (ou x). Ex.: 3*4,50');
+      return;
+    }
+    if (e.isTrusted) mostrar(conta, ''); // a pessoa voltou a digitar um número comum
+    input.maxLength = TAMANHO_NUMERO;
     const digitos = input.value.replace(/\D/g, '').replace(/^0+/, '');
     mostrarAviso(digitos.length > DIGITOS_VALOR);
     input.value = formatar(digitos.slice(0, DIGITOS_VALOR));
   });
-  input.addEventListener('blur', () => mostrarAviso(false));
+  // Enter com fórmula: faz a conta antes; se ela tiver erro, não envia o formulário
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && ehFormula(input.value) && !resolverFormula()) e.preventDefault();
+  });
+  input.addEventListener('blur', () => {
+    if (ehFormula(input.value)) resolverFormula();
+    else mostrarAviso(false);
+  });
 }
 
 // ---------- Mensagens de erro ao lado do campo (leitores de tela também anunciam)

@@ -3,6 +3,7 @@ import { esc, nomeMes, inicioMes } from '../lib/format.js';
 import { store } from '../lib/store.js';
 import { icone } from '../lib/ui.js';
 import { iconeAnimado, ligarIconesAnimados } from './icones-animados.js';
+import { resinaAtiva } from '../modulos/resina/dados.js';
 
 const MENU = [
   ['inicio', 'Início', 'inicio'],
@@ -12,6 +13,29 @@ const MENU = [
   ['ajustes', 'Ajustes', 'ajustes'],
   ['ajuda', 'Como usar', 'ajuda'],
 ];
+const MENU_RESINA = [
+  ['resina', 'Produção', 'tambor'],
+  ['cargas', 'Cargas', 'caminhao'],
+  ['insumos', 'Insumos', 'insumo'],
+  ['conta-corrente', 'Conta corrente', 'extrato'],
+  ['resina-cadastros', 'Cadastros', 'cadastros'],
+  ['ajustes', 'Ajustes', 'ajustes'],
+  ['ajuda', 'Como usar', 'ajuda'],
+];
+// Seletor de módulo: Caixa da família, Produção da resina e Cargas da resina
+const MODULOS = [
+  ['caixa', 'inicio', 'Caixa familiar', 'inicio'],
+  ['producao', 'resina', 'Produção resina', 'tambor'],
+  ['carga', 'cargas', 'Carga resina', 'caminhao'],
+];
+const ROTAS_RESINA = { resina: 'producao', 'resina-cadastros': 'producao', cargas: 'carga', carga: 'carga', 'conta-corrente': 'carga', insumos: 'producao' };
+let moduloAtual = 'caixa', seletorAtual = 'caixa';
+
+const seletorModulos = (classe) => `
+  <nav aria-label="Escolher módulo" data-seletor-modulo class="${classe}">
+    <ul class="seletor-modulo">${MODULOS.map(([id, rota, nome, ic]) =>
+      `<li><a href="#${rota}" data-modulo-link="${id}" data-anima>${iconeAnimado(ic, 'size-4')}<span>${nome}</span></a></li>`).join('')}</ul>
+  </nav>`;
 
 export function montarLayout() {
   document.getElementById('app').innerHTML = `
@@ -22,10 +46,13 @@ export function montarLayout() {
         <span class="flex size-10 items-center justify-center rounded-xl bg-brand-600 text-sm font-bold text-white" aria-hidden="true">R$</span>
         <div class="min-w-0"><p class="font-bold">Caixa da Família</p><p class="truncate text-sm text-stone-600 dark:text-stone-400" data-saudacao>Olá, ${esc(store.usuario)}</p></div>
       </div>
-      <a href="#novo" data-nav="novo" data-anima class="btn-primario mb-4 w-full">${iconeAnimado('mais')} Novo lançamento</a>
-      <nav aria-label="Menu principal"><ul class="grid gap-1">
-        ${MENU.map(([rota, nome, ic]) => `<li><a href="#${rota}" data-nav="${rota}" data-anima class="nav-link">${iconeAnimado(ic)}<span>${nome}</span></a></li>`).join('')}
-      </ul></nav>
+      ${seletorModulos('mb-4 hidden')}
+      <a href="#novo" data-nav="novo" data-menu="caixa" data-anima class="btn-primario mb-4 w-full">${iconeAnimado('mais')} Novo lançamento</a>
+      <a href="#carga" data-nav="carga" data-menu="resina" data-anima class="btn-primario mb-4 hidden w-full">${iconeAnimado('mais')} Nova carga</a>
+      <nav aria-label="Menu principal">
+        <ul class="grid gap-1" data-menu="caixa">${MENU.map(([rota, nome, ic]) => `<li><a href="#${rota}" data-nav="${rota}" data-anima class="nav-link">${iconeAnimado(ic)}<span>${nome}</span></a></li>`).join('')}</ul>
+        <ul class="hidden gap-1" data-menu="resina">${MENU_RESINA.map(([rota, nome, ic]) => `<li><a href="#${rota}" data-nav="${rota}" data-anima class="nav-link">${iconeAnimado(ic)}<span>${nome}</span></a></li>`).join('')}</ul>
+      </nav>
       <button type="button" data-bloquear data-anima class="nav-link mt-auto w-full cursor-pointer">${iconeAnimado('cadeado')}<span>Bloquear</span></button>
     </aside>
 
@@ -37,18 +64,26 @@ export function montarLayout() {
           <button type="button" id="btn-ajuda" data-anima class="btn-icone" aria-label="Ajuda desta tela" title="Ajuda desta tela">${iconeAnimado('ajuda')}</button>
           <a href="#ajustes" data-anima class="btn-icone lg:hidden" aria-label="Ajustes" title="Ajustes">${iconeAnimado('ajustes')}</a>
           <button type="button" data-bloquear data-anima class="btn-icone lg:hidden" aria-label="Bloquear o sistema" title="Bloquear">${iconeAnimado('cadeado')}</button>
+          ${seletorModulos('order-first hidden w-full lg:!hidden')}
         </div>
       </header>
       <main id="conteudo" tabindex="-1" class="mx-auto max-w-6xl px-4 pt-1 pb-32 outline-none lg:px-8 lg:pb-12"></main>
     </div>
 
     <nav aria-label="Menu principal" class="fixed inset-x-0 bottom-0 z-30 border-t border-stone-200 bg-cartao pb-[env(safe-area-inset-bottom)] lg:hidden dark:border-stone-800 dark:bg-stone-900">
-      <ul class="mx-auto grid max-w-lg grid-cols-5 items-end">
+      <ul class="mx-auto grid max-w-lg grid-cols-5 items-end" data-menu="caixa">
         ${navBaixo('inicio', 'Início', 'inicio')}
         ${navBaixo('extrato', 'Extrato', 'extrato')}
-        <li class="flex justify-center"><a href="#novo" data-nav="novo" data-anima class="-mt-6 flex size-16 items-center justify-center rounded-full bg-brand-600 text-white shadow-lg ring-4 ring-white transition active:scale-95 dark:ring-stone-900" aria-label="Novo lançamento">${iconeAnimado('mais', 'size-8')}</a></li>
+        ${botaoMais('novo', 'Novo lançamento')}
         ${navBaixo('cartoes', 'Cartões', 'cartao')}
         ${navBaixo('relatorio', 'Relatório', 'relatorio')}
+      </ul>
+      <ul class="mx-auto hidden max-w-lg grid-cols-5 items-end" data-menu="resina">
+        ${navBaixo('resina', 'Produção', 'tambor')}
+        ${navBaixo('cargas', 'Cargas', 'caminhao')}
+        ${botaoMais('carga', 'Nova carga')}
+        ${navBaixo('conta-corrente', 'Conta', 'extrato')}
+        ${navBaixo('resina-cadastros', 'Cadastro', 'cadastros')}
       </ul>
     </nav>
     <div id="toasts" class="pointer-events-none fixed inset-x-0 bottom-24 z-[60] flex flex-col items-center gap-2 px-4 lg:bottom-6 lg:pl-64"></div>`;
@@ -65,10 +100,35 @@ export function montarLayout() {
   };
 }
 
+const botaoMais = (rota, nome) =>
+  `<li class="flex justify-center"><a href="#${rota}" data-nav="${rota}" data-anima class="-mt-6 flex size-16 items-center justify-center rounded-full bg-brand-600 text-white shadow-lg ring-4 ring-white transition active:scale-95 dark:ring-stone-900" aria-label="${nome}">${iconeAnimado('mais', 'size-8')}</a></li>`;
+
 const navBaixo = (rota, nome, ic) =>
   `<li><a href="#${rota}" data-nav="${rota}" data-anima class="nav-baixo">${iconeAnimado(ic, 'size-6')}<span>${nome}</span></a></li>`;
 
+/** Em qual módulo está a tela (Ajustes e Como usar ficam no módulo de onde a pessoa veio) */
+export function moduloDaRota(rota) {
+  if (ROTAS_RESINA[rota]) return 'resina';
+  if (rota === 'ajustes' || rota === 'ajuda') return moduloAtual;
+  return 'caixa';
+}
+
 export function marcarMenu(rota) {
+  const ativa = resinaAtiva();
+  moduloAtual = ativa ? moduloDaRota(rota) : 'caixa';
+  if (ROTAS_RESINA[rota]) seletorAtual = ROTAS_RESINA[rota];
+  else if (moduloAtual === 'caixa') seletorAtual = 'caixa';
+  document.querySelectorAll('[data-seletor-modulo]').forEach((n) => n.classList.toggle('hidden', !ativa));
+  document.querySelectorAll('[data-modulo-link]').forEach((a) => {
+    const sim = a.dataset.moduloLink === seletorAtual;
+    a.classList.toggle('ativo', sim);
+    sim ? a.setAttribute('aria-current', 'true') : a.removeAttribute('aria-current');
+  });
+  document.querySelectorAll('[data-menu]').forEach((m) => {
+    const mostrar = m.dataset.menu === moduloAtual;
+    m.classList.toggle('hidden', !mostrar);
+    if (m.tagName === 'UL') m.classList.toggle('grid', mostrar);
+  });
   document.querySelectorAll('[data-nav]').forEach((a) => {
     const ativo = a.dataset.nav === rota;
     a.classList.toggle('ativo', ativo);

@@ -7,6 +7,14 @@ export const store = {
   cartoes: [],
   categorias: [],
   pessoas: [],
+  // módulo Resina
+  resina_fazendas: [],
+  resina_produtores: [],
+  resina_motoristas: [],
+  resina_caminhoes: [],
+  resina_precos: [],
+  resina_produtos: [], // insumos usados para coletar a resina
+  resina_titulares: [], // contas da proprietária (CNPJ e CPF) para a conta corrente
   mes: inicioMes(new Date()), // mês escolhido no topo da tela
 };
 

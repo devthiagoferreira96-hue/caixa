@@ -12,8 +12,10 @@ import cartoes from './pages/cartoes.js';
 import relatorio from './pages/relatorio.js';
 import ajustes from './pages/ajustes.js';
 import ajuda from './pages/ajuda.js';
+import { TELAS_RESINA } from './modulos/resina/telas.js';
 
-const TELAS = { inicio, extrato, novo, cartoes, relatorio, ajustes, ajuda };
+const TELAS = { inicio, extrato, novo, cartoes, relatorio, ajustes, ajuda, ...TELAS_RESINA };
+let parametro = null;
 let telaAtual = null;
 let redesenharMes = () => {};
 let versao = 0;
@@ -24,16 +26,29 @@ export function iniciarApp() {
   document.getElementById('btn-ajuda').onclick = () =>
     dialogo({ titulo: `Como usar: ${telaAtual.titulo}`, corpo: `<div class="grid gap-3 text-stone-700 dark:text-stone-300">${telaAtual.ajuda}</div>` });
   navegar(true);
+  window.addEventListener('caixa:remontar', remontarLayout);
   if (!lerPreferencias().tourVisto) setTimeout(abrirTour, 400);
 }
 
 
+/** Monta o menu de novo (ex.: depois de ligar ou desligar o módulo Resina) e redesenha a tela */
+export function remontarLayout() {
+  montarLayout();
+  document.getElementById('btn-ajuda').onclick = () =>
+    dialogo({ titulo: `Como usar: ${telaAtual.titulo}`, corpo: `<div class="grid gap-3 text-stone-700 dark:text-stone-300">${telaAtual.ajuda}</div>` });
+  navegar(true);
+}
+
 function navegar(primeiraVez) {
-  const rota = location.hash.slice(1) || 'inicio';
-  telaAtual = TELAS[rota] || TELAS.inicio;
+  // o endereço pode ter um complemento: #carga/<id>
+  const [rota0, param] = (location.hash.slice(1) || 'inicio').split('/');
+  const rota = TELAS[rota0] ? rota0 : 'inicio';
+  parametro = param ? decodeURIComponent(param) : null;
+  telaAtual = TELAS[rota];
   marcarMenu(rota);
-  document.getElementById('titulo-pagina').textContent = telaAtual.titulo;
-  document.title = `${telaAtual.titulo} · Caixa da Família`;
+  const titulo = typeof telaAtual.tituloPara === 'function' ? telaAtual.tituloPara(parametro) : telaAtual.titulo;
+  document.getElementById('titulo-pagina').textContent = titulo;
+  document.title = `${titulo} · Caixa da Família`;
   redesenharMes = seletorMes(telaAtual.usaMes, () => desenhar(true)) || (() => {});
   desenhar(false).then(() => {
     // leva o foco para o título (quem usa leitor de tela ouve em qual tela entrou)
@@ -51,7 +66,7 @@ export function redesenharSeSeguro() {
   if (!telaAtual) return false;
   const conteudo = document.getElementById('conteudo');
   const digitando = conteudo?.contains(document.activeElement) && document.activeElement.matches('input, textarea, select');
-  if (telaAtual === TELAS.novo || document.querySelector('dialog[open]') || digitando) return false;
+  if (telaAtual === TELAS.novo || telaAtual === TELAS.carga || document.querySelector('dialog[open]') || digitando) return false;
   redesenharMes();
   desenhar(true);
   return true;
@@ -67,6 +82,7 @@ async function desenhar(silencioso) {
   el.onclick = el.onchange = el.onsubmit = el.oninput = null;
   if (!silencioso) el.innerHTML = esqueleto();
   const ctx = {
+    param: parametro,
     atualizar: () => desenhar(true),
     irPara: (rota) => { location.hash = rota; },
     aoTrocarMes: () => { redesenharMes(); desenhar(true); },

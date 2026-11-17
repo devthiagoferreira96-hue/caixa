@@ -112,6 +112,7 @@
   .nav-baixo {
     @apply flex flex-col items-center gap-0.5 px-1 py-2 text-xs font-medium text-stone-700 dark:text-stone-400;
   }
+  .nav-baixo > span:last-child { @apply max-w-full truncate; letter-spacing: -0.01em; }
   .nav-baixo .ani-icone { @apply rounded-full px-3 py-0.5 box-content transition-colors; }
   .nav-baixo.ativo .ani-icone { @apply bg-brand-50 text-brand-700 dark:bg-brand-950 dark:text-brand-300; }
 
@@ -149,5 +150,32 @@
   .opcao-lista {
     @apply flex cursor-pointer items-start gap-3 rounded-xl border-2 border-stone-200 p-3 text-left transition hover:border-brand-300 has-checked:border-brand-600 has-checked:bg-brand-50 has-focus-visible:outline-2 has-focus-visible:outline-brand-500 dark:border-stone-700 dark:has-checked:bg-brand-950;
   }
+  /* seletor de módulo (Caixa familiar · Produção resina · Carga resina) */
+  .seletor-modulo { @apply grid gap-1 rounded-xl bg-stone-100 p-1 dark:bg-stone-800; }
+  .seletor-modulo a { @apply flex min-h-10 items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-stone-700 transition-colors hover:bg-white/60 dark:text-stone-300 dark:hover:bg-stone-900/60; }
+  .seletor-modulo a.ativo { @apply bg-white text-brand-800 shadow-sm dark:bg-stone-950 dark:text-brand-200; }
+  header .seletor-modulo { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  header .seletor-modulo a { @apply min-h-9 justify-center gap-1.5 px-1 py-1.5 text-center text-xs leading-tight; }
+
+  /* pesagem da carga e kg digitado à mão */
+  .opcao-peso { @apply rounded-xl border border-stone-200 p-3 transition-colors dark:border-stone-700; }
+  .opcao-peso:has(input[type=radio]:checked) { @apply border-brand-500 bg-brand-50/60 dark:border-brand-700 dark:bg-brand-950/40; }
+  .campo.kg-manual { @apply border-amber-400 bg-amber-50 dark:border-amber-600 dark:bg-amber-950/40; }
+
+  /* céu atrás da carreta da resina */
+  .cena-carreta { background: linear-gradient(#d6ecf7, #eaf5ef 60%, #e9eee9); }
+  .dark .cena-carreta { background: linear-gradient(#1e3a4c, #22392e 60%, #1c2620); }
+
   .esqueleto { @apply animate-pulse rounded-xl bg-stone-200 dark:bg-stone-800; }
 }
+
+/* Valor dos quadrinhos da resina: uma linha só. A fonte é a maior que cabe na caixa para
+   aquela quantidade de letras (--letras), entre 0,75rem e 1,25rem: "190" fica grande e
+   "R$ 1.234.562,50" diminui só o necessário numa caixa estreita. */
+.quadro-valor { font-size: clamp(0.75rem, calc(100cqi / (var(--letras, 12) * 0.64)), 1.25rem); line-height: 1.75rem; }
+
+/* Gráfico de insumos × produção (cores validadas para daltonismo, claro e escuro) */
+:root { --serie-insumo: #2a78d6; --serie-producao: #2a8a63; --grade-grafico: #e7e5e4; }
+.dark { --serie-insumo: #3987e5; --serie-producao: #43a57d; --grade-grafico: #3a3633; }
+.barra-grafico { height: 14px; border-radius: 0 4px 4px 0; transition: filter .15s; }
+.barra-alvo:hover .barra-grafico, .barra-alvo:focus-visible .barra-grafico { filter: brightness(1.12); }

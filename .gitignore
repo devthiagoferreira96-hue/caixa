@@ -3,3 +3,9 @@ dist
 .env
 .env.local
 .DS_Store
+
+# arquivos de teste (planilhas, PDFs e backups) ficam só no computador
+testes-navegador/arq/
+__pycache__/
+*.pyc
+*.log

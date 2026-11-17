@@ -1,0 +1,53 @@
+import asyncio, sys
+sys.path.insert(0,'/tmp/qa')
+from comum import preparar, pular_tour
+from playwright.async_api import async_playwright
+U='http://localhost:8765/'
+R=[]
+def ok(n,c,x=''): R.append(('PASS' if c else 'FALHA',n,x))
+async def toasts(pg): return await pg.locator('#toasts').inner_text()
+async def ir(pg,r): await pg.goto(U+'#'+r); await pg.wait_for_timeout(600)
+async def desfazer(pg): await pg.locator('#toasts >> text=Desfazer').last.click(); await pg.wait_for_timeout(700)
+tem = lambda pg, t: pg.locator('[data-editar]', has_text=t).count()
+async def main():
+    async with async_playwright() as p:
+        b=await p.chromium.launch(executable_path='/usr/bin/google-chrome')
+        pg=await (await b.new_context(viewport={'width':1280,'height':900})).new_page(); errs=[]
+        pg.on('pageerror',lambda e:errs.append(str(e)))
+        await preparar(pg,U); await pular_tour(pg)
+        await ir(pg,'extrato')
+        ok('Sem bolinha/filtro de "quem lançou"', await pg.locator('[aria-label^="Lançado por"], #f-f-autor').count()==0)
+        await pg.locator('[data-editar]', has_text='Pizzaria').click(); await pg.wait_for_timeout(300)
+        rod=await pg.inner_text('dialog[open]'); ok('Rodapé com data em que foi lançado', 'Lançado' in rod and 'por' not in rod.split('Lançado')[1][:6])
+        await pg.fill('dialog #f-descricao','Pizzaria do Zé'); await pg.click('dialog button[type=submit]'); await pg.wait_for_timeout(600)
+        await desfazer(pg); ok('Desfazer edição', await tem(pg,'Pizzaria do Zé')==0 and await tem(pg,'Pizzaria')==1)
+        await pg.locator('[data-editar]', has_text='Gasolina').click(); await pg.wait_for_timeout(300)
+        await pg.click('dialog [data-excluir]'); await pg.wait_for_timeout(300); await pg.click('dialog [data-resposta=sim]'); await pg.wait_for_timeout(600)
+        ok('Excluir', await tem(pg,'Gasolina')==0); await desfazer(pg); ok('Desfazer exclusão', await tem(pg,'Gasolina')==1)
+        b1=pg.locator('[data-pagar][aria-pressed=false]').first; lbl=await b1.get_attribute('aria-label'); await b1.click(); await pg.wait_for_timeout(500)
+        await desfazer(pg); ok('Desfazer marcar como pago', await pg.locator(f'[data-pagar][aria-label="{lbl}"]').count()==1)
+        await ir(pg,'novo'); await pg.fill('#f-valor','4321'); await pg.fill('#f-descricao','Teste desfazer'); await pg.select_option('#f-categoria',label='Lazer'); await pg.click('button[type=submit]'); await pg.wait_for_timeout(500)
+        await desfazer(pg); await ir(pg,'extrato'); ok('Desfazer lançamento novo', await tem(pg,'Teste desfazer')==0)
+        await ir(pg,'cartoes'); nome=(await pg.locator('[aria-label^="Excluir a compra"]').first.get_attribute('aria-label')).replace('Excluir a compra ','')
+        await pg.locator('[aria-label^="Excluir a compra"]').first.click(); await pg.wait_for_timeout(300); await pg.click('dialog [data-resposta=sim]'); await pg.wait_for_timeout(600)
+        ok('Excluir compra', nome not in await pg.inner_text('#conteudo')); await desfazer(pg); ok('Desfazer exclusão da compra', nome in await pg.inner_text('#conteudo'))
+        card=pg.locator('section', has=pg.locator('[data-pagar-fatura]')).first
+        await card.locator('[data-pagar-fatura]').click(); await pg.wait_for_timeout(300); await pg.click('text=Confirmar pagamento'); await pg.wait_for_timeout(600)
+        n=await pg.locator('text=Paga em').count(); await desfazer(pg); ok('Desfazer pagamento de fatura', await pg.locator('text=Paga em').count()==n-1)
+        await ir(pg,'ajustes'); await pg.evaluate("document.querySelectorAll('details').forEach(d=>d.open=true)")
+        await pg.locator('form[data-tabela=pessoas]', has=pg.locator('input[value="João"]')).locator('[data-excluir]').click(); await pg.wait_for_timeout(300); await pg.click('dialog [data-resposta=sim]'); await pg.wait_for_timeout(600)
+        await desfazer(pg); await ir(pg,'extrato'); ok('Desfazer exclusão de pessoa religa lançamentos', await tem(pg,'Conta corrente · João')==1)
+        await ir(pg,'ajustes'); await pg.evaluate("document.querySelectorAll('details').forEach(d=>d.open=true)")
+        await pg.locator('form[data-tabela=cartoes]', has=pg.locator('input[value="Mercado Pago"]')).locator('[data-excluir]').click(); await pg.wait_for_timeout(300); await pg.click('dialog [data-resposta=sim]'); await pg.wait_for_timeout(600)
+        await desfazer(pg); await ir(pg,'cartoes'); ok('Desfazer exclusão de cartão traz as compras', 'Geladeira' in await pg.inner_text('#conteudo'))
+        await ir(pg,'ajustes'); await pg.evaluate("document.querySelectorAll('details').forEach(d=>d.open=true)")
+        f=pg.locator('form[data-tabela=categorias]', has=pg.locator('input[value="Lazer"]')); await f.locator('input[name=nome]').fill('Passeios'); await f.locator('button[type=submit]').click(); await pg.wait_for_timeout(500)
+        await desfazer(pg); await pg.evaluate("document.querySelectorAll('details').forEach(d=>d.open=true)")
+        ok('Desfazer renomear categoria', await pg.locator('form[data-tabela=categorias] input[value="Lazer"]').count()==1)
+        await pg.fill('#a-meu-nome','Thi'); await pg.click('form[data-meu-nome] button'); await pg.wait_for_timeout(500); await desfazer(pg)
+        ok('Desfazer troca de nome', 'Olá, Thiago' in await pg.inner_text('aside'))
+        ok('Sem erros de JavaScript', not errs, '; '.join(errs[:3]))
+        await b.close()
+    for r in R: print(*r)
+    print(sum(r[0]=='PASS' for r in R),'passaram /',len(R))
+asyncio.run(main())

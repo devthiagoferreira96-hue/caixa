@@ -24,7 +24,7 @@ export function itensDaCategoria(categoriaId, lancamentos, parcelas) {
       .filter((p) => (p.compra.categoria_id ?? null) === categoriaId)
       .map((p) => ({
         data: p.compra.data_compra,
-        descricao: p.compra.descricao + (p.compra.qtd_parcelas > 1 ? ` (${p.numero}/${p.compra.qtd_parcelas})` : ''),
+        descricao: p.compra.descricao + (p.compra.tipo === 'estorno' ? ' (reembolso)' : p.compra.recorrente_base ? '' : p.compra.qtd_parcelas > 1 ? ` (${p.numero}/${p.compra.qtd_parcelas})` : ''),
         valor: p.valor,
         origem: 'cartao',
         cartao_id: p.compra.cartao_id,
@@ -59,3 +59,63 @@ export function entradasPorCategoria(lancamentos) {
   entradas(lancamentos).forEach((l) => m.set(l.categoria_id ?? null, (m.get(l.categoria_id ?? null) || 0) + Number(l.valor)));
   return m;
 }
+
+/**
+ * Situação da fatura de um cartão num mês. `pagamentos` = lançamentos com fatura_cartao_id desse cartão e fatura_mes desse mês
+ * (pagamento da fatura e adiantamentos). Retorna { pago, falta, agendado, estado }, com estado:
+ * 'sem' (sem compras), 'paga', 'parcial' (adiantou uma parte), 'agendada' (pagamento lançado mas não pago) ou 'aberta'.
+ * Fatura só com reembolso (total negativo) conta como crédito: estado 'credito'.
+ */
+export function situacaoFatura(total, pagamentos) {
+  const c = (v) => Math.round(v * 100) / 100;
+  const pago = c(somar(pagamentos.filter((p) => p.pago)));
+  const agendado = pagamentos.find((p) => !p.pago) || null;
+  const falta = c(Math.max(0, total - pago));
+  const estado = total < -0.004 ? 'credito'
+    : total < 0.005 && !pago ? 'sem'
+    : falta < 0.005 ? 'paga'
+    : agendado ? 'agendada'
+    : pago > 0 ? 'parcial' : 'aberta';
+  return { pago, falta, agendado, estado };
+}
+
+// ---------- Pagamento dividido entre contas
+const arred = (v) => Math.round(v * 100) / 100;
+
+/** Divide desconto e juros entre as partes de um pagamento, na proporção de cada parte */
+export function dividirAjustes(partes, { desconto, juros }) {
+  const total = partes.reduce((s, p) => s + p.valor, 0);
+  let restoD = desconto || 0, restoJ = juros || 0;
+  return partes.map((p, i) => {
+    const ultima = i === partes.length - 1;
+    const d = ultima ? arred(restoD) : arred(((desconto || 0) * p.valor) / total);
+    const j = ultima ? arred(restoJ) : arred(((juros || 0) * p.valor) / total);
+    restoD -= d; restoJ -= j;
+    const ajuste = d > 0 || j > 0;
+    return { ...p, desconto: d > 0 ? d : null, juros: j > 0 ? j : null, valor_original: ajuste ? arred(p.valor + d - j) : null };
+  });
+}
+
+// ---------- Em qual mês cada lançamento entra nos relatórios
+/**
+ * Bases para organizar os relatórios:
+ *  - vencimento: o dia em que vence (padrão)
+ *  - competencia: o mês a que a conta se refere (sem competência, vale o vencimento)
+ *  - pagamento: o dia em que o dinheiro saiu ou entrou de fato (regime de caixa; o que não foi pago fica de fora)
+ * As compras no cartão entram sempre pelo mês da fatura.
+ */
+export const BASES_RELATORIO = {
+  vencimento: { nome: 'Vencimento', explica: 'Cada lançamento entra no mês em que vence.' },
+  competencia: { nome: 'Competência', explica: 'Cada lançamento entra no mês a que se refere (ex.: a luz de outubro paga em novembro conta em outubro). Sem competência, vale o vencimento.' },
+  pagamento: { nome: 'Pagamento', explica: 'Só o que já foi pago ou recebido, no mês em que o dinheiro saiu ou entrou. O que está em aberto fica de fora.' },
+};
+
+/** Data (ISO) que decide o mês do lançamento na base escolhida, ou null se ele não entra (em aberto, na base pagamento) */
+export function dataDeReferencia(l, base = 'vencimento') {
+  if (base === 'competencia') return l.competencia ? `${l.competencia.slice(0, 7)}-01` : l.vencimento;
+  if (base === 'pagamento') return l.pago ? l.data_pagamento || l.vencimento : null;
+  return l.vencimento;
+}
+
+/** "AAAA-MM" do lançamento na base escolhida, ou null */
+export const mesDeReferencia = (l, base = 'vencimento') => dataDeReferencia(l, base)?.slice(0, 7) ?? null;

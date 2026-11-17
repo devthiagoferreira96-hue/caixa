@@ -7,10 +7,14 @@ import { local } from './local-db.js';
 import { store } from './store.js';
 import { mesISO } from './format.js';
 import { TIPO_PADRAO } from './exemplo.js';
+import { completarLancamentos, completarAssinaturas, limiteRecorrencia } from './recorrencia.js';
+import { CADASTROS_RESINA, conferirResina } from '../modulos/resina/tabelas.js';
 
 /** Transforma erros técnicos em mensagens que qualquer pessoa entende */
 export function traduzirErro(e) {
   const m = String(e?.message || e || '');
+  if ((e?.code === '23503' || /foreign key/i.test(m)) && /insumos/.test(m)) return new Error('Esse produto já foi usado em lançamentos de insumos, por isso não pode ser excluído. Desmarque "Em uso" para ele sumir das listas.');
+  if ((e?.code === '23503' || /foreign key/i.test(m)) && /cargas/.test(m)) return new Error('Esse item já foi usado em cargas, por isso não pode ser excluído. Desmarque "Em uso" para ele sumir das listas.');
   if (e?.code === '23503' || /foreign key/i.test(m)) return new Error('Esse item já foi usado em lançamentos, por isso não pode ser excluído.');
   return new Error(m || 'Algo deu errado. Tente de novo.');
 }
@@ -21,7 +25,7 @@ const ok = ({ data, error }) => {
 };
 
 // ---------- Escritas: aplica na cópia local e coloca na fila
-const COM_DATA = ['lancamentos', 'compras_cartao']; // guardam quando foram lançados/alterados
+const COM_DATA = ['lancamentos', 'compras_cartao', 'resina_cargas', 'resina_movimentos', 'resina_insumos']; // guardam quando foram lançados/alterados
 const agora = () => new Date().toISOString();
 
 async function inserir(tabela, linhas) {
@@ -49,8 +53,8 @@ const valoresAnteriores = (antes, valores) => Object.fromEntries(Object.keys(val
 
 // ---------- Cadastros (contas, cartões, categorias, pessoas)
 export async function carregarCadastros() {
-  for (const t of ['contas', 'cartoes', 'categorias', 'pessoas']) {
-    store[t] = ok(await local.from(t).select('*').order('nome'));
+  for (const t of ['contas', 'cartoes', 'categorias', 'pessoas', ...CADASTROS_RESINA]) {
+    store[t] = ok(await local.from(t).select('*').order(t === 'resina_precos' ? 'inicio' : 'nome'));
   }
   if (store.categorias.some((c) => !c.tipo)) {
     await completarTipoDasCategorias();
@@ -110,13 +114,16 @@ export async function excluirItem(tabela, id) {
     lancs = await copiar('lancamentos', 'fatura_cartao_id', [id]);
     coluna = 'fatura_cartao_id';
   }
-  if (tabela === 'pessoas') { lancs = await copiar('lancamentos', 'pessoa_id', [id]); coluna = 'pessoa_id'; }
+  if (tabela === 'pessoas') {
+    lancs = await copiar('lancamentos', 'pessoa_id', [id]); coluna = 'pessoa_id';
+    compras = await copiar('compras_cartao', 'pessoa_id', [id]);
+  }
   await remover(tabela, [id]);
   await carregarCadastros();
   return async () => {
     await reinserir(tabela, [item]);
-    await reinserir('compras_cartao', compras);
-    await reinserir('parcelas', parcelas);
+    if (tabela === 'pessoas') { if (compras.length) await alterar('compras_cartao', compras.map((c) => c.id), { pessoa_id: id }); }
+    else { await reinserir('compras_cartao', compras); await reinserir('parcelas', parcelas); }
     if (lancs.length) await alterar('lancamentos', lancs.map((l) => l.id), { [coluna]: id });
     await carregarCadastros();
   };
@@ -157,6 +164,47 @@ export async function excluirLancamentos(ids) {
   return () => reinserir('lancamentos', linhas);
 }
 
+/**
+ * Encerra uma repetição "sempre" (ao excluir este e os próximos): os meses que ficaram
+ * deixam de ser recorrentes e o sistema não lança mais nada. Retorna `desfazer()`.
+ */
+export async function pararRecorrencia(grupo) {
+  const itens = ok(await local.from('lancamentos').select('*').eq('grupo', grupo).eq('recorrente', true));
+  if (!itens.length) return async () => {};
+  await alterar('lancamentos', itens.map((l) => l.id), { recorrente: false });
+  return () => alterar('lancamentos', itens.map((l) => l.id), { recorrente: true });
+}
+
+/**
+ * Mantém lançados os próximos meses das contas "sempre" e das assinaturas no cartão.
+ * Chamado ao abrir o sistema e depois de criar uma repetição.
+ */
+export async function manterRecorrencias(hoje = new Date()) {
+  const limite = limiteRecorrencia(hoje);
+  const recorrentes = ok(await local.from('lancamentos').select('*').eq('recorrente', true));
+  if (recorrentes.length) {
+    const { novos, atualizar } = completarLancamentos(recorrentes, limite);
+    if (novos.length) await inserir('lancamentos', novos);
+    for (const [grupo, ate] of atualizar) {
+      const ids = ok(await local.from('lancamentos').select('*').eq('grupo', grupo)).map((l) => l.id);
+      ok(await local.from('lancamentos').update({ recorrente_ate: ate }).in('id', ids));
+    }
+  }
+  const assinaturas = ok(await local.from('compras_cartao').select('*').eq('recorrente', true));
+  if (assinaturas.length) {
+    const ps = ok(await local.from('parcelas').select('*').in('compra_id', assinaturas.map((c) => c.id)));
+    const porCompra = new Map();
+    ps.forEach((p) => (porCompra.get(p.compra_id) || porCompra.set(p.compra_id, []).get(p.compra_id)).push(p));
+    const { novas, atualizar } = completarAssinaturas(assinaturas, porCompra, limite);
+    if (novas.length) await inserir('parcelas', novas);
+    for (const [id, valores] of atualizar) ok(await local.from('compras_cartao').update(valores).in('id', [id]));
+  }
+}
+
+/** As partes de um pagamento dividido entre contas (mesmo `divisao`) */
+export const lancamentosDaDivisao = async (divisao) =>
+  ok(await local.from('lancamentos').select('*').eq('divisao', divisao));
+
 /** Lançamentos repetidos (mesmo grupo) a partir de uma data */
 export const lancamentosDoGrupo = async (grupo, aPartirDe) =>
   ok(await local.from('lancamentos').select('*').eq('grupo', grupo).gte('vencimento', aPartirDe));
@@ -191,6 +239,25 @@ export async function criarCompra(compra, parcelas) {
   const [salva] = await inserir('compras_cartao', [compra]);
   await inserir('parcelas', parcelas.map((p) => ({ ...p, compra_id: salva.id })));
   return salva;
+}
+
+/**
+ * Exclui parcelas de uma compra (só uma, ou esta e as próximas).
+ * Na assinatura, "esta e as próximas" também cancela a assinatura (o sistema não lança mais meses).
+ * Se não sobrar nenhuma parcela, a compra é excluída. Retorna `desfazer()`.
+ */
+export async function excluirParcelas(compraId, { parcelaId = null, aPartirDe = null } = {}) {
+  const [compra] = await copiar('compras_cartao', 'id', [compraId]);
+  const todas = await copiar('parcelas', 'compra_id', [compraId]);
+  const sair = todas.filter((p) => (parcelaId ? p.id === parcelaId : p.fatura_mes >= aPartirDe));
+  if (sair.length === todas.length) return excluirCompra(compraId);
+  await remover('parcelas', sair.map((p) => p.id));
+  const cancelar = !parcelaId && compra.recorrente === true;
+  if (cancelar) await alterar('compras_cartao', [compraId], { recorrente: false });
+  return async () => {
+    await reinserir('parcelas', sair);
+    if (cancelar) await alterar('compras_cartao', [compraId], { recorrente: true });
+  };
 }
 
 /** Exclui a compra e as parcelas. Retorna `desfazer()`. */
@@ -274,6 +341,11 @@ const numero = (v) => {
   return Number.isFinite(n) ? Math.round(n * 100) / 100 : null;
 };
 const texto = (v, max = 120) => (v == null ? '' : String(v)).slice(0, max);
+/** Desconto, juros, valor original: número maior que zero ou null */
+const positivo = (v) => {
+  const n = v == null || v === '' ? null : numero(v);
+  return n !== null && n > 0 && n <= 99_999_999.99 ? n : null;
+};
 
 /**
  * Confere cada linha do backup: corrige o que dá (número em texto, nome vazio, id faltando)
@@ -330,6 +402,11 @@ export function conferirTabelas(entrada) {
       data_pagamento: dataValida(l.data_pagamento) ? l.data_pagamento : null,
       conta_id: ref('contas', l.conta_id), categoria_id: ref('categorias', l.categoria_id), pessoa_id: ref('pessoas', l.pessoa_id),
       fatura_cartao_id: ref('cartoes', l.fatura_cartao_id) ?? null, fatura_mes: dataValida(l.fatura_mes) ? l.fatura_mes : null,
+      recorrente: l.recorrente === true,
+      competencia: dataValida(l.competencia) ? `${l.competencia.slice(0, 7)}-01` : null,
+      observacao: l.observacao == null || l.observacao === '' ? null : texto(l.observacao, 500),
+      desconto: positivo(l.desconto), juros: positivo(l.juros), valor_original: positivo(l.valor_original),
+      divisao: typeof l.divisao === 'string' && l.divisao ? l.divisao : null,
     });
   });
   (entrada.compras_cartao || []).forEach((l0) => {
@@ -337,18 +414,27 @@ export function conferirTabelas(entrada) {
     const total = numero(l.valor_total);
     if (!total || total < 0 || !existe('cartoes', l.cartao_id) || !l.cartao_id || !dataValida(l.data_compra)) { ignorados++; return; }
     const n = Number.isInteger(+l.qtd_parcelas) && +l.qtd_parcelas >= 1 ? +l.qtd_parcelas : 1;
-    saida.compras_cartao.push({ ...l, valor_total: total, qtd_parcelas: n, descricao: texto(l.descricao) || 'Compra', categoria_id: existe('categorias', l.categoria_id) ? l.categoria_id : (corrigidos++, null) });
+    saida.compras_cartao.push({
+      ...l, valor_total: total, qtd_parcelas: n, descricao: texto(l.descricao) || 'Compra', categoria_id: existe('categorias', l.categoria_id) ? l.categoria_id : (corrigidos++, null),
+      pessoa_id: existe('pessoas', l.pessoa_id) ? l.pessoa_id ?? null : (corrigidos++, null),
+      tipo: l.tipo === 'estorno' ? 'estorno' : 'compra', recorrente: l.recorrente === true,
+    });
   });
   const compras = new Set(saida.compras_cartao.map((c) => c.id));
+  const estornos = new Set(saida.compras_cartao.filter((c) => c.tipo === 'estorno').map((c) => c.id));
   (entrada.parcelas || []).forEach((l0) => {
     const l = comId(l0); if (!l) return;
-    const valor = numero(l.valor);
-    if (!compras.has(l.compra_id) || valor === null || valor < 0 || !dataValida(l.fatura_mes)) { ignorados++; return; }
+    let valor = numero(l.valor);
+    // estorno/reembolso entra na fatura com valor negativo (abate o total)
+    if (valor !== null && estornos.has(l.compra_id) && valor > 0) { valor = -valor; corrigidos++; }
+    if (!compras.has(l.compra_id) || valor === null || (valor < 0 && !estornos.has(l.compra_id)) || !dataValida(l.fatura_mes)) { ignorados++; return; }
     saida.parcelas.push({ ...l, valor, numero: Number.isInteger(+l.numero) && +l.numero >= 1 ? +l.numero : 1 });
   });
   // tipo vazio de categoria: o sistema deduz pelo uso ao abrir (como nas versões antigas)
   saida.categorias.forEach((c) => { if (c.tipo === undefined) delete c.tipo; });
-  return { tabelas: saida, corrigidos, ignorados };
+  // módulo Resina (backups antigos não têm essas tabelas: ficam vazias)
+  const r = conferirResina(entrada, saida, comId, { numero, dataValida, texto });
+  return { tabelas: saida, corrigidos: corrigidos + r.corrigidos, ignorados: ignorados + r.ignorados };
 }
 
 /** Restaura um backup. Retorna `desfazer()`, que volta os dados de antes. */

@@ -25,7 +25,7 @@ export default {
       <div class="animate-entrar">
         <div class="mb-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-4" role="search">
           <div class="relative sm:col-span-2 lg:col-span-1">
-            <label for="f-busca" class="sr-only">Buscar pela descrição</label>
+            <label for="f-busca" class="sr-only">Buscar pela descrição ou observação</label>
             <span class="pointer-events-none absolute inset-y-0 left-3 flex items-center text-stone-400">${icone('busca')}</span>
             <input id="f-busca" type="search" class="campo pl-10" placeholder="Buscar…" value="${esc(filtros.busca)}" autocomplete="off">
           </div>
@@ -48,7 +48,7 @@ export default {
     const desenharLista = () => {
       const termo = filtros.busca.trim().toLowerCase();
       visiveis = lancamentos.filter((l) =>
-        (!termo || l.descricao.toLowerCase().includes(termo)) &&
+        (!termo || `${l.descricao} ${l.observacao || ''}`.toLowerCase().includes(termo)) &&
         (!filtros.conta || String(l.conta_id) === filtros.conta) &&
         (!filtros.categoria || String(l.categoria_id) === filtros.categoria) &&
         (!filtros.situacao ||

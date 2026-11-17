@@ -3,7 +3,7 @@
 import { local } from './local-db.js';
 import { store, areaDaCategoria, GRUPOS_SEPARADOS } from './store.js';
 import { mesISO, nomeMes, dataCompleta, hojeISO } from './format.js';
-import { saidasReais, entradas, somar, resumoPorArea } from './calculos.js';
+import { saidasReais, entradas, somar, resumoPorArea, dataDeReferencia, BASES_RELATORIO } from './calculos.js';
 
 /** Períodos que a pessoa pode escolher */
 export function periodos(mes = store.mes) {
@@ -19,15 +19,18 @@ const nomeDe = (lista, id, padrao = '') => store[lista].find((x) => x.id === id)
 
 /**
  * Monta as linhas de cada parte do relatório.
- * @param {{inicio: string, fim: string}} periodo  datas ISO (fim não incluso)
+ * @param {{inicio: string, fim: string, base?: string}} periodo  datas ISO (fim não incluso);
+ *   `base` = vencimento (padrão), competencia ou pagamento: qual data decide se o lançamento entra (ver BASES_RELATORIO)
  */
 export function dadosDoPeriodo(periodo) {
   const t = local.tabelas();
-  const dentro = (d) => d >= periodo.inicio && d < periodo.fim;
+  const base = BASES_RELATORIO[periodo.base] ? periodo.base : 'vencimento';
+  const dentro = (d) => !!d && d >= periodo.inicio && d < periodo.fim;
+  const ref = (l) => dataDeReferencia(l, base);
 
   const lancs = t.lancamentos
-    .filter((l) => dentro(l.vencimento))
-    .sort((a, b) => a.vencimento.localeCompare(b.vencimento) || String(a.descricao).localeCompare(String(b.descricao)));
+    .filter((l) => dentro(ref(l)))
+    .sort((a, b) => ref(a).localeCompare(ref(b)) || a.vencimento.localeCompare(b.vencimento) || String(a.descricao).localeCompare(String(b.descricao)));
 
   const compras = new Map(t.compras_cartao.map((c) => [c.id, c]));
   const parcelas = t.parcelas
@@ -44,6 +47,11 @@ export function dadosDoPeriodo(periodo) {
     pessoa: nomeDe('pessoas', l.pessoa_id),
     valor: (l.tipo === 'entrada' ? 1 : -1) * Number(l.valor),
     situacao: l.pago ? 'Pago' : l.vencimento < hojeISO() ? 'Atrasado' : 'A pagar',
+    pagamento: l.pago ? l.data_pagamento || null : null,
+    competencia: l.competencia || null,
+    desconto: Number(l.desconto) || 0,
+    juros: Number(l.juros) || 0,
+    observacao: l.observacao || '',
   }));
 
   const cartao = parcelas.map((p) => ({
@@ -52,7 +60,9 @@ export function dadosDoPeriodo(periodo) {
     cartao: nomeDe('cartoes', p.compra.cartao_id),
     descricao: p.compra.descricao || '',
     categoria: nomeDe('categorias', p.compra.categoria_id, 'Sem categoria'),
-    parcela: p.compra.qtd_parcelas > 1 ? `${p.numero}/${p.compra.qtd_parcelas}` : 'À vista',
+    parcela: p.compra.tipo === 'estorno' ? 'Reembolso'
+      : p.compra.recorrente_base ? (Number(p.compra.recorrente_intervalo) === 12 ? 'Anual' : 'Mensal')
+      : p.compra.qtd_parcelas > 1 ? `${p.numero}/${p.compra.qtd_parcelas}` : 'À vista',
     valor: p.valor,
   }));
 
@@ -107,15 +117,17 @@ export function dadosDoPeriodo(periodo) {
       cartao: totalCartao,
       gastos: totalCaixa + totalCartao,
       saldo: totalEntradas - totalCaixa - totalCartao,
-      aPagar: somar(lancs.filter((l) => !l.pago && l.tipo === 'saida')),
+      // "a pagar" é sempre pelo vencimento (na base pagamento, o que está em aberto não entra na lista)
+      aPagar: somar(t.lancamentos.filter((l) => !l.pago && l.tipo === 'saida' && dentro(l.vencimento))),
     },
   };
 }
 
 /** "01/11/2026 a 30/11/2026" ou "Todo o período" */
 export function textoDoPeriodo(p) {
-  if (p.id === 'tudo') return 'Todo o período';
+  const porBase = p.base && p.base !== 'vencimento' && BASES_RELATORIO[p.base] ? ` (por ${BASES_RELATORIO[p.base].nome.toLowerCase()})` : '';
+  if (p.id === 'tudo') return `Todo o período${porBase}`;
   const ultimo = new Date(`${p.fim}T12:00:00`);
   ultimo.setDate(ultimo.getDate() - 1);
-  return `${dataCompleta(p.inicio)} a ${ultimo.toLocaleDateString('pt-BR')}`;
+  return `${dataCompleta(p.inicio)} a ${ultimo.toLocaleDateString('pt-BR')}${porBase}`;
 }

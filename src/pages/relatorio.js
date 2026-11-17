@@ -2,7 +2,10 @@
 import { brl, esc, mesISO, inicioMes, nomeMes, nomeMesCurto, porcentagem } from '../lib/format.js';
 import { store, categoriasPorGrupo, buscar } from '../lib/store.js';
 import { lancamentosEntre, parcelasEntre } from '../lib/api.js';
-import { gastosPorCategoria, saidasReais, entradas, somar } from '../lib/calculos.js';
+import { gastosPorCategoria, saidasReais, entradas, somar, mesDeReferencia, BASES_RELATORIO } from '../lib/calculos.js';
+
+// Base escolhida (vencimento, competência ou pagamento): fica guardada enquanto o sistema estiver aberto
+let base = 'vencimento';
 import { barrasCategorias, colunasMeses, abrirDetalheCategoria } from '../components/grafico.js';
 import { estadoVazio } from '../lib/ui.js';
 
@@ -12,18 +15,23 @@ export default {
   ajuda: `
     <p>O gráfico de colunas mostra quanto foi gasto em cada um dos <strong>últimos 6 meses</strong>. Toque numa coluna para ver aquele mês.</p>
     <p>Abaixo, os gastos do mês escolhido separados por <strong>grupo</strong> (Casa, Fazenda, Empresa…) e por categoria. Aqui entram <strong>todas</strong> as categorias, inclusive as que não aparecem no gráfico do Início.</p>
-    <p><strong>Pagamentos por pessoa</strong> soma o que foi pago a cada funcionário ou prestador no mês.</p>`,
+    <p><strong>Pagamentos por pessoa</strong> soma o que foi pago a cada funcionário ou prestador no mês.</p>
+    <p><strong>Organizar por</strong>: <strong>Vencimento</strong> põe cada conta no mês em que vence. <strong>Competência</strong>, no mês a que ela se refere (a luz de outubro paga em novembro conta em outubro). <strong>Pagamento</strong> mostra só o que já foi pago ou recebido, no mês em que o dinheiro saiu ou entrou. As compras no cartão entram sempre pelo mês da fatura.</p>`,
 
   async render(el, ctx) {
     const inicio = mesISO(store.mes, -5);
     const fim = mesISO(store.mes, 1);
-    const [lancamentos, parcelas] = await Promise.all([lancamentosEntre(inicio, fim), parcelasEntre(inicio, fim)]);
+    // na competência e no pagamento, a data que conta pode cair fora do mês do vencimento: busca tudo e separa aqui
+    const [lancamentos, parcelas] = await Promise.all([
+      base === 'vencimento' ? lancamentosEntre(inicio, fim) : lancamentosEntre('0000-01-01', '9999-12-31'),
+      parcelasEntre(inicio, fim),
+    ]);
     if (!ctx.aindaAtual()) return;
 
     const meses = [-5, -4, -3, -2, -1, 0].map((n) => {
       const data = inicioMes(store.mes, n);
       const chave = mesISO(data);
-      const ls = lancamentos.filter((l) => l.vencimento.slice(0, 7) === chave.slice(0, 7));
+      const ls = lancamentos.filter((l) => mesDeReferencia(l, base) === chave.slice(0, 7));
       const ps = parcelas.filter((p) => p.fatura_mes === chave);
       return { data, rotulo: nomeMesCurto(data), rotuloLongo: nomeMes(data), valor: somar(saidasReais(ls)) + somar(ps), entrada: somar(entradas(ls)), ls, ps };
     });
@@ -43,6 +51,13 @@ export default {
 
     el.innerHTML = `
     <div class="grid gap-4 animate-entrar">
+      <div class="card flex flex-wrap items-center gap-x-3 gap-y-2 py-3 sm:py-3">
+        <label for="r-base" class="text-sm font-semibold">Organizar por</label>
+        <select id="r-base" class="campo w-auto min-w-40" aria-describedby="r-base-dica">
+          ${Object.entries(BASES_RELATORIO).map(([v, b]) => `<option value="${v}" ${v === base ? 'selected' : ''}>${esc(b.nome)}</option>`).join('')}
+        </select>
+        <p id="r-base-dica" class="min-w-0 flex-1 basis-64 text-sm text-stone-600 dark:text-stone-400">${esc(BASES_RELATORIO[base].explica)} Cartão: pelo mês da fatura.</p>
+      </div>
       <section class="card" aria-labelledby="t-meses">
         <div class="mb-4 flex flex-wrap items-end justify-between gap-3">
           <div><h2 id="t-meses" class="card-titulo mb-1">Gastos dos últimos 6 meses</h2>
@@ -90,6 +105,7 @@ export default {
       </div>
     </div>`;
 
+    el.querySelector('#r-base').onchange = (e) => { base = e.target.value; ctx.atualizar(); };
     el.onclick = (e) => {
       const coluna = e.target.closest('[data-mes]');
       if (coluna) {

@@ -13,6 +13,11 @@ const DESENHOS = {
   ajuda: '<g class="ani-balanca"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><path d="M12 17h.01"/></g>',
   cadeado: '<g class="ani-tranca"><rect width="18" height="11" x="3" y="11" rx="2"/><path class="ani-alca" pathLength="1" d="M7 11V7a5 5 0 0 1 10 0v4"/></g>',
   mais: '<g class="ani-gira"><path d="M5 12h14"/><path d="M12 5v14"/></g>',
+  // módulo Resina
+  tambor: `<ellipse cx="12" cy="5" rx="8" ry="2.5"/><path d="M4 5v14c0 1.4 3.6 2.5 8 2.5s8-1.1 8-2.5V5"/><path ${D} d="M4 10.5c0 1.4 3.6 2.5 8 2.5s8-1.1 8-2.5"/><path class="ani-desenha ani-d2" pathLength="1" d="M4 15.5c0 1.4 3.6 2.5 8 2.5s8-1.1 8-2.5"/>`,
+  insumo: `<path d="M14 2v6a2 2 0 0 0 .245.96l5.51 10.08A2 2 0 0 1 18 22H6a2 2 0 0 1-1.755-2.96l5.51-10.08A2 2 0 0 0 10 8V2"/><path d="M8.5 2h7"/><path ${D} d="M6.453 15h11.094"/>`,
+  caminhao: '<g class="ani-desliza"><path d="M14 18V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v11a1 1 0 0 0 1 1h2"/><path d="M15 18H9"/><path d="M19 18h2a1 1 0 0 0 1-1v-3.65a1 1 0 0 0-.22-.62l-3.48-4.35A1 1 0 0 0 17.52 8H14"/><circle cx="17" cy="18" r="2"/><circle cx="7" cy="18" r="2"/></g>',
+  cadastros: `<rect width="8" height="4" x="8" y="2" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="M8 11h.01M8 16h.01"/><path ${D} d="M12 11h4"/><path class="ani-desenha ani-d2" pathLength="1" d="M12 16h4"/>`,
 };
 
 // Ajustes: para onde cada linha dos controles deslizantes vai (e volta)

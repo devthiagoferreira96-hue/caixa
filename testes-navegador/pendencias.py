@@ -1,0 +1,71 @@
+import asyncio, sys, re
+sys.path.insert(0,'/tmp/qa')
+from comum import preparar, pular_tour
+from playwright.async_api import async_playwright
+U='http://localhost:8765/'; ARQ='/tmp/imp/pendencias.xlsx'
+R=[]
+def ok(n,c,x=''): R.append(('PASS' if c else 'FALHA',n,x))
+async def abrir(pg):
+    await pg.evaluate("location.hash='#ajustes'"); await pg.wait_for_timeout(600)
+    async with pg.expect_file_chooser() as fc: await pg.click('[data-importar]')
+    await (await fc.value).set_files(ARQ); await pg.wait_for_selector('dialog[open] [data-resumo]')
+def pend(pg, chave): return pg.locator(f'dialog[open] [data-pendencia="{chave}"]')
+async def main():
+    async with async_playwright() as p:
+        b=await p.chromium.launch(executable_path='/usr/bin/google-chrome')
+        pg=await (await b.new_context(viewport={'width':1280,'height':900})).new_page(); errs=[]
+        pg.on('pageerror', lambda e: errs.append(str(e)))
+        await preparar(pg,U,exemplo=False); await pular_tour(pg)
+        await abrir(pg)
+        d=pg.locator('dialog[open]')
+        n=await d.locator('[data-pendencia]').count()
+        chaves=[await d.locator('[data-pendencia]').nth(i).get_attribute('data-pendencia') for i in range(n)]
+        ok('4 pendências: conta, categoria, categoria em branco, cartão', set(chaves)=={'conta:BRADESCO','categoria:ALIMENTACAO','categoria:','cartao:CARTAOINTER'}, chaves)
+        txt=await d.locator('[data-pendencias]').inner_text()
+        ok('Título conta o que falta', '4 itens precisam da sua decisão' in txt, txt[:80])
+        ok('Mensagem: conta não existe', 'A conta “BRADESCO” da planilha não existe no sistema' in txt.replace('"','“',1).replace('"','”',1) or ('BRADESCO' in txt and 'não existe no sistema' in txt))
+        ok('Diz em quais linhas (aba e linha)', 'OUTUBRO, linha 4' in await pend(pg,'conta:BRADESCO').inner_text())
+        ok('Conta quantas linhas', '2 linhas' in await pend(pg,'conta:BRADESCO').inner_text())
+        ok('Linha sem categoria explicada', 'categoria em branco' in await pend(pg,'categoria:').inner_text())
+        ok('Sugestão do nome parecido', 'Alimentação/Produtos Limpeza' in await pend(pg,'categoria:ALIMENTACAO').inner_text())
+        sel=await pend(pg,'categoria:ALIMENTACAO').locator('select').evaluate('e=>e.selectedOptions[0].textContent')
+        ok('Lista já vem na sugestão', 'Alimentação/Produtos Limpeza' in sel, sel)
+        ok('Cartão desconhecido: conta as linhas do bloco', '2 linhas' in await pend(pg,'cartao:CARTAOINTER').inner_text())
+        botao=d.locator('[data-importar-confirmar]')
+        ok('Importar bloqueado', await botao.is_disabled() and 'Resolva 4 pendências' in await botao.inner_text())
+        ok('Resumo avisa linhas esperando', 'esperam as decisões' in await d.locator('[data-resumo]').inner_text())
+        # resolve uma a uma
+        await pend(pg,'categoria:ALIMENTACAO').locator('input[value=usar]').check(); await pg.wait_for_timeout(200)
+        ok('Resolver uma atualiza o botão', 'Resolva 3 pendências' in await botao.inner_text())
+        ok('Marca como resolvida', 'Resolvido' in await pend(pg,'categoria:ALIMENTACAO').inner_text())
+        await pend(pg,'conta:BRADESCO').locator('input[value=criar]').check(); await pg.wait_for_timeout(200)
+        await pend(pg,'categoria:').locator('input[value=pular]').check(); await pg.wait_for_timeout(200)
+        # escolher na lista marca "usar" sozinho
+        await pend(pg,'cartao:CARTAOINTER').locator('select').select_option(label='Nubank'); await pg.wait_for_timeout(200)
+        ok('Escolher na lista marca "usar"', await pend(pg,'cartao:CARTAOINTER').locator('input[value=usar]').is_checked())
+        ok('Tudo resolvido libera o botão', not await botao.is_disabled() and 'Importar' in await botao.inner_text(), await botao.inner_text())
+        ok('Título vira "Tudo resolvido"', 'Tudo resolvido' in await d.locator('[data-pendencias]').inner_text())
+        res=await d.locator('[data-resumo]').inner_text()
+        ok('Conta nova listada', 'BRADESCO' in res)
+        ok('Resumo mostra a linha que fica de fora', '1 linha fica de fora' in res, res[:300])
+        # trocar de ideia mantém o foco e recalcula
+        await pend(pg,'conta:BRADESCO').locator('input[value=pular]').check(); await pg.wait_for_timeout(200)
+        ok('Mudar de ideia recalcula', 'BRADESCO' not in await d.locator('[data-resumo]').inner_text())
+        await pend(pg,'conta:BRADESCO').locator('input[value=criar]').check(); await pg.wait_for_timeout(200)
+        await botao.click(); await pg.wait_for_timeout(1500)
+        ok('Importou', await pg.locator('dialog[open]').count()==0 and 'Planilha importada' in await pg.inner_text('#toasts'))
+        await pg.evaluate("location.hash='#extrato'"); await pg.wait_for_timeout(600)
+        await pg.evaluate("location.hash='#extrato'"); await pg.click('[data-mes="-1"]'); await pg.wait_for_timeout(600)
+        ext=await pg.inner_text('#conteudo')
+        ok('"Alimentacao" entrou como Alimentação/Produtos Limpeza', 'Mercado do bairro' in ext and 'Alimentação/Produtos Limpeza' in ext, ext[:300])
+        ok('Linha sem categoria não entrou', 'Coisa sem categoria' not in ext)
+        ok('Conta BRADESCO criada e usada', 'Venda de milho' in ext and 'BRADESCO' in ext)
+        await pg.evaluate("location.hash='#cartoes'"); await pg.wait_for_timeout(700)
+        cart=await pg.inner_text('#conteudo')
+        ok('Compras do "CARTÃO INTER" foram para o Nubank', 'Show' in cart and 'Calça' in cart)
+        ok('Nenhum cartão novo criado', 'INTER' not in cart.upper())
+        ok('Sem erros JS', not errs, errs[:2])
+        await b.close()
+    for r in R: print(*r)
+    print(sum(r[0]=='PASS' for r in R),'passaram /',len(R))
+asyncio.run(main())

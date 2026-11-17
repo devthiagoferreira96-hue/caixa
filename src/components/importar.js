@@ -1,5 +1,9 @@
-// Importar a planilha do Excel (modelo NOVO_CAIXA.xlsx): escolher o arquivo, conferir e importar
+// Importar planilhas do Excel. A importação geral (importarQualquerPlanilha) reconhece cada aba e manda
+// para o lugar certo: Caixa (modelo NOVO_CAIXA), produção da Resina (CONTROLE ANUAL / SAFRAS) ou
+// conta corrente do arrendamento. Também lê o backup em Excel gerado pelo sistema (as três juntas).
 import { lerXlsx } from '../lib/ler-xlsx.js';
+import { lerPlanilhaConta } from '../modulos/resina/importar-conta.js';
+import { lerSafras } from '../modulos/resina/importar-safras.js';
 import { reconhecerAbas, montarPlano, NOMES_MESES } from '../lib/importar-planilha.js';
 import { importarPlanilha } from '../lib/api.js';
 import { dialogo, toast, icone } from '../lib/ui.js';
@@ -7,7 +11,7 @@ import { esc, brl } from '../lib/format.js';
 import { store } from '../lib/store.js';
 import { desfazendo } from './lancamento.js';
 
-const ERROS = {
+export const ERROS = {
   XLS_ANTIGO: 'Essa planilha tem senha ou é do Excel antigo (.xls). No Excel, tire a senha e use "Salvar como" > Pasta de Trabalho do Excel (.xlsx).',
   DANIFICADO: 'A planilha parece danificada ou incompleta. Abra no Excel, salve de novo e tente outra vez.',
   NAO_ZIP: 'Esse arquivo não é uma planilha do Excel (.xlsx).',
@@ -15,7 +19,7 @@ const ERROS = {
   FORMATO: 'Não consegui ler essa planilha. Abra no Excel e salve de novo como .xlsx.',
 };
 
-function escolherArquivo() {
+export function escolherArquivo() {
   return new Promise((resolver) => {
     const input = Object.assign(document.createElement('input'), {
       type: 'file',
@@ -30,13 +34,118 @@ function escolherArquivo() {
 const lista = (nomes, max = 10) =>
   `${nomes.slice(0, max).map((n) => `<span class="selo selo-neutro">${esc(n)}</span>`).join(' ')}${nomes.length > max ? ` <span class="text-sm">e mais ${nomes.length - max}</span>` : ''}`;
 
-/** Fluxo completo. `aoTerminar` é chamado depois de importar (e depois de desfazer). */
-export async function importarDoExcel(aoTerminar) {
+/**
+ * Que tipo de planilha é cada aba.
+ * @returns {{caixa: string[], producao: string[], conta: string[], resumo: string[], outras: string[]}}
+ */
+export function classificarAbas(abas) {
+  const r = { caixa: [], producao: [], conta: [], resumo: [], outras: [] };
+  const caixa = new Set(reconhecerAbas(abas).filter((a) => a.modelo).map((a) => a.nome));
+  const conta = new Set(lerPlanilhaConta(abas).map((a) => a.aba));
+  const { blocos, resumos } = lerSafras(abas);
+  const producao = new Set(blocos.map((b) => b.aba));
+  for (const a of abas) {
+    if (caixa.has(a.nome)) r.caixa.push(a.nome);
+    else if (producao.has(a.nome)) r.producao.push(a.nome);
+    else if (conta.has(a.nome)) r.conta.push(a.nome);
+    else if (resumos.includes(a.nome)) r.resumo.push(a.nome);
+    else r.outras.push(a.nome);
+  }
+  return r;
+}
+
+const TIPOS_PLANILHA = {
+  caixa: ['Caixa', 'lançamentos e cartões (modelo NOVO_CAIXA)'],
+  producao: ['Produção da resina', 'cargas de cada produtor (CONTROLE ANUAL / SAFRAS)'],
+  conta: ['Conta corrente', 'arrendamento: cargas, insumos e PIX (Conta corrente arrendo)'],
+};
+
+/**
+ * Importar qualquer uma das planilhas (ou o backup em Excel com todas): reconhece cada aba e abre
+ * a conferência de cada parte, uma depois da outra (Caixa, depois Produção, depois Conta corrente,
+ * para a conta corrente completar as cargas que vieram da produção). `contaAtual` = conta já escolhida na tela.
+ */
+export async function importarQualquerPlanilha(aoTerminar, { contaAtual = null } = {}) {
   const arquivo = await escolherArquivo();
   if (!arquivo) return;
   let abas;
   try {
-    abas = reconhecerAbas(await lerXlsx(arquivo));
+    abas = await lerXlsx(arquivo);
+  } catch (e) {
+    if (!ERROS[e.message]) console.error(e);
+    toast(ERROS[e.message] || 'Não consegui ler essa planilha. Confira se é o arquivo certo (.xlsx).', { tipo: 'erro' });
+    return;
+  }
+  const tipos = classificarAbas(abas);
+  const achados = Object.keys(TIPOS_PLANILHA).filter((k) => tipos[k].length);
+  if (!achados.length) {
+    toast(tipos.resumo.length
+      ? 'Essa planilha só tem o resumo por mês (CONTROLE DE CARGA ANUAL). Para importar as cargas, use a aba das SAFRAS (DATA | TBS | PESO - KG).'
+      : 'Não reconheci essa planilha. O sistema importa o caixa (NOVO_CAIXA), a produção da resina (CONTROLE ANUAL / SAFRAS) e a conta corrente do arrendamento.', { tipo: 'erro' });
+    return;
+  }
+  let escolhidos = achados;
+  if (achados.length > 1) {
+    escolhidos = await escolherPartes(arquivo, tipos, achados);
+    if (!escolhidos?.length) return;
+  }
+  const lido = { arquivo, abas };
+  if (escolhidos.includes('caixa')) await importarDoExcel(aoTerminar, lido);
+  if (escolhidos.includes('producao')) {
+    const { importarSafras } = await import('../modulos/resina/importar-safras-tela.js');
+    await importarSafras(lido, aoTerminar);
+  }
+  if (escolhidos.includes('conta')) {
+    const { importarConta } = await import('../modulos/resina/importar-conta-tela.js');
+    // uma conferência por aba (cada aba é uma conta: CNPJ, CPF...)
+    for (const aba of tipos.conta) await importarConta(contaAtual, aoTerminar, { ...lido, aba });
+  }
+}
+
+/** Janela "o que tem neste arquivo": a pessoa escolhe o que importar */
+function escolherPartes(arquivo, tipos, achados) {
+  return new Promise((resolver) => {
+    let resposta = null;
+    const d = dialogo({
+      titulo: 'O que tem nesta planilha',
+      largura: 'max-w-lg',
+      corpo: `<form class="grid gap-4" novalidate>
+        <p class="text-sm text-stone-700 dark:text-stone-300">Arquivo <strong class="break-all">${esc(arquivo.name)}</strong>. Encontrei:</p>
+        <fieldset class="grid gap-2"><legend class="sr-only">Partes para importar</legend>
+          ${achados.map((k) => `<label class="opcao-lista">
+            <input type="checkbox" class="mt-0.5 size-5 shrink-0 accent-brand-600" value="${k}" checked>
+            <span class="grid gap-0.5"><span class="font-semibold">${TIPOS_PLANILHA[k][0]}</span>
+            <span class="text-sm text-stone-600 dark:text-stone-400">${TIPOS_PLANILHA[k][1]}. Abas: ${tipos[k].map(esc).join(', ')}</span></span>
+          </label>`).join('')}
+        </fieldset>
+        ${tipos.resumo.length ? `<p class="text-sm text-stone-600 dark:text-stone-400">A aba ${tipos.resumo.map(esc).join(', ')} é só o resumo por mês e não precisa ser importada.</p>` : ''}
+        ${tipos.outras.length ? `<p class="text-sm text-stone-600 dark:text-stone-400">Abas que não reconheci e ficam de fora: ${tipos.outras.map(esc).join(', ')}.</p>` : ''}
+        <p class="text-sm text-stone-600 dark:text-stone-400">Cada parte abre a sua conferência, uma depois da outra, antes de gravar.</p>
+        <div class="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+          <button type="button" class="btn-neutro" data-fechar>Cancelar</button>
+          <button type="submit" class="btn-primario">${icone('check')} Continuar</button>
+        </div>
+      </form>`,
+    });
+    d.querySelector('form').addEventListener('submit', (e) => {
+      e.preventDefault();
+      resposta = [...d.querySelectorAll('input[type=checkbox]:checked')].map((x) => x.value);
+      d.close();
+    });
+    d.addEventListener('close', () => resolver(resposta));
+  });
+}
+
+/**
+ * Importar só o caixa (modelo NOVO_CAIXA). `aoTerminar` é chamado depois de importar (e depois de desfazer).
+ * `lido` = arquivo já aberto pela importação geral ({arquivo, abas}). Retorna uma Promise que termina quando a janela fecha.
+ */
+export async function importarDoExcel(aoTerminar, lido = null) {
+  const arquivo = lido?.arquivo || await escolherArquivo();
+  if (!arquivo) return;
+  let abas;
+  try {
+    abas = reconhecerAbas(lido?.abas || await lerXlsx(arquivo));
   } catch (e) {
     if (!ERROS[e.message]) console.error(e);
     toast(ERROS[e.message] || 'Não consegui ler essa planilha. Confira se é o arquivo certo (.xlsx).', { tipo: 'erro' });
@@ -56,7 +165,8 @@ export async function importarDoExcel(aoTerminar) {
     const c = contar(a, a.mes || 1, a.ano);
     return [a.nome, { usar: !a.oculta && c.caixa + c.cartao > 0, mes: a.mes || 1, ano: a.ano, contagem: c, semMes: !a.mes }];
   }));
-  const ignoradas = abas.filter((a) => !a.modelo).map((a) => a.nome);
+  // na importação geral, as outras abas vão para a Resina (não são "ignoradas")
+  const ignoradas = lido ? [] : abas.filter((a) => !a.modelo).map((a) => a.nome);
   const resolucoes = {}; // decisão de cada item que não existe no sistema
 
   const d = dialogo({
@@ -236,6 +346,7 @@ export async function importarDoExcel(aoTerminar) {
       d.querySelector('[data-texto-botao]').textContent = `Importar ${plano.total} itens`;
     }
   });
+  return new Promise((resolver) => d.addEventListener('close', () => resolver()));
 }
 
 function textoContagem(c) {

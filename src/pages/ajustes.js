@@ -1,16 +1,19 @@
 // Ajustes: backup, contas, cartões, categorias, pessoas, aparência, usuário e senha
-import { esc, valorParaCampo, lerValor, VALOR_MAXIMO, valorMaximoTexto, dataCompleta } from '../lib/format.js';
+import { esc, dataCompleta } from '../lib/format.js';
 import { store, categoriasPorGrupo, TIPOS_CATEGORIA } from '../lib/store.js';
 import { salvarItem, excluirItem } from '../lib/api.js';
 import { local } from '../lib/local-db.js';
 import { desfazendo } from '../components/lancamento.js';
 import { abrirOpcoesBackup, restaurarComConfirmacao } from '../components/backup.js';
-import { importarDoExcel } from '../components/importar.js';
+import { importarQualquerPlanilha } from '../components/importar.js';
 import { icone, toast, confirmar, mascaraDinheiro, dialogo, erroNoCampo, limparErros, semRepetir } from '../lib/ui.js';
 import { htmlAparencia, ligarAparencia } from '../components/aparencia.js';
 import { chave } from '../lib/importar-planilha.js';
 import { abrirTour } from '../components/tour.js';
 import { mostrarCodigoRecuperacao } from '../components/recuperacao.js';
+import { resinaAtiva } from '../modulos/resina/dados.js';
+import { salvarPreferencias } from '../lib/preferencias.js';
+import { secao as secaoBase, linha, lerLinha as lerLinhaGenerica } from '../components/lista-editavel.js';
 
 // Definição de cada lista editável: quais campos aparecem e como são lidos
 const LISTAS = {
@@ -61,6 +64,7 @@ const LISTAS = {
 };
 
 const abertas = new Set(['backup']);
+const secao = (id, titulo, ic, conteudo) => secaoBase(id, titulo, ic, conteudo, abertas.has(id));
 const NOME_ITEM = { contas: 'uma conta chamada', cartoes: 'um cartão chamado', categorias: 'uma categoria chamada', pessoas: 'uma pessoa chamada' };
 
 export default {
@@ -68,7 +72,7 @@ export default {
   usaMes: false,
   ajuda: `
     <p>Toque no nome de cada seção para abrir.</p>
-    <p><strong>Backup e exportar</strong>: escolha entre o <strong>backup completo</strong> (guarda tudo e é o único que restaura os dados), uma <strong>planilha do Excel</strong> ou um <strong>relatório em PDF</strong> do mês, do ano ou de tudo.</p>
+    <p><strong>Backup e exportar</strong>: escolha entre o <strong>backup completo</strong> (guarda tudo e é o único que restaura os dados), um <strong>backup em Excel</strong> (no formato das suas planilhas: NOVO_CAIXA, CONTROLE ANUAL e Conta corrente, e dá para importar de volta) ou um <strong>relatório em PDF</strong> do mês, do ano ou de tudo.</p>
     <p><strong>Contas, Cartões, Categorias e Pessoas</strong>: mude qualquer campo e toque em <strong>Salvar</strong> na mesma linha. Para incluir um item novo, use a última linha de cada lista.</p>
     <p><strong>Aparência</strong>: modo claro ou escuro, temas de cores prontos, suas próprias cores e letras maiores.</p>
     <p><strong>Usuário e senha</strong>: troque seu nome ou sua senha, gere um novo código de recuperação ou apague tudo deste aparelho.</p>`,
@@ -84,8 +88,8 @@ export default {
           <button type="button" class="btn-neutro" data-restaurar>${icone('enviar')} Restaurar um backup</button>
         </div>
         <div class="mt-4 rounded-xl border border-stone-200 p-3 dark:border-stone-700">
-          <p class="font-semibold">Já usa a planilha do caixa no Excel?</p>
-          <p class="mt-1 text-sm text-stone-600 dark:text-stone-400">Traga os lançamentos e as compras no cartão de cada mês (cada aba é um mês). Nada é apagado, e o que já estiver no sistema não é duplicado.</p>
+          <p class="font-semibold">Já usa as planilhas no Excel?</p>
+          <p class="mt-1 text-sm text-stone-600 dark:text-stone-400">Traga o caixa (NOVO_CAIXA, uma aba por mês), a produção da resina (CONTROLE ANUAL / SAFRAS), a conta corrente do arrendamento ou o backup em Excel gerado aqui. O sistema reconhece cada aba e mostra tudo para você conferir antes de gravar. Nada é apagado, e o que já estiver no sistema não é duplicado.</p>
           <button type="button" class="btn-sec mt-3" data-importar>${icone('planilha')} Importar planilha do Excel</button>
         </div>`)}
 
@@ -95,6 +99,14 @@ export default {
         <h3 class="mt-5 mb-2 text-sm font-semibold">Adicionar</h3>
         <ul>${linha(tabela, def, def.novo)}</ul>
         ${def.dicaExcluir ? `<p class="dica mt-3">${def.dicaExcluir}</p>` : ''}`)).join('')}
+
+      ${secao('modulos', 'Módulos', 'tambor', `
+        <p class="mb-3 text-sm text-stone-600 dark:text-stone-400">Partes extras do sistema. Ligar ou desligar não apaga nada: os dados continuam guardados.</p>
+        <label class="flex cursor-pointer items-start gap-3 rounded-xl border border-stone-200 p-3 dark:border-stone-700">
+          <input type="checkbox" class="mt-0.5 size-5 accent-brand-600" data-modulo-resina ${resinaAtiva() ? 'checked' : ''}>
+          <span><span class="block font-semibold">Resina: produção e cargas</span>
+          <span class="text-sm text-stone-600 dark:text-stone-400">Cadastro de produtores, motoristas e caminhões, registro das cargas (com a carreta animada) e a produção do mês. Aparece um seletor no topo do menu para trocar entre o Caixa e a Resina. As contas da resina ficam separadas das da casa.</span></span>
+        </label>`)}
 
       ${secao('aparencia', 'Aparência', 'paleta', htmlAparencia())}
 
@@ -169,7 +181,7 @@ export default {
       } else if (e.target.closest('[data-backup]')) {
         if (await abrirOpcoesBackup()) ctx.atualizar();
       } else if (e.target.closest('[data-importar]')) {
-        await importarDoExcel(ctx.atualizar);
+        await importarQualquerPlanilha(ctx.atualizar);
       } else if (e.target.closest('[data-restaurar]')) {
         await restaurarComConfirmacao(ctx.atualizar);
       } else if (e.target.closest('[data-tour]')) {
@@ -183,19 +195,15 @@ export default {
       }
     };
 
+    el.querySelector('[data-modulo-resina]').addEventListener('change', (e) => {
+      salvarPreferencias({ resina: e.target.checked });
+      window.dispatchEvent(new Event('caixa:remontar'));
+      toast(e.target.checked ? 'Módulo Resina ligado. Use o seletor no topo do menu para trocar.' : 'Módulo Resina desligado. Os dados dele continuam guardados.');
+    });
+
     ligarAparencia(el, ctx.atualizar);
   },
 };
-
-const secao = (id, titulo, ic, conteudo) => `
-  <details class="card group p-0 sm:p-0" data-secao="${id}" ${abertas.has(id) ? 'open' : ''}>
-    <summary class="flex min-h-14 cursor-pointer list-none items-center gap-3 rounded-2xl px-4 py-3 font-semibold sm:px-5 [&::-webkit-details-marker]:hidden">
-      <span class="flex size-9 items-center justify-center rounded-lg bg-stone-100 text-stone-600 dark:bg-stone-800 dark:text-stone-300">${icone(ic)}</span>
-      <span class="flex-1">${titulo}</span>
-      <span class="text-stone-400 transition group-open:rotate-90">${icone('direita')}</span>
-    </summary>
-    <div class="border-t border-stone-100 px-4 pt-4 pb-5 sm:px-5 dark:border-stone-800">${conteudo}</div>
-  </details>`;
 
 function listaCategorias(def) {
   const grupos = [...new Set(store.categorias.map((c) => c.grupo))];
@@ -204,57 +212,8 @@ function listaCategorias(def) {
     <ul class="grid gap-3">${cats.map((c) => linha('categorias', def, c)).join('')}</ul>`).join('');
 }
 
-/** Uma linha editável (um pequeno formulário) */
-function linha(tabela, def, item) {
-  const novo = !item.id;
-  const sufixo = `${tabela}-${item.id || 'novo'}`;
-  return `<li><form data-tabela="${tabela}" data-id="${item.id || ''}" class="grid grid-cols-2 items-end gap-2 rounded-xl ${novo ? 'border-2 border-dashed border-stone-300 p-3 dark:border-stone-700' : 'bg-stone-50 p-3 dark:bg-stone-800/50'} sm:grid-cols-12" novalidate>
-    <div class="col-span-2 grid grid-cols-2 gap-2 sm:col-span-9 sm:grid-cols-12">
-    ${def.campos.map((c) => {
-      const id = `${c.nome}-${sufixo}`;
-      const valor = item[c.nome];
-      const rotulo = `<label class="rotulo text-xs" for="${id}">${c.rotulo}</label>`;
-      let campo;
-      if (c.tipo === 'marcar') {
-        return `<label class="col-span-1 flex min-h-11 cursor-pointer items-center gap-2 self-end text-sm font-medium ${c.largura}" for="${id}">
-          <input id="${id}" type="checkbox" name="${c.nome}" class="size-5 accent-brand-600" ${valor ? 'checked' : ''}>${c.rotulo}</label>`;
-      }
-      if (c.tipo === 'dinheiro') campo = `<input id="${id}" name="${c.nome}" class="campo tabular-nums" inputmode="numeric" data-dinheiro value="${valorParaCampo(Math.abs(valor))}" placeholder="0,00">
-        <label class="mt-1 flex items-center gap-1.5 text-xs"><input type="checkbox" name="${c.nome}_negativo" class="accent-red-700" ${valor < 0 ? 'checked' : ''}> negativo</label>`;
-      else if (c.tipo === 'dia') campo = `<input id="${id}" name="${c.nome}" type="number" min="1" max="31" class="campo" value="${valor}">`;
-      else if (c.tipo === 'opcoes') campo = `<select id="${id}" name="${c.nome}" class="campo">${c.opcoes.map((o) => {
-        const [v, texto] = Array.isArray(o) ? o : [o, o];
-        return `<option value="${esc(v)}" ${v === (valor ?? (tabela === 'categorias' ? 'saida' : '')) ? 'selected' : ''}>${esc(texto)}</option>`;
-      }).join('')}</select>`;
-      else if (c.tipo === 'grupo') campo = `<input id="${id}" name="${c.nome}" class="campo" list="grupos-lista" value="${esc(valor)}">`;
-      else campo = `<input id="${id}" name="${c.nome}" class="campo" maxlength="60" value="${esc(valor)}" ${novo ? 'placeholder="Nome do novo item"' : ''}>`;
-      return `<div class="${c.nome === 'nome' ? 'col-span-2' : 'col-span-1'} ${c.largura}">${rotulo}${campo}</div>`;
-    }).join('')}
-    </div>
-    <div class="col-span-2 flex gap-2 sm:col-span-3 sm:justify-end">
-      <button type="submit" class="${novo ? 'btn-primario' : 'btn-sec'} flex-1 sm:flex-none">${novo ? `${icone('mais')} Adicionar` : 'Salvar'}</button>
-      ${novo ? '' : `<button type="button" class="btn-icone text-stone-600 dark:text-stone-400 hover:text-red-700" data-excluir="${tabela}:${item.id}" aria-label="Excluir ${esc(item.nome)}" title="Excluir">${icone('lixo')}</button>`}
-    </div>
-  </form></li>`;
-}
-
 function lerLinha(form, def) {
-  const item = form.dataset.id ? { id: form.dataset.id } : {};
-  for (const c of def.campos) {
-    const campo = form.elements[c.nome];
-    if (c.tipo === 'marcar') item[c.nome] = campo.checked;
-    else if (c.tipo === 'dinheiro') {
-      const v = lerValor(campo.value) || 0;
-      if (v > VALOR_MAXIMO) throw new Error(`O valor máximo é ${valorMaximoTexto()}.`);
-      item[c.nome] = v * (form.elements[`${c.nome}_negativo`].checked ? -1 : 1);
-    }
-    else if (c.tipo === 'dia') {
-      const n = Number(campo.value);
-      if (!(n >= 1 && n <= 31)) throw new Error('O dia precisa ser um número de 1 a 31.');
-      item[c.nome] = n;
-    } else item[c.nome] = campo.value.trim();
-  }
-  if ('grupo' in item && !item.grupo) item.grupo = 'Outros';
+  const item = lerLinhaGenerica(form, def);
   if (form.dataset.tabela === 'categorias' && item.id) {
     // não deixa mudar o tipo se já há lançamentos do outro tipo nessa categoria
     const { lancamentos, compras_cartao: compras } = local.tabelas();
