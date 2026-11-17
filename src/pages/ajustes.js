@@ -90,7 +90,8 @@ export default {
         <div class="mt-4 rounded-xl border border-stone-200 p-3 dark:border-stone-700">
           <p class="font-semibold">Já usa as planilhas no Excel?</p>
           <p class="mt-1 text-sm text-stone-600 dark:text-stone-400">Traga o caixa (NOVO_CAIXA, uma aba por mês), a produção da resina (CONTROLE ANUAL / SAFRAS), a conta corrente do arrendamento ou o backup em Excel gerado aqui. O sistema reconhece cada aba e mostra tudo para você conferir antes de gravar. Nada é apagado, e o que já estiver no sistema não é duplicado.</p>
-          <button type="button" class="btn-sec mt-3" data-importar>${icone('planilha')} Importar planilha do Excel</button>
+          <p class="mt-1 text-sm text-stone-600 dark:text-stone-400">Também aceita o <strong>backup completo (.json)</strong>, que restaura tudo do arquivo no lugar dos dados de agora, e o <strong>PDF gerado aqui</strong> com a opção "Permitir importar este PDF de volta", que junta os dados do período sem apagar nem duplicar nada. Os dois pedem confirmação e dá para desfazer.</p>
+          <button type="button" class="btn-sec mt-3" data-importar>${icone('planilha')} Importar planilha ou backup</button>
         </div>`)}
 
       ${Object.entries(LISTAS).map(([tabela, def]) => secao(tabela, def.titulo, def.icone, `

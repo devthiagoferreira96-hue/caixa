@@ -53,7 +53,7 @@ const TOPICOS = [
     <p>Escolha o período: o mês aberto na tela, o ano inteiro ou tudo.</p>
     <p><strong>Atenção:</strong> planilha e PDF são só para consultar. Para guardar os dados e poder restaurar depois, use o <strong>Backup completo</strong>.</p>`],
   ['planilha', 'Importar a planilha do Excel', `
-    <p>Em <a href="#ajustes" class="font-semibold underline">Ajustes > Backup, importar e exportar</a>, toque em <strong>Importar planilha do Excel</strong> e escolha o arquivo (.xlsx): a planilha do caixa (NOVO_CAIXA), a da produção da resina (CONTROLE ANUAL), a da conta corrente ou o backup em Excel gerado pelo sistema. O sistema reconhece cada aba e manda para o lugar certo.</p>
+    <p>Em <a href="#ajustes" class="font-semibold underline">Ajustes > Backup, importar e exportar</a>, toque em <strong>Importar planilha ou backup</strong> e escolha o arquivo (.xlsx): a planilha do caixa (NOVO_CAIXA), a da produção da resina (CONTROLE ANUAL), a da conta corrente ou o backup em Excel gerado pelo sistema. O sistema reconhece cada aba e manda para o lugar certo. Se escolher o <strong>backup completo (.json)</strong>, ele restaura tudo do arquivo no lugar dos dados de agora. Se escolher um <strong>PDF gerado pelo sistema</strong> com a opção "Permitir importar este PDF de volta", ele junta os dados do período: só entra o que falta, sem apagar nem duplicar. Os dois pedem confirmação e têm Desfazer.</p>
     <ul class="list-disc pl-5">
       <li>Cada aba é um mês. Antes de importar, confira o mês e o ano de cada aba e desmarque as que não quiser.</li>
       <li>Do caixa: valor negativo vira saída e positivo vira entrada. STATUS "OK" fica como pago.</li>

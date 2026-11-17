@@ -3,6 +3,7 @@
 import { LARGURAS } from './pdf-fontes.js';
 import { dadosDoPeriodo, textoDoPeriodo } from './exportar-dados.js';
 import { local } from './local-db.js';
+import { objetosDoAnexo } from './dados-periodo.js';
 import { dataCompleta, nomeMes, parseISO } from './format.js';
 
 // A4 em pontos
@@ -156,8 +157,8 @@ class Documento {
     if (total) desenhar(total, -1, true);
   }
 
-  /** Monta o arquivo PDF final */
-  arquivo(rodape) {
+  /** Monta o arquivo PDF final. `anexo` = dados comprimidos para levar dentro do PDF (ou null) */
+  arquivo(rodape, anexo = null) {
     const objetos = [];
     const add = (s) => objetos.push(s);
     add('<< /Type /Catalog /Pages 2 0 R >>'); // 1
@@ -182,6 +183,13 @@ class Documento {
     objetos[1] = `<< /Type /Pages /Kids [${filhos.join(' ')}] /Count ${total} >>`;
     add(`<< /Title ${literal('Caixa da Família')} /Producer ${literal('Caixa da Família')} >>`);
     const info = objetos.length;
+    if (anexo) {
+      // os dados vão como arquivo anexado ao PDF (o sistema lê de volta na importação)
+      const o = objetosDoAnexo(anexo, 'Dados do Caixa da Familia para importar de volta');
+      add(o.arquivo);
+      add(o.especificacao(objetos.length));
+      objetos[0] = `<< /Type /Catalog /Pages 2 0 R /Names << /EmbeddedFiles << /Names [(caixa-familia-dados.json) ${objetos.length} 0 R] >> >> >>`;
+    }
 
     // Tudo aqui é ASCII (letras acentuadas foram escritas como \ooo), então 1 caractere = 1 byte
     let pdf = '%PDF-1.4\n%\xe2\xe3\xcf\xd3\n';
@@ -206,7 +214,7 @@ const mesCurto = (iso) => {
  * Gera o relatório em PDF do período.
  * @returns {Uint8Array}
  */
-export function gerarPDF(periodo) {
+export function gerarPDF(periodo, _partes = {}, { anexo = null } = {}) {
   const d = dadosDoPeriodo(periodo);
   const r = d.resumo;
   const doc = new Documento();
@@ -323,5 +331,5 @@ export function gerarPDF(periodo) {
     { total: ['Total', '', '', '', '', reais(d.cartao.reduce((s, c) => s + c.valor, 0))], vazio: 'Nenhuma compra no cartão neste período.' },
   );
 
-  return doc.arquivo((pag, total) => ({ esquerda: `Caixa da Família  ·  ${textoDoPeriodo(periodo)}`, direita: `Página ${pag} de ${total}` }));
+  return doc.arquivo((pag, total) => ({ esquerda: `Caixa da Família  ·  ${textoDoPeriodo(periodo)}`, direita: `Página ${pag} de ${total}` }), anexo);
 }

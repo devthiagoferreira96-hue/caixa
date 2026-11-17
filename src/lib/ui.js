@@ -114,12 +114,12 @@ export function dialogo({ titulo, corpo, largura = 'max-w-lg', obrigatorio = fal
 }
 
 /** Pergunta de confirmação. Retorna true/false. */
-export function confirmar(mensagem, { titulo = 'Tem certeza?', botao = 'Confirmar', perigo = false } = {}) {
+export function confirmar(mensagem, { titulo = 'Tem certeza?', botao = 'Confirmar', perigo = false, detalhes = '' } = {}) {
   return new Promise((resolver) => {
     const d = dialogo({
       titulo,
       largura: 'max-w-sm',
-      corpo: `<p class="text-stone-600 dark:text-stone-300">${esc(mensagem)}</p>
+      corpo: `<p class="text-stone-600 dark:text-stone-300">${esc(mensagem)}</p>${detalhes /* HTML já escapado por quem chama */}
         <div class="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
           <button type="button" class="btn-neutro" data-resposta="nao">Cancelar</button>
           <button type="button" class="${perigo ? 'btn-perigo' : 'btn-primario'}" data-resposta="sim">${esc(botao)}</button>

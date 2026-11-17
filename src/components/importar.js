@@ -19,16 +19,68 @@ export const ERROS = {
   FORMATO: 'Não consegui ler essa planilha. Abra no Excel e salve de novo como .xlsx.',
 };
 
-export function escolherArquivo() {
+/** Escolher o arquivo. `json: true` aceita também o backup completo (.json) e o PDF gerado pelo sistema */
+export function escolherArquivo({ json = false } = {}) {
   return new Promise((resolver) => {
     const input = Object.assign(document.createElement('input'), {
       type: 'file',
-      accept: '.xlsx,.xlsm,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      accept: `.xlsx,.xlsm,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet${json ? ',.json,application/json,.pdf,application/pdf' : ''}`,
     });
     input.addEventListener('change', () => resolver(input.files?.[0] || null));
     input.addEventListener('cancel', () => resolver(null));
     input.click();
   });
+}
+
+const ehJson = (arquivo) => /\.json$/i.test(arquivo.name) || arquivo.type === 'application/json';
+const ehPdf = (arquivo) => /\.pdf$/i.test(arquivo.name) || arquivo.type === 'application/pdf';
+
+const NOMES_TABELAS = {
+  lancamentos: ['lançamento', 'lançamentos'], compras_cartao: ['compra no cartão', 'compras no cartão'], parcelas: ['parcela', 'parcelas'],
+  contas: ['conta', 'contas'], cartoes: ['cartão', 'cartões'], categorias: ['categoria', 'categorias'], pessoas: ['pessoa', 'pessoas'],
+  resina_cargas: ['carga', 'cargas'], resina_carga_itens: ['entrega de produtor', 'entregas de produtores'],
+  resina_movimentos: ['movimento da conta corrente', 'movimentos da conta corrente'], resina_insumos: ['insumo', 'insumos'],
+  resina_produtores: ['produtor', 'produtores'], resina_titulares: ['conta da conta corrente', 'contas da conta corrente'],
+  resina_fazendas: ['fazenda', 'fazendas'], resina_motoristas: ['motorista', 'motoristas'], resina_caminhoes: ['caminhão', 'caminhões'],
+  resina_produtos: ['produto', 'produtos'], resina_precos: ['preço do kg', 'preços do kg'],
+};
+const quantos = (tabela, n) => `${n} ${(NOMES_TABELAS[tabela] || [tabela, tabela])[n === 1 ? 0 : 1]}`;
+
+/** Lê os dados de dentro do PDF, mostra o que vai entrar e junta (sem apagar nem duplicar) */
+async function importarPdf(arquivo, aoTerminar) {
+  const { lerAnexoDoPdf, juntarTabelas } = await import('../lib/dados-periodo.js');
+  const { lerBackup, juntarDados } = await import('../lib/api.js');
+  const { local } = await import('../lib/local-db.js');
+  let dados;
+  try {
+    const texto = await lerAnexoDoPdf(new Uint8Array(await arquivo.arrayBuffer()));
+    if (!texto) {
+      toast('Esse PDF não tem os dados para importar. Só dá para importar o PDF gerado pelo sistema com a opção "Permitir importar este PDF de volta" marcada. Para trazer tudo, use o backup (.json).', { tipo: 'erro' });
+      return;
+    }
+    dados = lerBackup(texto);
+  } catch (e) {
+    toast(e.message === 'NAO_PDF' ? 'Esse arquivo não é um PDF.' : 'Não consegui ler os dados desse PDF. Gere o PDF de novo no sistema.', { tipo: 'erro' });
+    return;
+  }
+  const previa = juntarTabelas(local.tabelas(), dados.tabelas);
+  const periodo = dados.periodo?.nome ? ` (${esc(dados.periodo.nome)})` : '';
+  if (!previa.total) {
+    toast(`Tudo o que está nesse PDF${periodo} já está no sistema. Nada foi mudado.`);
+    return;
+  }
+  const itens = Object.entries(previa.novos).map(([t, n]) => `<li>${esc(quantos(t, n))}</li>`).join('');
+  const { confirmar } = await import('../lib/ui.js');
+  const ok = await confirmar(
+    `Os dados do PDF${periodo} vão ser JUNTADOS aos do sistema. Vai entrar só o que ainda não existe; nada que já está aqui é apagado ou mudado.`,
+    { titulo: 'Importar os dados deste PDF?', botao: 'Importar', detalhes: `<ul class="mt-2 list-disc pl-5 text-sm">${itens}</ul>` },
+  );
+  if (!ok) return;
+  const r = await juntarDados(dados);
+  toast(`Dados do PDF importados: ${Object.entries(r.novos).map(([t, n]) => quantos(t, n)).join(', ')}.`, {
+    acao: { texto: 'Desfazer', fn: async () => { await r.desfazer(); toast('Importação desfeita'); aoTerminar?.(); } },
+  });
+  aoTerminar?.();
 }
 
 const lista = (nomes, max = 10) =>
@@ -66,8 +118,18 @@ const TIPOS_PLANILHA = {
  * para a conta corrente completar as cargas que vieram da produção). `contaAtual` = conta já escolhida na tela.
  */
 export async function importarQualquerPlanilha(aoTerminar, { contaAtual = null } = {}) {
-  const arquivo = await escolherArquivo();
+  const arquivo = await escolherArquivo({ json: true });
   if (!arquivo) return;
+  // backup completo (.json): restaura tudo (com confirmação e Desfazer)
+  if (ehJson(arquivo)) {
+    const { restaurarComConfirmacao } = await import('./backup.js');
+    const { lerBackup } = await import('../lib/api.js');
+    let dados;
+    try { dados = lerBackup(await arquivo.text()); } catch (e) { toast(e.message, { tipo: 'erro' }); return; }
+    return restaurarComConfirmacao(aoTerminar, dados);
+  }
+  // PDF gerado pelo sistema com "Permitir importar este PDF de volta": junta os dados do período
+  if (ehPdf(arquivo)) return importarPdf(arquivo, aoTerminar);
   let abas;
   try {
     abas = await lerXlsx(arquivo);

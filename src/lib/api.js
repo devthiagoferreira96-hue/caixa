@@ -445,6 +445,21 @@ export async function restaurarBackup(dados) {
   return async () => { await local.substituir(antes); await carregarCadastros(); };
 }
 
+/**
+ * Junta os dados que vieram dentro de um PDF do sistema (já conferidos por lerBackup):
+ * só entra o que falta; nada é apagado ou alterado. Retorna o que entrou e `desfazer()`.
+ */
+export async function juntarDados(dados) {
+  const { juntarTabelas } = await import('./dados-periodo.js');
+  const antes = structuredClone(local.tabelas());
+  const r = juntarTabelas(antes, dados.tabelas);
+  if (r.total) {
+    await local.substituir(r.tabelas);
+    await carregarCadastros();
+  }
+  return { ...r, desfazer: async () => { await local.substituir(antes); await carregarCadastros(); } };
+}
+
 // ---------- Importar planilha do Excel
 /**
  * Grava o plano montado por `montarPlano` (importar-planilha.js).
