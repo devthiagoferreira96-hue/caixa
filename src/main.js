@@ -27,6 +27,20 @@ async function abrirSistema() {
   // contas "sempre" e assinaturas no cartão: completa os próximos meses
   try { await manterRecorrencias(); } catch (e) { console.error(e); }
   iniciarApp();
+  protegerDados();
+}
+
+/**
+ * Pede ao navegador para NÃO apagar sozinho os dados do sistema (ele apaga dados de sites
+ * quando o aparelho fica sem espaço). Não impede a pessoa de limpar à mão.
+ * Chamado logo depois de entrar com a senha (o navegador aceita melhor depois de uma ação da pessoa).
+ */
+async function protegerDados() {
+  try {
+    if (!navigator.storage?.persist) return;
+    if (await navigator.storage.persisted()) return;
+    await navigator.storage.persist();
+  } catch { /* navegador sem esse recurso: segue normal */ }
 }
 
 /** Bloqueia o sistema: grava o que faltar, esquece a chave da memória e volta para a tela de senha */

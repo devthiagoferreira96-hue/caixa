@@ -78,11 +78,17 @@ export default {
     <p><strong>Usuário e senha</strong>: troque seu nome ou sua senha, gere um novo código de recuperação ou apague tudo deste aparelho.</p>`,
 
   async render(el, ctx) {
+    // o navegador aceitou não apagar sozinho os dados deste site? (pedido feito ao entrar, em main.js)
+    let protegido = null;
+    try { protegido = navigator.storage?.persisted ? await navigator.storage.persisted() : null; } catch { /* sem o recurso */ }
     el.innerHTML = `
     <div class="mx-auto grid max-w-3xl gap-3 animate-entrar">
       ${secao('backup', 'Backup, importar e exportar', 'baixar', `
         <p class="text-sm text-stone-700 dark:text-stone-300">Seus dados ficam <strong>só neste aparelho</strong>. Faça um backup de vez em quando e guarde o arquivo fora dele (Drive, e-mail ou WhatsApp). Aqui também dá para gerar uma <strong>planilha do Excel</strong> ou um <strong>relatório em PDF</strong>.</p>
         <p class="mt-2 text-sm ${!local.ultimoBackup ? 'font-semibold text-amber-800 dark:text-amber-300' : 'text-stone-600 dark:text-stone-400'}">${local.ultimoBackup ? `Último backup: ${dataCompleta(local.ultimoBackup.slice(0, 10))}` : 'Você ainda não fez nenhum backup.'}</p>
+        ${protegido === null ? '' : `<p class="mt-1 text-sm text-stone-600 dark:text-stone-400">${protegido
+    ? 'Proteção ligada: o navegador não apaga estes dados sozinho quando falta espaço. Limpar os dados do navegador à mão ainda apaga, por isso o backup continua importante.'
+    : 'O navegador ainda não liberou a proteção contra apagar estes dados quando falta espaço (ele costuma liberar com o uso, ou ao instalar o sistema como app). Por isso, faça backups.'}</p>`}
         <div class="mt-4 flex flex-col gap-2 sm:flex-row">
           <button type="button" class="btn-primario" data-backup>${icone('baixar')} Backup, Excel ou PDF</button>
           <button type="button" class="btn-neutro" data-restaurar>${icone('enviar')} Restaurar um backup</button>

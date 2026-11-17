@@ -92,6 +92,26 @@
   .dica {
     @apply mt-1.5 text-sm text-stone-600 dark:text-stone-400;
   }
+  /* Tabela com linhas entre as colunas (comparativo de insumos): mais fácil de seguir cada número */
+  .tabela-colunas {
+    @apply border-collapse;
+  }
+  .tabela-colunas :is(th, td) + :is(th, td) {
+    @apply border-l border-stone-200 dark:border-stone-700;
+  }
+  /* início de um grupo de colunas (produção, valores, insumos, resultado): linha mais forte */
+  .tabela-colunas :is(th, td).grupo {
+    @apply border-l-2 border-stone-300 dark:border-stone-600;
+  }
+  .tabela-colunas thead tr {
+    @apply border-b-2 border-stone-200 dark:border-stone-700;
+  }
+  .tabela-colunas tbody tr:nth-child(even) {
+    @apply bg-stone-50 dark:bg-stone-800/40;
+  }
+  .tabela-colunas tbody tr:hover {
+    @apply bg-brand-50 dark:bg-brand-950/40;
+  }
   .erro-campo {
     @apply mt-1.5 text-sm font-medium text-saida dark:text-red-400;
   }

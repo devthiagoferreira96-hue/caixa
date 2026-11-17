@@ -10,6 +10,9 @@ import { nomeProduto, unidade } from './insumos.js';
 const rotuloProdutor = (id) => `<span class="flex min-w-0 items-center gap-2 text-sm font-medium">${bolinha(corProdutor(id))}<span class="truncate">${esc(nomeProdutor(id))}</span></span>`;
 const largura = (v, maior) => (v > 0 ? Math.max((v / maior) * 100, 1.5) : 0);
 const porKg = (v) => (v == null ? '—' : `${brl(v)}/kg`);
+// colunas da "Tabela com todos os números" onde começa um grupo (linha mais forte antes):
+// produção (Cargas), valores (Valor da resina), insumos (Insumos) e o resultado (Produtor − insumos)
+const INICIO_GRUPO = new Set([1, 4, 7, 10]);
 
 /** Uma barra com o valor na ponta. A barra é o alvo do toque/foco e mostra a dica. */
 const barra = (valor, maior, cor, texto, dica) => `
@@ -104,18 +107,18 @@ export function secaoComparativo(comp, periodo) {
     <details class="group rounded-xl border border-stone-200 dark:border-stone-800" open>
       <summary class="cursor-pointer px-3 py-2 font-semibold">Tabela com todos os números</summary>
       <div class="overflow-x-auto px-3 pb-3">
-        <table class="w-full min-w-[52rem] text-sm tabular-nums">
+        <table class="tabela-colunas w-full min-w-[52rem] text-sm tabular-nums">
           <thead class="text-left text-xs uppercase text-stone-600 dark:text-stone-400"><tr>
             ${['Produtor', 'Cargas', 'Tbs', 'Resina', 'Valor da resina', 'Arrendamento', 'Parte do produtor', 'Insumos', 'Insumo por kg', 'Insumo / valor', 'Produtor − insumos'].map((c, i) =>
-              `<th scope="col" class="px-1.5 py-1.5 font-semibold ${i ? 'text-right' : ''}">${c}</th>`).join('')}</tr></thead>
-          <tbody class="divide-y divide-stone-100 dark:divide-stone-800">${linhas.map((l) => `<tr>
-            <td class="px-1.5 py-2">${rotuloProdutor(l.produtor_id)}</td>
-            <td class="px-1.5 py-2 text-right">${numero(l.cargas)}</td><td class="px-1.5 py-2 text-right">${numero(l.tbs)}</td>
-            <td class="whitespace-nowrap px-1.5 py-2 text-right">${kg(l.kg)}</td><td class="whitespace-nowrap px-1.5 py-2 text-right">${brl(l.valor)}</td>
-            <td class="whitespace-nowrap px-1.5 py-2 text-right">${brl(l.arrendamento)}</td><td class="whitespace-nowrap px-1.5 py-2 text-right">${brl(l.produtor)}</td><td class="whitespace-nowrap px-1.5 py-2 text-right font-semibold">${brl(l.gasto)}</td>
-            <td class="whitespace-nowrap px-1.5 py-2 text-right">${l.alerta ? icone('alerta', 'mr-1 inline size-3.5 align-[-2px] text-amber-700 dark:text-amber-300') : ''}${porKg(l.custoPorKg)}</td>
-            <td class="whitespace-nowrap px-1.5 py-2 text-right">${l.pctDoValor == null ? '—' : pct(l.pctDoValor)}</td>
-            <td class="whitespace-nowrap px-1.5 py-2 text-right ${l.liquidoProdutor < 0 ? 'font-semibold text-red-700 dark:text-red-400' : ''}">${brl(l.liquidoProdutor)}</td>
+              `<th scope="col" class="px-2 py-1.5 font-semibold ${i ? 'text-right' : ''} ${INICIO_GRUPO.has(i) ? 'grupo' : ''}">${c}</th>`).join('')}</tr></thead>
+          <tbody>${linhas.map((l) => `<tr>
+            <td class="px-2 py-2">${rotuloProdutor(l.produtor_id)}</td>
+            <td class="grupo px-2 py-2 text-right">${numero(l.cargas)}</td><td class="px-2 py-2 text-right">${numero(l.tbs)}</td>
+            <td class="whitespace-nowrap px-2 py-2 text-right">${kg(l.kg)}</td><td class="grupo whitespace-nowrap px-2 py-2 text-right">${brl(l.valor)}</td>
+            <td class="whitespace-nowrap px-2 py-2 text-right">${brl(l.arrendamento)}</td><td class="whitespace-nowrap px-2 py-2 text-right">${brl(l.produtor)}</td><td class="grupo whitespace-nowrap px-2 py-2 text-right font-semibold">${brl(l.gasto)}</td>
+            <td class="whitespace-nowrap px-2 py-2 text-right">${l.alerta ? icone('alerta', 'mr-1 inline size-3.5 align-[-2px] text-amber-700 dark:text-amber-300') : ''}${porKg(l.custoPorKg)}</td>
+            <td class="whitespace-nowrap px-2 py-2 text-right">${l.pctDoValor == null ? '—' : pct(l.pctDoValor)}</td>
+            <td class="grupo whitespace-nowrap px-2 py-2 text-right ${l.liquidoProdutor < 0 ? 'font-semibold text-red-700 dark:text-red-400' : ''}">${brl(l.liquidoProdutor)}</td>
           </tr>`).join('')}</tbody>
         </table>
         <p class="dica mt-2">Os insumos são descontados do produtor (entram como débito na conta corrente). "Produtor − insumos" é o que sobra para ele depois do desconto.</p>
@@ -126,10 +129,10 @@ export function secaoComparativo(comp, periodo) {
       <summary class="cursor-pointer px-3 py-2 font-semibold">Consumo de cada produto por tonelada de resina</summary>
       <div class="overflow-x-auto px-3 pb-3">
         <p class="mb-2 text-sm text-stone-600 dark:text-stone-400">Quanto de cada produto o produtor usou para cada 1.000 kg de resina entregue. Compare a mesma coluna entre produtores.</p>
-        <table class="w-full text-sm tabular-nums">
+        <table class="tabela-colunas w-full text-sm tabular-nums">
           <thead class="text-left text-xs uppercase text-stone-600 dark:text-stone-400"><tr><th scope="col" class="px-1.5 py-1.5 font-semibold">Produtor</th>${produtos.map((p) =>
             `<th scope="col" class="px-1.5 py-1.5 text-right font-semibold">${esc(nomeProduto(p))} <span class="font-normal normal-case">(${esc(unidade(p))}/t)</span></th>`).join('')}</tr></thead>
-          <tbody class="divide-y divide-stone-100 dark:divide-stone-800">${linhas.map((l) => `<tr><td class="px-1.5 py-2">${rotuloProdutor(l.produtor_id)}</td>${produtos.map((p) => {
+          <tbody>${linhas.map((l) => `<tr><td class="px-1.5 py-2">${rotuloProdutor(l.produtor_id)}</td>${produtos.map((p) => {
             const q = l.porProduto.get(p)?.quantidade;
             return `<td class="whitespace-nowrap px-1.5 py-2 text-right">${!q ? '—' : l.kg > 0 ? numero((q / l.kg) * 1000, 2) : `${numero(q, 2)} <span class="text-xs text-stone-500">sem resina</span>`}</td>`;
           }).join('')}</tr>`).join('')}</tbody>
