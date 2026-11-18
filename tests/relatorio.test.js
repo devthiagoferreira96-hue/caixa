@@ -1,6 +1,6 @@
 // Testes das bases do relatório (vencimento, competência, pagamento). Rodar: node tests/relatorio.test.js
 import assert from 'node:assert/strict';
-import { dataDeReferencia, mesDeReferencia, BASES_RELATORIO } from '../src/lib/calculos.js';
+import { dataDeReferencia, mesDeReferencia, BASES_RELATORIO, dataNoExtrato } from '../src/lib/calculos.js';
 
 let falhas = 0;
 const teste = (nome, fn) => {
@@ -34,6 +34,12 @@ teste('competência guardada com dia diferente de 01 continua no mês certo', ()
   assert.equal(dataDeReferencia({ ...luz, competencia: '2026-10-15' }, 'competencia'), '2026-10-01'));
 teste('as três bases têm nome e explicação', () =>
   assert.deepEqual(Object.keys(BASES_RELATORIO), ['vencimento', 'competencia', 'pagamento']));
+
+teste('extrato: parcela de dezembro paga em novembro aparece em novembro', () =>
+  assert.equal(dataNoExtrato({ vencimento: '2026-12-10', pago: true, data_pagamento: '2026-11-15' }), '2026-11-15'));
+teste('extrato: em aberto fica no vencimento', () => assert.equal(dataNoExtrato(aberto), '2026-11-20'));
+teste('extrato: pago sem data de pagamento fica no vencimento', () =>
+  assert.equal(dataNoExtrato({ vencimento: '2026-12-10', pago: true, data_pagamento: null }), '2026-12-10'));
 
 console.log(falhas ? `\n${falhas} teste(s) falharam` : '\nTodos os testes passaram');
 process.exit(falhas ? 1 : 0);

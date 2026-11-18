@@ -5,7 +5,7 @@ import { somarMeses, lerValor, valorParaCampo, brl, esc, diasAte, quandoVence, s
 import { PALETAS, calcularTema, contraste, oklch, hexDe, coresDasPreferencias } from '../src/lib/temas.js';
 import { calcularCarga, diferencaDePeso, precoNaData, proximoNumero, codigoCarga, resumoDasCargas, linhasContaCorrente, extratoContaCorrente, comparativoInsumos, totalDoInsumo, aReceberPorConta } from '../src/modulos/resina/calculos.js';
 import { numeroBR, dataDaCelula, lerPlanilhaConta, entenderLinha, produtorDaLinha, produtoParecido, montarImportacao } from '../src/modulos/resina/importar-conta.js';
-import { proximasDatas, completarLancamentos, completarAssinaturas, limiteRecorrencia, mesesEntre } from '../src/lib/recorrencia.js';
+import { proximasDatas, completarLancamentos, completarAssinaturas, limiteRecorrencia, mesesEntre, SEMANAL, mudancasNaSequencia } from '../src/lib/recorrencia.js';
 import { gastosPorCategoria, itensDaCategoria, saidasReais, totalDoCartao, resumoPorArea, entradasPorCategoria, situacaoFatura, dividirAjustes } from '../src/lib/calculos.js';
 let ok=0, falhas=[];
 const t=(nome, obtido, esperado)=>{ const a=JSON.stringify(obtido), b=JSON.stringify(esperado); a===b?ok++:falhas.push(`${nome}: obtido ${a}, esperado ${b}`); };
@@ -144,9 +144,8 @@ t('preferência inválida volta ao padrão',coresDasPreferencias({paleta:'person
   const a1 = linhas[0];
   t('conta: kg do produtor', a1.kg, 1200);
   t('conta: média kg por tambor', a1.media, 200);
-  t('conta: UNI. = valor de um tambor', a1.uni, 1000);
   t('conta: % arrendo é a porcentagem', a1.pct, 40);
-  t('conta: débito = tambores × UNI. × %', a1.debito, 6 * 1000 * 0.4);
+  t('conta: débito = kg × R$ do kg × %', a1.debito, 6 * 1000 * 0.4);
   t('conta: nota e destino da carga', [a1.nota, a1.destino], ['123', 'Usina X']);
   const ext = extratoContaCorrente(linhas, '2026-11-01', '2026-12-01');
   t('conta: saldo anterior (só outubro, a receber)', ext.saldoAnterior, -(2400 + 2000));
@@ -270,6 +269,13 @@ t('preferência inválida volta ao padrão',coresDasPreferencias({paleta:'person
   t('rec: meses entre datas', [mesesEntre('2026-01-31', '2026-03-05'), mesesEntre('2026-11-10', '2027-02-01')], [2, 3]);
   t('rec: limite = 12 meses à frente', limiteRecorrencia(new Date(2026, 10, 17)), '2027-12-01');
   t('rec: próximas datas mensais (dia 31)', proximasDatas('2026-01-31', '2026-01-31', '2026-05-01').map((x) => x.data), ['2026-02-28', '2026-03-31', '2026-04-30']);
+  t('rec: próximas datas semanais (virando o mês)', proximasDatas('2026-11-24', '2026-11-24', '2026-12-16', SEMANAL).map((x) => x.data), ['2026-12-01', '2026-12-08', '2026-12-15']);
+  t('rec: semanal continua de onde parou', proximasDatas('2026-11-03', '2026-11-17', '2026-12-02', SEMANAL).map((x) => [x.indice, x.data]), [[3, '2026-11-24'], [4, '2026-12-01']]);
+  {
+    const sem = [{ id: 's1', tipo: 'saida', valor: 80, descricao: 'Feira', grupo: 'S', recorrente: true, recorrente_base: '2026-11-07', recorrente_ate: '2026-11-14', recorrente_intervalo: SEMANAL, vencimento: '2026-11-14', competencia: null }];
+    t('rec: semanal completa toda semana', completarLancamentos(sem, '2026-12-01').novos.map((n) => n.vencimento), ['2026-11-21', '2026-11-28']);
+    t('rec: semanal guarda o passo', completarLancamentos(sem, '2026-11-22').novos[0].recorrente_intervalo, SEMANAL);
+  }
   t('rec: próximas datas anuais', proximasDatas('2026-03-10', '2026-03-10', '2029-01-01', 12).map((x) => x.data), ['2027-03-10', '2028-03-10']);
   t('rec: continua de onde parou', proximasDatas('2026-01-05', '2026-03-05', '2026-06-01').map((x) => [x.indice, x.data]), [[3, '2026-04-05'], [4, '2026-05-05']]);
   const base = { tipo: 'saida', valor: 100, descricao: 'Internet', categoria_id: 'c', conta_id: 'k', pessoa_id: null, grupo: 'g', recorrente: true, recorrente_base: '2026-11-10' };
@@ -305,6 +311,28 @@ t('preferência inválida volta ao padrão',coresDasPreferencias({paleta:'person
   t('fatura: reembolso abate o total', totalDoCartao(parcelas, 'c'), 250);
   t('fatura: reembolso abate a categoria', gastosPorCategoria([], parcelas).get('m'), 250);
 }
+// ---------- Editar "este e os próximos"
+{
+  const p = (n, extra = {}) => ({ id: `p${n}`, grupo: 'G', parcela: `${n}/4`, descricao: 'Geladeira', valor: 250, categoria_id: 'c1', conta_id: 'a1',
+    vencimento: `2026-${String(9 + n).padStart(2, '0')}-10`, pago: n === 1, data_pagamento: n === 1 ? '2026-10-10' : null, competencia: null, ...extra });
+  const grupo = [p(1), p(2), p(3), p(4)];
+  const ed = { ...p(2), descricao: 'Geladeira nova', valor: 270, vencimento: '2026-11-15', pago: true, data_pagamento: '2026-11-15' };
+  const m = mudancasNaSequencia(grupo[1], ed, grupo);
+  const de = (id) => m.find((x) => x.id === id)?.valores;
+  t('seq: a anterior não muda', de('p1'), undefined);
+  t('seq: a editada leva tudo', [de('p2').descricao, de('p2').pago], ['Geladeira nova', true]);
+  t('seq: as próximas levam descrição e valor', [de('p3').descricao, de('p4').valor], ['Geladeira nova', 270]);
+  t('seq: o dia do vencimento anda junto', [de('p3').vencimento, de('p4').vencimento], ['2026-12-15', '2027-01-15']);
+  t('seq: pago não passa para as próximas', 'pago' in de('p3') || 'data_pagamento' in de('p3'), false);
+  t('seq: campo que não mudou não é tocado', 'categoria_id' in de('p3'), false);
+  const rec = [{ id: 'r1', grupo: 'R', recorrente: true, recorrente_base: '2026-11-05', recorrente_ate: '2026-12-05', recorrente_intervalo: 1, vencimento: '2026-11-05', valor: 100, descricao: 'Net' },
+    { id: 'r2', grupo: 'R', recorrente: true, recorrente_intervalo: 1, vencimento: '2026-12-05', valor: 100, descricao: 'Net' }];
+  const mr = mudancasNaSequencia(rec[1], { ...rec[1], vencimento: '2026-12-08' }, rec);
+  t('seq: na repetição sempre, a data-base segue o novo dia', mr.find((x) => x.id === 'r1').valores, { recorrente_base: '2026-11-08', recorrente_ate: '2026-12-08' });
+  const sem = [{ id: 'w1', grupo: 'W', recorrente_intervalo: SEMANAL, vencimento: '2026-11-03', descricao: 'Diarista' }, { id: 'w2', grupo: 'W', recorrente_intervalo: SEMANAL, vencimento: '2026-11-10', descricao: 'Diarista' }];
+  t('seq: semanal anda por dias', mudancasNaSequencia(sem[0], { ...sem[0], vencimento: '2026-11-04' }, sem)[1].valores.vencimento, '2026-11-11');
+}
+
 // ---------- Pagamento dividido entre contas, desconto/juros e competência na repetição
 {
   const soma = (l, c) => Math.round(l.reduce((s, x) => s + Number(x[c] || 0), 0) * 100) / 100;

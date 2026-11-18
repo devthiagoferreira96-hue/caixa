@@ -120,7 +120,7 @@ export function linhasContaCorrente(cargas, itensPorCarga, movimentos, titularId
       linhas.push({
         tipo: 'carga', carga_id: c.id, carga: c, data: c.data, produtor_id: l.produtor_id,
         nota: c.nota || '', destino: c.destino || '', tbs: l.tbs || 0, pct: pctArr, kg: l.kg,
-        uni: media == null ? null : media * (c.preco_kg || 0), media, preco: c.preco_kg || 0,
+        media, preco: c.preco_kg || 0,
         credito: 0, debito: l.arrendamento,
       });
     });

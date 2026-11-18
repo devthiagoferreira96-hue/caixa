@@ -1,8 +1,9 @@
 // Uma linha de lançamento (usada no Início e no Extrato) + edição/exclusão
-import { esc, brl, diaMes, diasAte, quandoVence, hojeISO } from '../lib/format.js';
+import { esc, brl, diaMes, dataCompleta, diasAte, quandoVence, hojeISO } from '../lib/format.js';
 import { buscar } from '../lib/store.js';
 import { icone, toast, dialogo, confirmar, mascaraDinheiro, limparErros, semRepetir } from '../lib/ui.js';
-import { atualizarLancamento, excluirLancamentos, lancamentosDoGrupo, lancamentosDaDivisao, pessoaPorNome, pararRecorrencia } from '../lib/api.js';
+import { atualizarLancamento, atualizarSequencia, criarLancamentos, excluirLancamentos, lancamentosDoGrupo, lancamentosDaDivisao, pessoaPorNome, pararRecorrencia } from '../lib/api.js';
+import { passoDe, nomesDoPasso, mudancasNaSequencia } from '../lib/recorrencia.js';
 import { campoValor, campoDescricao, campoCategoria, camposCaixa, lerCamposCaixa, ligarCamposCaixa, atualizarCategorias } from './form-lancamento.js';
 
 /** Botão "Desfazer" padrão dos avisos: desfaz, avisa e redesenha a tela */
@@ -34,10 +35,10 @@ export function itemLancamento(l, { mostrarPrazo = false } = {}) {
     buscar('contas', l.conta_id)?.nome,
     buscar('pessoas', l.pessoa_id)?.nome,
     l.parcela && `parcela ${l.parcela}`,
-    l.recorrente && (Number(l.recorrente_intervalo) === 12 ? 'todo ano' : 'todo mês'),
+    l.recorrente && nomesDoPasso(passoDe(l)).todo,
     l.divisao && 'pagamento dividido',
     (l.resina_movimento_id || l.resina_entrega_id) && 'veio da Resina',
-    l.competencia && l.competencia.slice(0, 7) !== l.vencimento.slice(0, 7) && `competência ${l.competencia.slice(5, 7)}/${l.competencia.slice(0, 4)}`,
+    l.competencia && l.competencia !== l.vencimento && `competência ${dataCompleta(l.competencia)}`,
     l.pago && l.data_pagamento && l.data_pagamento !== l.vencimento && `${entrada ? 'recebido' : 'pago'} em ${diaMes(l.data_pagamento)}`,
     Number(l.desconto) > 0 && `desconto ${brl(l.desconto)}`,
     Number(l.juros) > 0 && `juros ${brl(l.juros)}`,
@@ -52,7 +53,7 @@ export function itemLancamento(l, { mostrarPrazo = false } = {}) {
     <button type="button" data-editar="${l.id}" class="min-w-[42%] flex-1 cursor-pointer rounded-lg px-2 py-1 text-left transition hover:bg-stone-50 dark:hover:bg-stone-800/60"
       aria-label="Abrir “${esc(l.descricao)}” para ver ou editar">
       <span class="line-clamp-2 font-medium">${esc(l.descricao)}</span>
-      <span class="line-clamp-2 text-sm text-stone-600 dark:text-stone-400">${diaMes(l.vencimento)}${mostrarPrazo && !l.pago ? ` · ${quandoVence(l.vencimento)}` : ''} · ${detalhes.map(esc).join(' · ')}</span>
+      <span class="line-clamp-2 text-sm text-stone-600 dark:text-stone-400">${l.pago && l.data_pagamento && l.data_pagamento !== l.vencimento ? 'vence ' : ''}${diaMes(l.vencimento)}${mostrarPrazo && !l.pago ? ` · ${quandoVence(l.vencimento)}` : ''} · ${detalhes.map(esc).join(' · ')}</span>
       ${l.observacao ? `<span class="line-clamp-1 text-sm italic text-stone-600 dark:text-stone-400" title="${esc(l.observacao)}">Obs.: ${esc(l.observacao)}</span>` : ''}
     </button>
     <div class="text-right @max-[15.5rem]:flex @max-[15.5rem]:basis-full @max-[15.5rem]:flex-wrap @max-[15.5rem]:items-center @max-[15.5rem]:gap-2 @max-[15.5rem]:pl-12 @max-[15.5rem]:text-left">
@@ -111,6 +112,27 @@ export async function cliqueEmLancamento(e, lista, atualizar) {
   return false;
 }
 
+/** Pergunta se a mudança vale só para este lançamento da sequência ou também para os próximos. Retorna 'um', 'todos' ou '' (cancelou) */
+function perguntarAlcance(l) {
+  const este = l.parcela ? `esta parcela (${l.parcela})` : nomesDoPasso(passoDe(l)).esta;
+  return new Promise((resolver) => {
+    const j = dialogo({
+      titulo: l.parcela ? 'Este lançamento é parcelado' : 'Este lançamento se repete',
+      largura: 'max-w-sm',
+      corpo: `<p class="text-stone-600 dark:text-stone-300">Quer salvar a mudança só em ${esc(este)} ou também nos próximos?</p>
+        <p class="mt-2 text-sm text-stone-600 dark:text-stone-400">Nos próximos mudam descrição, valor, categoria, conta, pessoa, observação e as datas (cada um no seu mês ou semana). O que já foi pago continua como está.</p>
+        <div class="mt-5 grid gap-2">
+          <button class="btn-primario" data-r="todos">Este e os próximos</button>
+          <button class="btn-neutro" data-r="um">Só este</button>
+          <button class="btn-sec" data-r="">Cancelar</button>
+        </div>`,
+    });
+    let r = '';
+    j.addEventListener('click', (ev) => { const b = ev.target.closest('[data-r]'); if (b) { r = b.dataset.r; j.close(); } });
+    j.addEventListener('close', () => resolver(r));
+  });
+}
+
 async function excluir(l, atualizar, d) {
   let ids = [l.id];
   let todos = false;
@@ -119,7 +141,7 @@ async function excluir(l, atualizar, d) {
       const j = dialogo({
         titulo: 'Este lançamento se repete',
         largura: 'max-w-sm',
-        corpo: `<p class="text-stone-600 dark:text-stone-300">Quer excluir só este ${Number(l.recorrente_intervalo) === 12 ? 'ano' : 'mês'} ou este e os próximos?${l.recorrente ? ' "Este e os próximos" também para a repetição: o sistema não lança mais.' : ''}</p>
+        corpo: `<p class="text-stone-600 dark:text-stone-300">Quer excluir só ${l.parcela ? 'esta parcela' : nomesDoPasso(passoDe(l)).esta} ou este e os próximos?${l.recorrente ? ' "Este e os próximos" também para a repetição: o sistema não lança mais.' : ''}</p>
           <div class="mt-5 grid gap-2">
             <button class="btn-perigo" data-r="todos">Este e os próximos</button>
             <button class="btn-neutro" data-r="um">Só este</button>
@@ -172,8 +194,20 @@ async function excluir(l, atualizar, d) {
   }
 }
 
-export function abrirEdicao(l, atualizar) {
-  if (l.fatura_cartao_id) {
+/**
+ * Abre o lançamento para editar. Com `duplicar`, abre uma cópia dele (sem repetição, parcela nem pagamento)
+ * para a pessoa mudar o que precisar: ao salvar, cria um lançamento novo e o original fica como está.
+ */
+export function abrirEdicao(l, atualizar, { duplicar = false } = {}) {
+  const original = l;
+  if (duplicar) {
+    l = {
+      tipo: l.tipo, valor: l.valor, valor_original: l.valor_original, desconto: l.desconto, juros: l.juros,
+      descricao: l.descricao, categoria_id: l.categoria_id, conta_id: l.conta_id, pessoa_id: l.pessoa_id,
+      vencimento: l.vencimento, competencia: l.competencia, observacao: l.observacao, pago: false, data_pagamento: null,
+    };
+  }
+  if (!duplicar && l.fatura_cartao_id) {
     confirmar(`Este é o pagamento da fatura (${brl(l.valor)}). Quer desfazer o pagamento? A fatura volta a ficar em aberto.`, {
       titulo: l.descricao, botao: 'Desfazer pagamento', perigo: true,
     }).then(async (sim) => {
@@ -185,9 +219,10 @@ export function abrirEdicao(l, atualizar) {
     return;
   }
   const d = dialogo({
-    titulo: 'Editar lançamento',
+    titulo: duplicar ? 'Duplicar lançamento' : 'Editar lançamento',
     corpo: `
       <form class="grid gap-4" novalidate>
+        ${duplicar ? `<p class="rounded-xl bg-stone-100 px-3 py-2 text-sm text-stone-700 dark:bg-stone-800 dark:text-stone-300">${icone('copiar', 'mr-1 inline size-4 align-[-3px]')}Cópia de “${esc(original.descricao)}”. Mude o que precisar e salve: o original continua como está.</p>` : ''}
         ${l.resina_movimento_id || l.resina_entrega_id ? `<p class="rounded-xl bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:bg-amber-900/30 dark:text-amber-100">${icone('alerta', 'mr-1 inline size-4 align-[-3px]')}Este lançamento veio da Resina (${l.resina_movimento_id ? 'recebimento da <a href="#conta-corrente" class="font-semibold underline">Conta corrente</a>' : 'compra de <a href="#insumos" class="font-semibold underline">Insumos</a>'}). Se mudar lá, ele é refeito aqui. Mudanças feitas só aqui não voltam para a Resina.</p>` : ''}
         <fieldset class="grid grid-cols-2 gap-2">
           <legend class="sr-only">Tipo</legend>
@@ -199,10 +234,13 @@ export function abrirEdicao(l, atualizar) {
         ${campoDescricao(l.descricao, 'Ex.: Conta de luz')}
         ${campoCategoria(l.categoria_id, l.tipo)}
         ${camposCaixa(l)}
-        ${rodapeDatas(l)}
+        ${duplicar ? '' : rodapeDatas(l)}
         <div class="mt-2 flex flex-col-reverse gap-2 sm:flex-row sm:justify-between">
-          <button type="button" class="btn-neutro text-red-700 dark:text-red-400" data-excluir>${icone('lixo')} Excluir</button>
-          <button type="submit" class="btn-primario">${icone('check')} Salvar alterações</button>
+          ${duplicar ? '<button type="button" class="btn-sec" data-cancelar>Cancelar</button>' : `<div class="flex flex-col-reverse gap-2 sm:flex-row">
+            <button type="button" class="btn-neutro text-red-700 dark:text-red-400" data-excluir>${icone('lixo')} Excluir</button>
+            <button type="button" class="btn-neutro" data-duplicar>${icone('copiar')} Duplicar</button>
+          </div>`}
+          <button type="submit" class="btn-primario">${icone('check')} ${duplicar ? 'Salvar cópia' : 'Salvar alterações'}</button>
         </div>
       </form>`,
   });
@@ -220,19 +258,48 @@ export function abrirEdicao(l, atualizar) {
     atualizarCategorias(form, form.tipo.value);
     textosDoTipo();
   });
-  d.querySelector('[data-excluir]').onclick = () => excluir(l, atualizar, d);
+  if (duplicar) d.querySelector('[data-cancelar]').onclick = () => d.close();
+  else {
+    d.querySelector('[data-excluir]').onclick = () => excluir(l, atualizar, d);
+    d.querySelector('[data-duplicar]').onclick = () => { d.close(); abrirEdicao(l, atualizar, { duplicar: true }); };
+  }
   form.onsubmit = semRepetir(async (e) => {
     e.preventDefault();
     limparErros(form);
     const dados = lerCamposCaixa(form, form.tipo.value);
     if (!dados) return;
     const botao = form.querySelector('[type=submit]');
+    if (duplicar) {
+      botao.disabled = true;
+      try {
+        const { pessoaNome, ...resto } = dados;
+        const [novo] = await criarLancamentos([{ ...resto, pessoa_id: await pessoaPorNome(pessoaNome) }]);
+        d.close();
+        toast(`Cópia de “${resto.descricao}” salva`, { acao: desfazendo(() => excluirLancamentos([novo.id]), atualizar) });
+        atualizar();
+      } catch (err) {
+        toast(err.message, { tipo: 'erro' });
+        botao.disabled = false;
+      }
+      return;
+    }
+    const alcance = l.grupo ? await perguntarAlcance(l) : 'um';
+    if (!alcance) return;
     botao.disabled = true;
     try {
       const { pessoaNome, ...resto } = dados;
-      const r = await atualizarLancamento(l.id, { ...resto, pessoa_id: await pessoaPorNome(pessoaNome) });
+      const valores = { ...resto, pessoa_id: await pessoaPorNome(pessoaNome) };
+      let desfazer;
+      let quantos = 1;
+      if (alcance === 'todos') {
+        const mudancas = mudancasNaSequencia(l, valores, await lancamentosDoGrupo(l.grupo, '0000-01-01'));
+        desfazer = await atualizarSequencia(mudancas);
+        quantos = mudancas.length;
+      } else {
+        desfazer = (await atualizarLancamento(l.id, valores)).desfazer;
+      }
       d.close();
-      toast(`Alterações em “${resto.descricao}” salvas`, { acao: desfazendo(r.desfazer, atualizar) });
+      toast(quantos > 1 ? 'Alterações salvas neste e nos próximos' : `Alterações em “${resto.descricao}” salvas`, { acao: desfazendo(desfazer, atualizar) });
       atualizar();
     } catch (err) {
       toast(err.message, { tipo: 'erro' });

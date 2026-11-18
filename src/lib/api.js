@@ -6,6 +6,7 @@
 import { local } from './local-db.js';
 import { store } from './store.js';
 import { mesISO } from './format.js';
+import { dataNoExtrato } from './calculos.js';
 import { TIPO_PADRAO } from './exemplo.js';
 import { completarLancamentos, completarAssinaturas, limiteRecorrencia } from './recorrencia.js';
 import { CADASTROS_RESINA, conferirResina } from '../modulos/resina/tabelas.js';
@@ -144,6 +145,19 @@ export const lancamentosEntre = async (inicio, fim) =>
 
 export const lancamentosDoMes = (mes = store.mes) => lancamentosEntre(mesISO(mes), mesISO(mes, 1));
 
+/** Lançamentos do Extrato do mês: os pagos entram pelo dia do pagamento, os em aberto pelo vencimento */
+export async function lancamentosDoExtrato(mes = store.mes) {
+  const inicio = mesISO(mes), fim = mesISO(mes, 1);
+  const [porVencimento, porPagamento] = await Promise.all([
+    lancamentosEntre(inicio, fim),
+    ok(await local.from('lancamentos').select('*').eq('pago', true).gte('data_pagamento', inicio).lt('data_pagamento', fim)),
+  ]);
+  const unicos = new Map([...porVencimento, ...porPagamento].map((l) => [l.id, l]));
+  return [...unicos.values()]
+    .filter((l) => { const d = dataNoExtrato(l); return d >= inicio && d < fim; })
+    .sort((a, b) => dataNoExtrato(a).localeCompare(dataNoExtrato(b)));
+}
+
 /** Tudo que ainda não foi pago e vence até a data informada (inclui atrasados) */
 export const pendentesAte = async (data) =>
   ok(await local.from('lancamentos').select('*').eq('pago', false).lte('vencimento', data).order('vencimento'));
@@ -155,6 +169,16 @@ export async function atualizarLancamento(id, valores) {
   const [antes] = await copiar('lancamentos', 'id', [id]);
   const [depois] = await alterar('lancamentos', [id], valores);
   return { ...depois, desfazer: () => alterar('lancamentos', [id], valoresAnteriores(antes, valores)) };
+}
+
+/** Altera vários lançamentos de uma vez ([{ id, valores }], cada um com os seus valores). Retorna `desfazer()`. */
+export async function atualizarSequencia(mudancas) {
+  mudancas = mudancas.filter((m) => Object.keys(m.valores).length);
+  const antes = new Map((await copiar('lancamentos', 'id', mudancas.map((m) => m.id))).map((x) => [x.id, x]));
+  for (const m of mudancas) await alterar('lancamentos', [m.id], m.valores);
+  return async () => {
+    for (const m of mudancas) if (antes.has(m.id)) await alterar('lancamentos', [m.id], valoresAnteriores(antes.get(m.id), m.valores));
+  };
 }
 
 /** Exclui lançamentos. Retorna `desfazer()`, que coloca todos de volta. */
@@ -403,7 +427,7 @@ export function conferirTabelas(entrada) {
       conta_id: ref('contas', l.conta_id), categoria_id: ref('categorias', l.categoria_id), pessoa_id: ref('pessoas', l.pessoa_id),
       fatura_cartao_id: ref('cartoes', l.fatura_cartao_id) ?? null, fatura_mes: dataValida(l.fatura_mes) ? l.fatura_mes : null,
       recorrente: l.recorrente === true,
-      competencia: dataValida(l.competencia) ? `${l.competencia.slice(0, 7)}-01` : null,
+      competencia: dataValida(l.competencia) ? l.competencia : null,
       observacao: l.observacao == null || l.observacao === '' ? null : texto(l.observacao, 500),
       desconto: positivo(l.desconto), juros: positivo(l.juros), valor_original: positivo(l.valor_original),
       divisao: typeof l.divisao === 'string' && l.divisao ? l.divisao : null,

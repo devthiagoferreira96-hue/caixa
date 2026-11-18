@@ -5,7 +5,7 @@ import { criarLancamentos, excluirLancamentos, criarCompra, excluirCompra, pesso
 import { nomeCategoria } from '../lib/store.js';
 import { desfazendo } from '../components/lancamento.js';
 import { faturaDe, vencimentoFatura, dividirParcelas } from '../lib/faturas.js';
-import { proximasDatas, limiteRecorrencia, HORIZONTE_MESES } from '../lib/recorrencia.js';
+import { proximasDatas, limiteRecorrencia, HORIZONTE_MESES, SEMANAL, avancar, nomesDoPasso } from '../lib/recorrencia.js';
 import { icone, toast, mascaraDinheiro, erroNoCampo, limparErros, dialogo, semRepetir } from '../lib/ui.js';
 import {
   campoValor, campoDescricao, campoCategoria, camposCaixa, lerCamposCaixa, ligarCamposCaixa, atualizarCategorias, erroDeTipo, opcoesConta,
@@ -26,6 +26,7 @@ export function prepararNovo({ noCartao = 'compra', cartaoId = null } = {}) {
 
 const MAX_MESES = 120;
 const MAX_ANOS = 30;
+const MAX_SEMANAS = 260;
 const NO_CARTAO = [
   ['compra', 'Compra', 'À vista, parcelada ou assinatura'],
   ['estorno', 'Reembolso', 'Estorno ou devolução'],
@@ -40,9 +41,9 @@ export default {
     <p><strong>2.</strong> Digite o valor só com números: 4590 vira R$ 45,90.</p>
     <p><strong>3.</strong> Preencha descrição e categoria. A categoria é o que alimenta o gráfico do Início.</p>
     <p><strong>Contas</strong>: no valor dá para digitar uma conta, como <strong>3*4,50</strong> (3 tarifas de R$ 4,50). Quando sair do campo, ele mostra o resultado.</p>
-    <p><strong>Mais detalhes</strong>: competência (o mês a que a conta se refere), desconto, juros ou multa e uma observação. Com desconto ou juros, digite no Valor o valor original: o sistema calcula o valor final.</p>
+    <p><strong>Mais detalhes</strong>: competência (a data a que a conta se refere, escolhida livremente), desconto, juros ou multa e uma observação. Com desconto ou juros, digite no Valor o valor original: o sistema calcula o valor final.</p>
     <p><strong>Pagou com mais de uma conta?</strong> Marque "Paguei com mais de uma conta" e diga quanto saiu de cada uma (ex.: parte em dinheiro, parte no Pix).</p>
-    <p><strong>Contas fixas</strong> (aluguel, salário de funcionário, internet): em "Repetir todo mês", escolha <strong>por alguns meses</strong> e digite quantos, ou <strong>sempre</strong>. No "sempre", o sistema mantém os próximos ${HORIZONTE_MESES} meses lançados e vai completando sozinho. Para parar, exclua um mês e escolha <strong>Este e os próximos</strong>.</p>
+    <p><strong>Contas fixas</strong> (aluguel, salário de funcionário, internet): em "Repetir?", escolha <strong>toda semana</strong>, <strong>todo mês</strong> ou <strong>todo ano</strong>, <strong>por algumas vezes</strong> e digite quantas, ou <strong>sempre</strong>. No "sempre", o sistema mantém os próximos ${HORIZONTE_MESES} meses lançados e vai completando sozinho. Para parar, exclua um mês e escolha <strong>Este e os próximos</strong>.</p>
     <p><strong>Cartão</strong>: em <strong>Compra</strong>, digite o valor <em>total</em> e escolha as parcelas (o sistema mostra em qual fatura cada uma cai) ou <strong>Assinatura</strong>, que cobra o mesmo valor todo mês até você cancelar.</p>
     <p><strong>Reembolso</strong>: estorno ou devolução que o cartão creditou. Abate o valor da fatura.</p>
     <p><strong>Adiantamento</strong>: quando você paga parte da fatura antes. Sai da conta escolhida e abate o que falta pagar da fatura.</p>`,
@@ -79,9 +80,11 @@ export default {
           ${camposCaixa({})}
           ${campoDividir()}
           <div data-campo>
-            <label class="rotulo" for="f-repetir">Repetir todo mês?</label>
+            <label class="rotulo" for="f-repetir">Repetir?</label>
             <select id="f-repetir" name="repetir" class="campo" aria-describedby="dica-repetir">
               <option value="1">Não, só esta vez</option>
+              <option value="semanas">Toda semana, por algumas semanas</option>
+              <option value="semanal">Toda semana, sempre (até eu parar)</option>
               <option value="meses">Todo mês, por alguns meses</option>
               <option value="sempre">Todo mês, sempre (até eu parar)</option>
               <option value="anos">Todo ano, por alguns anos</option>
@@ -183,17 +186,22 @@ export default {
     const atualizarRepetir = () => {
       const r = form.repetir.value;
       const anos = r === 'anos';
-      mostrar('[data-meses]', r === 'meses' || anos);
-      el.querySelector('[data-rotulo-meses]').textContent = anos ? 'Quantos anos?' : 'Quantos meses?';
-      form.meses.max = anos ? MAX_ANOS : MAX_MESES;
+      const semanas = r === 'semanas';
+      const max = anos ? MAX_ANOS : semanas ? MAX_SEMANAS : MAX_MESES;
+      mostrar('[data-meses]', r === 'meses' || anos || semanas);
+      el.querySelector('[data-rotulo-meses]').textContent = anos ? 'Quantos anos?' : semanas ? 'Quantas semanas?' : 'Quantos meses?';
+      form.meses.max = max;
       const n = Math.trunc(Number(form.meses.value));
       const venc = form.vencimento.value || hojeISO();
-      el.querySelector('[data-ate-quando]').textContent = n >= 2 && n <= (anos ? MAX_ANOS : MAX_MESES)
-        ? `até ${nomeMes(parseISO(somarMeses(venc, (n - 1) * (anos ? 12 : 1)))).toLowerCase()}` : '';
+      el.querySelector('[data-ate-quando]').textContent = n >= 2 && n <= max
+        ? semanas ? `até ${dataCompleta(avancar(venc, n - 1, SEMANAL))}`
+        : `até ${nomeMes(parseISO(somarMeses(venc, (n - 1) * (anos ? 12 : 1)))).toLowerCase()}` : '';
       el.querySelector('[data-dica-repetir]').textContent = form.dividir?.checked
         ? 'Um pagamento dividido em várias contas é lançado uma vez só.'
         : r === 'sempre'
         ? `Lança todo mês até você parar. O sistema mantém os próximos ${HORIZONTE_MESES} meses lançados e completa sozinho. Para parar, exclua um mês e escolha "Este e os próximos".`
+        : r === 'semanal' ? `Lança toda semana, no mesmo dia da semana, até você parar. O sistema mantém os próximos ${HORIZONTE_MESES} meses lançados e completa sozinho. Para parar, exclua uma semana e escolha "Este e os próximos".`
+        : semanas ? `Digite de 2 a ${MAX_SEMANAS} semanas. Lança toda semana, no mesmo dia da semana. Só a primeira fica marcada como paga.`
         : r === 'anual' ? 'Lança uma vez por ano, na mesma data, até você parar (IPVA, seguro, anuidade). O próximo ano já fica lançado.'
         : r === 'meses' ? `Digite de 2 a ${MAX_MESES} meses. Só a primeira fica marcada como paga.`
         : anos ? `Digite de 2 a ${MAX_ANOS} anos. Lança uma vez por ano, na mesma data.`
@@ -304,25 +312,25 @@ export default {
 };
 
 /**
- * Quantas vezes lançar e de quantos em quantos meses: 1, o número digitado (meses ou anos),
- * ou "sempre" (todo mês ou todo ano, até o limite de meses à frente).
+ * Quantas vezes lançar e de quanto em quanto tempo: 1, o número digitado (semanas, meses ou anos),
+ * ou "sempre" (toda semana, todo mês ou todo ano, até o limite de meses à frente).
  */
 function vezesDoRepetir(form, vencimento) {
   const r = form.repetir.value;
-  if (r === 'sempre' || r === 'anual') {
-    const passo = r === 'anual' ? 12 : 1;
+  if (r === 'sempre' || r === 'anual' || r === 'semanal') {
+    const passo = r === 'anual' ? 12 : r === 'semanal' ? SEMANAL : 1;
     return { vezes: proximasDatas(vencimento, vencimento, limiteRecorrencia(), passo).length + 1, sempre: true, passo };
   }
-  if (r !== 'meses' && r !== 'anos') return { vezes: 1, sempre: false, passo: 1 };
-  const anos = r === 'anos';
-  const max = anos ? MAX_ANOS : MAX_MESES;
+  if (r !== 'meses' && r !== 'anos' && r !== 'semanas') return { vezes: 1, sempre: false, passo: 1 };
+  const passo = r === 'anos' ? 12 : r === 'semanas' ? SEMANAL : 1;
+  const max = passo === 12 ? MAX_ANOS : passo === SEMANAL ? MAX_SEMANAS : MAX_MESES;
   const n = Number(form.meses.value);
   if (!Number.isInteger(n) || n < 2 || n > max) {
-    erroNoCampo(form, 'meses', `Digite um número de ${anos ? 'anos' : 'meses'} entre 2 e ${max}.`);
+    erroNoCampo(form, 'meses', `Digite um número de ${nomesDoPasso(passo).varios} entre 2 e ${max}.`);
     form.meses.focus();
     return null;
   }
-  return { vezes: n, sempre: false, passo: anos ? 12 : 1 };
+  return { vezes: n, sempre: false, passo };
 }
 
 async function salvarCaixa(form, botao, tipo, divisao) {
@@ -347,14 +355,14 @@ async function salvarCaixa(form, botao, tipo, divisao) {
   }
   const { vezes, sempre, passo } = rep;
   const grupo = vezes > 1 || sempre ? crypto.randomUUID() : null;
-  const ultimaData = somarMeses(base.vencimento, (vezes - 1) * passo);
+  const ultimaData = avancar(base.vencimento, vezes - 1, passo);
   // desconto e juros valem só para o primeiro mês: os próximos ficam com o valor original
   const semAjuste = { valor: base.valor_original ?? base.valor, valor_original: null, desconto: null, juros: null };
   const linhas = Array.from({ length: vezes }, (_, i) => ({
     ...base,
     ...(i > 0 ? semAjuste : {}),
-    vencimento: somarMeses(base.vencimento, i * passo),
-    competencia: base.competencia ? somarMeses(base.competencia, i * passo) : null,
+    vencimento: avancar(base.vencimento, i, passo),
+    competencia: base.competencia ? avancar(base.competencia, i, passo) : null,
     pago: i === 0 && base.pago,
     data_pagamento: i === 0 && base.pago ? base.data_pagamento : null,
     parcela: vezes > 1 && !sempre ? `${i + 1}/${vezes}` : null,
@@ -364,8 +372,8 @@ async function salvarCaixa(form, botao, tipo, divisao) {
   const salvos = await criarLancamentos(linhas);
   return {
     ids: salvos.map((s) => s.id),
-    mensagem: sempre ? `“${base.descricao}” lançado todo ${passo === 12 ? 'ano' : 'mês'} (até você parar)`
-      : vezes > 1 ? `“${base.descricao}” lançado para os próximos ${vezes} ${passo === 12 ? 'anos' : 'meses'}` : `“${base.descricao}” salvo`,
+    mensagem: sempre ? `“${base.descricao}” lançado ${nomesDoPasso(passo).todo} (até você parar)`
+      : vezes > 1 ? `“${base.descricao}” lançado para as próximas ${vezes} vezes (${nomesDoPasso(passo).todo})` : `“${base.descricao}” salvo`,
   };
 }
 

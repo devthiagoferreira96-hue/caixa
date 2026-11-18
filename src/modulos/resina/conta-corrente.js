@@ -101,15 +101,15 @@ export default {
         <div class="hidden overflow-x-auto md:block">
           <table class="w-full min-w-[52rem] text-sm tabular-nums">
             <thead class="border-y border-stone-200 bg-stone-50 text-left text-xs uppercase text-stone-600 dark:border-stone-800 dark:bg-stone-800/50 dark:text-stone-400">
-              <tr>${['Data', 'Descrição', 'Nota', 'Destino', 'Tbs', '% arr.', 'Quant.', 'Uni.', 'Média', 'R$ unit.', 'Crédito', 'Débito', 'Saldo'].map((c, i) =>
+              <tr>${['Data', 'Descrição', 'Nota', 'Destino', 'Tbs', '% arr.', 'Quant.', 'Média', 'R$ unit.', 'Crédito', 'Débito', 'Saldo'].map((c, i) =>
                 `<th scope="col" class="px-1.5 py-2 font-semibold ${i >= 4 ? 'text-right' : ''}">${c}</th>`).join('')}</tr>
             </thead>
             <tbody class="divide-y divide-stone-100 dark:divide-stone-800">
-              <tr class="bg-stone-50/60 dark:bg-stone-800/30"><td class="px-1.5 py-2">${dataCompleta(mesISO(store.mes))}</td><td class="px-1.5 py-2 font-semibold" colspan="11">Saldo anterior</td><td class="whitespace-nowrap px-1.5 py-2 text-right font-semibold ${corSaldo(ext.saldoAnterior)}">${moeda(ext.saldoAnterior)}</td></tr>
+              <tr class="bg-stone-50/60 dark:bg-stone-800/30"><td class="px-1.5 py-2">${dataCompleta(mesISO(store.mes))}</td><td class="px-1.5 py-2 font-semibold" colspan="10">Saldo anterior</td><td class="whitespace-nowrap px-1.5 py-2 text-right font-semibold ${corSaldo(ext.saldoAnterior)}">${moeda(ext.saldoAnterior)}</td></tr>
               ${ext.linhas.map((l, i) => linhaTabela(l, i)).join('')}
             </tbody>
             <tfoot class="border-t-2 border-stone-200 font-semibold dark:border-stone-700">
-              <tr><td class="px-1.5 py-2" colspan="10">Total do mês</td><td class="whitespace-nowrap px-1.5 py-2 text-right">${moeda(ext.credito)}</td><td class="whitespace-nowrap px-1.5 py-2 text-right">${moeda(ext.debito)}</td><td class="whitespace-nowrap px-1.5 py-2 text-right ${corSaldo(ext.saldoFinal)}">${moeda(ext.saldoFinal)}</td></tr>
+              <tr><td class="px-1.5 py-2" colspan="9">Total do mês</td><td class="whitespace-nowrap px-1.5 py-2 text-right">${moeda(ext.credito)}</td><td class="whitespace-nowrap px-1.5 py-2 text-right">${moeda(ext.debito)}</td><td class="whitespace-nowrap px-1.5 py-2 text-right ${corSaldo(ext.saldoFinal)}">${moeda(ext.saldoFinal)}</td></tr>
             </tfoot>
           </table>
         </div>
@@ -181,7 +181,6 @@ function linhaTabela(l) {
     <td class="${td}">${c ? numero(l.tbs) : ''}</td>
     <td class="${td}">${c ? pct(l.pct) : ''}</td>
     <td class="${td}">${c ? numero(l.kg, 2) : ins ? numero(l.quantidade, 3) : ''}</td>
-    <td class="${td}">${c && l.uni != null ? moeda(l.uni) : ''}</td>
     <td class="${td}">${c && l.media != null ? numero(l.media, 2) : ''}</td>
     <td class="${td}">${c ? moeda(l.preco) : ins ? moeda(l.valor_unitario) : ''}</td>
     <td class="${td} text-brand-800 dark:text-brand-300">${valorOuTraco(l.credito)}</td>
@@ -197,7 +196,7 @@ function linhaCartao(l) {
       <div class="min-w-0">${descricaoHTML(l)}
         <p class="mt-0.5 text-stone-600 dark:text-stone-400">${[dataCompleta(l.data), l.nota ? `Nota ${l.nota}` : '', l.destino].filter(Boolean).map(esc).join(' · ')}</p>
         ${l.tipo === 'insumo' ? `<p class="mt-0.5 tabular-nums text-stone-600 dark:text-stone-400">Insumo descontado do produtor · ${brl(l.valor_unitario)} cada</p>` : ''}
-        ${c ? `<p class="mt-0.5 tabular-nums text-stone-600 dark:text-stone-400">${numero(l.tbs)} Tbs · ${pct(l.pct)} · ${numero(l.kg, 2)} kg${l.media != null ? ` · média ${numero(l.media, 2)}` : ''} · ${brl(l.preco)}/kg${l.uni != null ? ` · uni. ${brl(l.uni)}` : ''}</p>` : ''}
+        ${c ? `<p class="mt-0.5 tabular-nums text-stone-600 dark:text-stone-400">${numero(l.tbs)} Tbs · ${pct(l.pct)} · ${numero(l.kg, 2)} kg${l.media != null ? ` · média ${numero(l.media, 2)}` : ''} · ${brl(l.preco)}/kg</p>` : ''}
       </div>
       <p class="shrink-0 text-right tabular-nums">
         ${l.credito ? `<span class="block font-semibold text-brand-800 dark:text-brand-300">+${brl(l.credito)}</span>` : ''}

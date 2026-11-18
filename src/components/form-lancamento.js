@@ -1,5 +1,5 @@
 // Campos do formulário de lançamento do caixa (usados em "Novo lançamento" e na edição)
-import { esc, brl, hoje, hojeISO, mesISO, nomeMes, parseISO, valorParaCampo, lerValor, VALOR_MAXIMO, valorMaximoTexto } from '../lib/format.js';
+import { esc, brl, hojeISO, valorParaCampo, lerValor, VALOR_MAXIMO, valorMaximoTexto } from '../lib/format.js';
 import { store, contasAtivas, categoriasPorGrupo, buscar, categoriaServe } from '../lib/store.js';
 import { erroNoCampo, mascaraDinheiro, icone } from '../lib/ui.js';
 
@@ -88,14 +88,6 @@ const campoDinheiro = (nome, rotulo, valor, dica = '') => `
     ${dica ? `<p class="dica">${dica}</p>` : ''}
   </div>`;
 
-/** Meses para o campo Competência: 2 anos para trás e 1 para a frente (e o já escolhido, se estiver fora) */
-function opcoesCompetencia(selecionada) {
-  const meses = Array.from({ length: 37 }, (_, i) => mesISO(hoje(), i - 24)).reverse();
-  if (selecionada && !meses.includes(selecionada)) meses.push(selecionada);
-  return `<option value="">Mesmo mês do vencimento</option>` +
-    meses.map((m) => `<option value="${m}" ${m === selecionada ? 'selected' : ''}>${nomeMes(parseISO(m))}</option>`).join('');
-}
-
 /**
  * Campos de conta, datas (vencimento, pagamento, competência), pessoa, pago,
  * desconto/juros e observação. `l` = lançamento existente (edição) ou {}.
@@ -144,8 +136,8 @@ export function camposCaixa(l = {}) {
       <div class="grid gap-4 border-t border-stone-200 p-3 dark:border-stone-700">
         <div data-campo>
           <label class="rotulo" for="f-competencia">Competência ${OPCIONAL}</label>
-          <select id="f-competencia" name="competencia" class="campo">${opcoesCompetencia(l.competencia || null)}</select>
-          <p class="dica">O mês a que a conta se refere. Ex.: a luz de outubro que vence em novembro.</p>
+          <input id="f-competencia" name="competencia" type="date" class="campo" value="${l.competencia || ''}">
+          <p class="dica">A data a que a conta se refere. Ex.: a luz de outubro que vence em novembro. Em branco, vale o vencimento.</p>
         </div>
         <div class="grid gap-4 sm:grid-cols-2">
           ${campoDinheiro('desconto', `Desconto ${OPCIONAL}`, l.desconto)}
@@ -230,6 +222,7 @@ export function lerCamposCaixa(form, tipo) {
   else if (erroDeTipo(dados.categoria_id, tipo)) erro('categoria_id', erroDeTipo(dados.categoria_id, tipo));
   if (!dados.conta_id) erro('conta_id', 'Escolha a conta.');
   if (!dados.vencimento) erro('vencimento', 'Escolha a data do vencimento.');
+  if (form.competencia?.validity.badInput) erro('competencia', 'Data incompleta. Complete a data ou apague o campo.');
   if (!ok) {
     const invalido = form.querySelector('[aria-invalid]');
     invalido?.closest('details')?.setAttribute('open', '');

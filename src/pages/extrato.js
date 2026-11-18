@@ -1,8 +1,8 @@
 // Extrato do mês: todos os lançamentos do caixa, com busca e filtros
 import { brl, esc, dataPorExtenso } from '../lib/format.js';
 import { contasAtivas, categoriasPorGrupo } from '../lib/store.js';
-import { lancamentosDoMes } from '../lib/api.js';
-import { saidasReais, entradas, somar } from '../lib/calculos.js';
+import { lancamentosDoExtrato } from '../lib/api.js';
+import { saidasReais, entradas, somar, dataNoExtrato } from '../lib/calculos.js';
 import { itemLancamento, cliqueEmLancamento } from '../components/lancamento.js';
 import { icone, estadoVazio } from '../lib/ui.js';
 
@@ -14,11 +14,12 @@ export default {
   usaMes: true,
   ajuda: `
     <p>Aqui aparecem todas as entradas e saídas do <strong>caixa</strong> (dinheiro, Pix, conta bancária) do mês escolhido no topo.</p>
+    <p>O que já foi <strong>pago ou recebido</strong> aparece no dia e no mês do pagamento (uma parcela de dezembro paga em novembro fica em novembro). O que está <strong>em aberto</strong> aparece no dia do vencimento.</p>
     <p>As compras no cartão de crédito ficam na tela <strong>Cartões</strong>. Quando você paga a fatura, o pagamento aparece aqui.</p>
     <p>Use a <strong>busca</strong> e os filtros para achar algo rápido. Toque num lançamento para editar ou excluir. Toque no círculo para marcar como pago.</p>`,
 
   async render(el, ctx) {
-    const lancamentos = await lancamentosDoMes();
+    const lancamentos = await lancamentosDoExtrato();
     if (!ctx.aindaAtual()) return;
 
     el.innerHTML = `
@@ -55,7 +56,7 @@ export default {
           (filtros.situacao === 'pago' && l.pago) || (filtros.situacao === 'aberto' && !l.pago) ||
           (filtros.situacao === l.tipo)));
       const filtrando = Object.values(filtros).some(Boolean);
-      const porDia = Map.groupBy ? Map.groupBy(visiveis, (l) => l.vencimento) : agrupar(visiveis);
+      const porDia = Map.groupBy ? Map.groupBy(visiveis, dataNoExtrato) : agrupar(visiveis);
       const ent = somar(entradas(visiveis));
       const sai = somar(saidasReais(visiveis)) + somar(visiveis.filter((l) => l.fatura_cartao_id));
       resultado.innerHTML = `
@@ -93,6 +94,6 @@ export default {
 
 function agrupar(lista) {
   const m = new Map();
-  lista.forEach((l) => (m.get(l.vencimento) || m.set(l.vencimento, []).get(l.vencimento)).push(l));
+  lista.forEach((l) => { const d = dataNoExtrato(l); (m.get(d) || m.set(d, []).get(d)).push(l); });
   return m;
 }

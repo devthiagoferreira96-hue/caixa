@@ -117,5 +117,8 @@ export function dataDeReferencia(l, base = 'vencimento') {
   return l.vencimento;
 }
 
+/** Dia em que o lançamento aparece no Extrato: o que já foi pago, no dia do pagamento; o que está em aberto, no vencimento */
+export const dataNoExtrato = (l) => (l.pago ? l.data_pagamento || l.vencimento : l.vencimento);
+
 /** "AAAA-MM" do lançamento na base escolhida, ou null */
 export const mesDeReferencia = (l, base = 'vencimento') => dataDeReferencia(l, base)?.slice(0, 7) ?? null;
