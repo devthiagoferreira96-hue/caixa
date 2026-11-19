@@ -29,3 +29,4 @@ ligacao.py (26 checagens: recebimento da Resina vira entrada no Caixa, mudar/exc
   quadro do arrendamento a receber no Início, desfazer dos dois lados, celular). Roda igual ao conta_corrente.py.
 parte_produtor_cartao.py (42 checagens: parte do produtor nos insumos (cada produto com o seu produtor e a sua %, nota com vários produtores), no Início e na conta corrente; "a receber" no Caixa que baixa a conta corrente ao ser recebido; busca na tela Cartões;
   no cartão, mudar o valor de uma parcela ou assinatura "só esta" ou "esta e as próximas"). Roda igual ao conta_corrente.py.
+soma_cartao.py (17 checagens: selecionar compras na tela Cartões e ver a soma, reembolso descontado, caixinha do cartão inteiro, com busca, manter ao voltar, celular). Roda igual ao conta_corrente.py.
