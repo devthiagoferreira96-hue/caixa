@@ -4,7 +4,7 @@ import { store } from '../../lib/store.js';
 import { icone, estadoVazio, toast, confirmar, dialogo, mascaraDinheiro, erroNoCampo, limparErros, semRepetir } from '../../lib/ui.js';
 import { desfazendo } from '../../components/lancamento.js';
 import { insumosEntre, salvarInsumos, excluirInsumos } from './dados.js';
-import { totalDoInsumo } from './calculos.js';
+import { totalDoInsumo, pctDoProdutor, parteDoProdutor } from './calculos.js';
 import { camposPagamentoInsumos, ligarPagamentoInsumos, lerPagamentoInsumos, gravarPagamentoInsumos, desligar, lerLigacao } from './ligacao-caixa.js';
 import { numero, quadro, bolinha, nomeProdutor, corProdutor, nomeTitular, seDesligado } from './comum.js';
 
@@ -19,7 +19,7 @@ export function agruparEntregas(insumos) {
   const entregas = new Map();
   for (const i of insumos) {
     const k = i.entrega_id || i.id;
-    (entregas.get(k) || entregas.set(k, { id: k, data: i.data, produtor_id: i.produtor_id, titular_id: i.titular_id || null, nota: i.nota || '', obs: i.obs || '', itens: [] }).get(k)).itens.push(i);
+    (entregas.get(k) || entregas.set(k, { id: k, data: i.data, produtor_id: i.produtor_id, titular_id: i.titular_id || null, nota: i.nota || '', obs: i.obs || '', pct_produtor: pctDoProdutor(i), itens: [] }).get(k)).itens.push(i);
   }
   return entregas;
 }
@@ -31,16 +31,17 @@ export function abrirEntrega(insumos, entregaId, ctx) {
 }
 
 let ultimaConta = null; // repete a conta da última entrega lançada
+let ultimoPct = 50; // e a parte do produtor (padrão: metade dele, metade da proprietária)
 
 export default {
   titulo: 'Insumos',
   usaMes: true,
   ajuda: `
     <p>Os <strong>produtos</strong> que cada produtor usou para coletar a resina no mês escolhido no topo.</p>
-    <p>Os insumos são <strong>descontados do produtor</strong>: cada entrega entra como débito na <strong>Conta corrente</strong> da conta escolhida (CNPJ ou CPF).</p>
+    <p><strong>Parte do produtor</strong>: quanto da nota é cobrado do produtor (vem 50%: metade dele, metade da proprietária). Só essa parte entra como débito na <strong>Conta corrente</strong> da conta escolhida (CNPJ ou CPF) e aparece no Início como "falta receber". Quando ele pagar, lance em <strong>Conta corrente &gt; Lançar recebimento</strong>, marcando "Lançar também como entrada no Caixa".</p>
     <p>Em <strong>Lançar insumos</strong>, escolha o produtor, a conta e a data e adicione um produto por linha: a <strong>quantidade</strong> e o <strong>valor unitário</strong> (vem do cadastro) dão o <strong>valor total</strong>. Se você souber só o total, digite o total e o valor unitário é calculado.</p>
     <p>Toque numa entrega para mudar ou excluir.</p>
-    <p><strong>Caixa da Família</strong>: no fim do lançamento, escolha como a compra foi paga: <strong>saída de uma conta</strong> (pode ficar para pagar no vencimento da nota) ou <strong>compra no cartão</strong>. O valor entra no Caixa como gasto. Mudar ou excluir a entrega aqui muda ou exclui lá.</p>
+    <p><strong>Caixa da Família</strong>: no fim do lançamento, escolha como a compra foi paga: <strong>saída de uma conta</strong> (pode ficar para pagar no vencimento da nota) ou <strong>compra no cartão</strong>. O valor <strong>cheio</strong> da nota entra no Caixa como gasto, porque é o que foi pago ao fornecedor. Dar baixa no Extrato só marca a nota como paga: não baixa o que o produtor deve. Mudar ou excluir a entrega aqui muda ou exclui lá.</p>
     <p>A comparação entre produtores (quem gasta mais insumo para cada kg de resina) fica em <strong>Produção</strong>.</p>`,
 
   async render(el, ctx) {
@@ -51,6 +52,7 @@ export default {
     const entregas = agruparEntregas(insumos);
     const lista = [...entregas.values()].sort((a, b) => (a.data === b.data ? 0 : a.data < b.data ? 1 : -1));
     const gasto = insumos.reduce((s, i) => s + totalDoInsumo(i), 0);
+    const descontado = insumos.reduce((s, i) => s + parteDoProdutor(i), 0);
     const porProduto = new Map();
     for (const i of insumos) {
       const p = porProduto.get(i.produto_id) || porProduto.set(i.produto_id, { id: i.produto_id, quantidade: 0, gasto: 0 }).get(i.produto_id);
@@ -73,12 +75,13 @@ export default {
         <a href="#resina-cadastros" class="btn-primario mt-4">${icone('cadastros')} Abrir os cadastros</a></section>` : ''}
       ${lista.length ? `
       <div class="grid grid-cols-2 gap-2 sm:grid-cols-3">
-        ${quadro('Gasto com insumos', brl(gasto))}${quadro('Entregas', numero(lista.length))}${quadro('Produtores', numero(new Set(lista.map((e) => e.produtor_id)).size))}
+        ${quadro('Gasto com insumos', brl(gasto), `<p class="text-xs text-stone-600 dark:text-stone-400">${brl(descontado)} a cobrar dos produtores</p>`)}${quadro('Entregas', numero(lista.length))}${quadro('Produtores', numero(new Set(lista.map((e) => e.produtor_id)).size))}
       </div>
       <div class="grid gap-4 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
         <section class="card" aria-labelledby="t-entregas"><h2 id="t-entregas" class="card-titulo">Entregas de ${esc(mes)}</h2>
           <ul class="grid gap-2">${lista.map((e) => {
             const total = e.itens.reduce((s, i) => s + totalDoInsumo(i), 0);
+            const doProdutor = e.itens.reduce((s, i) => s + parteDoProdutor(i), 0);
             return `<li><button type="button" class="w-full cursor-pointer rounded-xl border border-stone-200 p-3 text-left transition hover:border-brand-300 dark:border-stone-800 dark:hover:border-brand-800" data-entrega="${esc(e.id)}"
               aria-label="Entrega de ${esc(nomeProdutor(e.produtor_id))} em ${dataCompleta(e.data)}, ${brl(total)}. Mudar ou excluir">
               <span class="flex flex-wrap items-start justify-between gap-x-3">
@@ -86,6 +89,7 @@ export default {
                 <span class="font-bold tabular-nums">${brl(total)}</span>
               </span>
               <span class="mt-0.5 block text-sm text-stone-600 dark:text-stone-400">${[dataCompleta(e.data), e.nota, e.obs].filter(Boolean).map(esc).join(' · ')}</span>
+              <span class="mt-0.5 block text-sm tabular-nums text-stone-600 dark:text-stone-400">Produtor paga ${numero(e.pct_produtor, 2)}%: <strong class="text-stone-800 dark:text-stone-200">${brl(doProdutor)}</strong> · proprietária ${brl(total - doProdutor)}</span>
               <span class="mt-1 block text-sm tabular-nums">${e.itens.map((i) => `${esc(nomeProduto(i.produto_id))}: ${esc(quantidade(i.quantidade, i.produto_id))} × ${brl(i.valor_unitario)}`).join(' · ')}</span>
             </button></li>`;
           }).join('')}</ul>
@@ -135,12 +139,14 @@ async function editarEntrega(entrega, ctx) {
         <div data-campo><label class="rotulo" for="in-data">Data</label><input id="in-data" name="data" type="date" class="campo" value="${entrega?.data || dataPadrao}"></div>
         ${titulares.length ? `<div data-campo><label class="rotulo" for="in-conta">Conta (desconto do produtor)</label><select id="in-conta" name="titular_id" class="campo">${nova ? '' : `<option value="" ${entrega.titular_id ? '' : 'selected'}>Sem conta</option>`}${titulares.map((t) =>
           `<option value="${t.id}" ${t.id === contaPadrao ? 'selected' : ''}>${esc(nomeTitular(t.id))}</option>`).join('')}</select></div>` : ''}
+        <div data-campo><label class="rotulo" for="in-pct">Parte do produtor (%)</label><input id="in-pct" name="pct_produtor" type="number" inputmode="decimal" min="0" max="100" step="any" class="campo tabular-nums" value="${nova ? ultimoPct : entrega.pct_produtor}" aria-describedby="dica-in-pct">
+          <p id="dica-in-pct" class="dica mt-1">Quanto da nota é cobrado do produtor. O resto fica com a proprietária.</p></div>
         <div data-campo><label class="rotulo" for="in-nota">Nota <span class="font-normal text-stone-600 dark:text-stone-400">(opcional)</span></label><input id="in-nota" name="nota" class="campo" maxlength="80" value="${esc(entrega?.nota || '')}" placeholder="Ex.: NF 150 - venc. 26/02"></div>
       </div>
       <fieldset><legend class="rotulo">Produtos</legend><ul class="grid gap-2" data-linhas></ul>
         <button type="button" class="btn-sec mt-2" data-mais-linha>${icone('mais')} Adicionar produto</button></fieldset>
       <div data-campo><label class="rotulo" for="in-obs">Observação <span class="font-normal text-stone-600 dark:text-stone-400">(opcional)</span></label><input id="in-obs" name="obs" class="campo" maxlength="120" value="${esc(entrega?.obs || '')}"></div>
-      <p class="rounded-xl bg-stone-50 px-3 py-2 text-right dark:bg-stone-800/60">Total da entrega: <strong class="tabular-nums" data-total-geral></strong></p>
+      <p class="rounded-xl bg-stone-50 px-3 py-2 text-right dark:bg-stone-800/60">Total da entrega: <strong class="tabular-nums" data-total-geral></strong><span class="block text-sm tabular-nums text-stone-600 dark:text-stone-400" data-divisao></span></p>
       ${camposPagamentoInsumos(ligacao)}
       <div class="flex flex-col-reverse gap-2 sm:flex-row sm:items-center">
         ${nova ? '' : `<button type="button" class="btn-neutro text-red-700 dark:text-red-400" data-excluir-entrega>${icone('lixo')} Excluir entrega</button>`}
@@ -166,13 +172,21 @@ async function editarEntrega(entrega, ctx) {
     ul.querySelectorAll('[data-dinheiro]').forEach(mascaraDinheiro);
     somar();
   };
-  const somar = () => (f.querySelector('[data-total-geral]').textContent = brl(linhas.reduce((s, l) => s + (l.valor_total || 0), 0)));
+  const lerPct = () => { const n = Number(String(f.pct_produtor.value).replace(',', '.')); return f.pct_produtor.value !== '' && n >= 0 && n <= 100 ? n : null; };
+  const somar = () => {
+    const total = linhas.reduce((s, l) => s + (l.valor_total || 0), 0);
+    f.querySelector('[data-total-geral]').textContent = brl(total);
+    const p = lerPct();
+    const doProdutor = p === null ? null : Math.round(total * p) / 100;
+    f.querySelector('[data-divisao]').textContent = doProdutor === null ? '' : `Cobrado do produtor: ${brl(doProdutor)} · proprietária: ${brl(total - doProdutor)}`;
+  };
   const campoDe = (l, c) => ul.querySelector(`[data-linha="${l.chave}"] [data-c="${c}"]`);
   const arred = (v) => Math.round(v * 100) / 100;
   desenhar();
   f.produtor_id.focus();
 
   f.addEventListener('input', (e) => {
+    if (e.target === f.pct_produtor) { e.target.removeAttribute('aria-invalid'); return somar(); }
     const li = e.target.closest('[data-linha]');
     if (!li) return;
     const l = linhas.find((x) => x.chave === +li.dataset.linha);
@@ -233,6 +247,8 @@ async function editarEntrega(entrega, ctx) {
     limparErros(f);
     if (!f.produtor_id.value) { erroNoCampo(f, 'produtor_id', 'Escolha o produtor.'); return f.produtor_id.focus(); }
     if (!/^\d{4}-\d{2}-\d{2}$/.test(f.data.value)) { erroNoCampo(f, 'data', 'Escolha a data.'); return f.data.focus(); }
+    const pctProdutor = lerPct();
+    if (pctProdutor === null) { erroNoCampo(f, 'pct_produtor', 'Digite de 0 a 100 (por exemplo, 50 para metade).'); return f.pct_produtor.focus(); }
     const problema = (l, c, msg) => { const x = campoDe(l, c); x.setAttribute('aria-invalid', 'true'); x.focus(); toast(msg, { tipo: 'erro' }); };
     const usados = new Set();
     for (const [n, l] of linhas.entries()) {
@@ -247,7 +263,7 @@ async function editarEntrega(entrega, ctx) {
     if (f.titular_id && !f.titular_id.value && nova) { erroNoCampo(f, 'titular_id', 'Escolha a conta.'); return f.titular_id.focus(); }
     const caixa = lerPagamentoInsumos(f, erroNoCampo, f.data.value);
     if (!caixa) return;
-    const base = { produtor_id: f.produtor_id.value, data: f.data.value, obs: f.obs.value.trim(), nota: f.nota.value.trim(), titular_id: f.titular_id?.value || null, entrega_id };
+    const base = { produtor_id: f.produtor_id.value, data: f.data.value, obs: f.obs.value.trim(), nota: f.nota.value.trim(), titular_id: f.titular_id?.value || null, entrega_id, pct_produtor: pctProdutor };
     try {
       const voltarInsumos = await salvarInsumos(
         linhas.map((l) => ({ ...base, produto_id: l.produto_id, quantidade: +l.quantidade, valor_unitario: l.valor_unitario, valor_total: arred(l.valor_total) })),
@@ -261,6 +277,7 @@ async function editarEntrega(entrega, ctx) {
       const desfazer = async () => { await voltarCaixa(); await voltarInsumos(); };
       d.close();
       if (base.titular_id) ultimaConta = base.titular_id;
+      ultimoPct = pctProdutor;
       const onde = caixa.modo === 'saida' ? ' (e no Caixa)' : caixa.modo === 'cartao' ? ' (e no cartão)' : '';
       toast(`${nova ? 'Lançado' : 'Atualizado'}: ${brl(total)} para ${nomeProdutor(base.produtor_id)}${onde}`, { acao: desfazendo(desfazer, ctx.atualizar) });
       ctx.atualizar();

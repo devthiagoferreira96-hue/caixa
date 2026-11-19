@@ -3,7 +3,7 @@
 import { faturaDe, vencimentoFatura, dividirParcelas, parcelasDaCompra } from '../src/lib/faturas.js';
 import { somarMeses, lerValor, valorParaCampo, brl, esc, diasAte, quandoVence, somarDias, nomeMes } from '../src/lib/format.js';
 import { PALETAS, calcularTema, contraste, oklch, hexDe, coresDasPreferencias } from '../src/lib/temas.js';
-import { calcularCarga, diferencaDePeso, precoNaData, proximoNumero, codigoCarga, resumoDasCargas, linhasContaCorrente, extratoContaCorrente, comparativoInsumos, totalDoInsumo, aReceberPorConta } from '../src/modulos/resina/calculos.js';
+import { calcularCarga, diferencaDePeso, precoNaData, proximoNumero, codigoCarga, resumoDasCargas, linhasContaCorrente, extratoContaCorrente, comparativoInsumos, totalDoInsumo, pctDoProdutor, parteDoProdutor, aReceberPorConta } from '../src/modulos/resina/calculos.js';
 import { numeroBR, dataDaCelula, lerPlanilhaConta, entenderLinha, produtorDaLinha, produtoParecido, montarImportacao } from '../src/modulos/resina/importar-conta.js';
 import { proximasDatas, completarLancamentos, completarAssinaturas, limiteRecorrencia, mesesEntre, SEMANAL, mudancasNaSequencia } from '../src/lib/recorrencia.js';
 import { gastosPorCategoria, itensDaCategoria, saidasReais, totalDoCartao, resumoPorArea, entradasPorCategoria, situacaoFatura, dividirAjustes, saldoAoFimDoDia, faturasAPagar } from '../src/lib/calculos.js';
@@ -197,6 +197,15 @@ t('preferência inválida volta ao padrão',coresDasPreferencias({paleta:'person
   t('conta: insumo vira débito na conta dele', ls.map((l) => [l.tipo, l.debito, l.credito]), [['insumo', 120, 0]]);
   t('conta: insumo de outra conta fica de fora', linhasContaCorrente([], new Map(), [], 'cpf', ins).map((l) => l.debito), [5]);
   t('conta: saldo com insumo', extratoContaCorrente(ls, '2026-11-01', '2026-12-01').saldoFinal, -120);
+
+  // parte do produtor: só o % dele entra como débito; o comparativo guarda o gasto cheio e o descontado
+  const meio = [{ ...ins[0], pct_produtor: 50 }, { ...ins[0], id: 'i3', pct_produtor: 0, criado_em: '3' }];
+  t('insumo: sem o campo, 100% do produtor', [pctDoProdutor(ins[0]), parteDoProdutor(ins[0])], [100, 120]);
+  t('insumo: 50% do produtor', parteDoProdutor(meio[0]), 60);
+  t('conta: só a parte do produtor vira débito (0% fica de fora)', linhasContaCorrente([], new Map(), [], 'cnpj', meio).map((l) => [l.debito, l.total, l.pct_produtor]), [[60, 120, 50]]);
+  t('conta: a receber com 50%', aReceberPorConta([], new Map(), [], meio, ['cnpj'], '2027-01-01')[0].aReceber, 60);
+  const cm = comparativoInsumos([{ produtor_id: 'a', cargas: 1, tbs: 1, kg: 100, valor: 500, arrendamento: 200, produtor: 300 }], meio);
+  t('comp: gasto cheio, desconto só da parte dele', [cm.linhas[0].gasto, cm.linhas[0].descontado, cm.linhas[0].liquidoProdutor], [240, 60, 240]);
 }
 
 // módulo Resina: importar a planilha "Conta corrente arrendo"

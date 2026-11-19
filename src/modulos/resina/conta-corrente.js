@@ -29,7 +29,7 @@ export default {
   usaMes: true,
   ajuda: `
     <p>A conta corrente do <strong>arrendamento</strong>, no mesmo formato da planilha da empresa. Existe uma conta para cada cadastro em <em>Cadastros &gt; Contas</em> (o CNPJ e o CPF da proprietária).</p>
-    <p><strong>Débito</strong>: cada produtor de cada carga vira uma linha, e o débito é o arrendamento dele, ou seja, o que a proprietária tem para receber. Os <strong>insumos</strong> lançados para o produtor também entram como débito, porque são descontados dele.</p>
+    <p><strong>Débito</strong>: cada produtor de cada carga vira uma linha, e o débito é o arrendamento dele, ou seja, o que a proprietária tem para receber. Dos <strong>insumos</strong>, entra como débito só a parte cobrada do produtor (o % escolhido na entrega, por exemplo 50%). O resto fica com a proprietária.</p>
     <p><strong>Crédito</strong>: o que ela já recebeu. Lance em <strong>Lançar recebimento</strong>. Ali também dá para lançar um valor a receber que não veio de carga.</p>
     <p><strong>Ligado ao Caixa</strong>: o recebimento pode entrar também como <strong>entrada</strong> numa conta do Caixa da Família (marque "Lançar também como entrada no Caixa"). Mudar ou excluir aqui muda ou exclui lá. As linhas lançadas no Caixa mostram "no Caixa".</p>
     <p><strong>Saldo</strong>: vem desde a primeira carga. Negativo quer dizer que ainda falta receber.</p>
@@ -175,7 +175,7 @@ function linhaTabela(l) {
   const td = 'whitespace-nowrap px-1.5 py-2 text-right';
   return `<tr class="align-top">
     <td class="whitespace-nowrap px-1.5 py-2">${dataCompleta(l.data)}</td>
-    <td class="min-w-40 px-1.5 py-2">${descricaoHTML(l)}</td>
+    <td class="min-w-40 px-1.5 py-2">${descricaoHTML(l)}${ins && l.pct_produtor < 100 ? `<span class="mt-0.5 block text-xs text-stone-600 dark:text-stone-400">${numero(l.pct_produtor, 2)}% de ${brl(l.total)} cobrado do produtor</span>` : ''}</td>
     <td class="min-w-28 px-1.5 py-2">${esc(l.nota || '')}</td>
     <td class="px-1.5 py-2">${esc(l.destino || '')}</td>
     <td class="${td}">${c ? numero(l.tbs) : ''}</td>
@@ -195,7 +195,7 @@ function linhaCartao(l) {
     <div class="flex items-start justify-between gap-3">
       <div class="min-w-0">${descricaoHTML(l)}
         <p class="mt-0.5 text-stone-600 dark:text-stone-400">${[dataCompleta(l.data), l.nota ? `Nota ${l.nota}` : '', l.destino].filter(Boolean).map(esc).join(' · ')}</p>
-        ${l.tipo === 'insumo' ? `<p class="mt-0.5 tabular-nums text-stone-600 dark:text-stone-400">Insumo descontado do produtor · ${brl(l.valor_unitario)} cada</p>` : ''}
+        ${l.tipo === 'insumo' ? `<p class="mt-0.5 tabular-nums text-stone-600 dark:text-stone-400">Insumo · ${l.pct_produtor < 100 ? `${numero(l.pct_produtor, 2)}% de ${brl(l.total)} cobrado do produtor` : 'descontado do produtor'} · ${brl(l.valor_unitario)} cada</p>` : ''}
         ${c ? `<p class="mt-0.5 tabular-nums text-stone-600 dark:text-stone-400">${numero(l.tbs)} Tbs · ${pct(l.pct)} · ${numero(l.kg, 2)} kg${l.media != null ? ` · média ${numero(l.media, 2)}` : ''} · ${brl(l.preco)}/kg</p>` : ''}
       </div>
       <p class="shrink-0 text-right tabular-nums">

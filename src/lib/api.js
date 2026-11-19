@@ -295,7 +295,7 @@ export const parcelasDaCompraSalvas = async (compraId) => ok(await local.from('p
  * (quando mudou valor, parcelas, data ou cartão). `valorDesde` = { mes, valor }: na assinatura, muda o valor
  * das cobranças a partir dessa fatura. Retorna `desfazer()`.
  */
-export async function atualizarCompra(id, valores, { parcelas = null, valorDesde = null } = {}) {
+export async function atualizarCompra(id, valores, { parcelas = null, valorDesde = null, valoresDasParcelas = null } = {}) {
   const [antes] = await copiar('compras_cartao', 'id', [id]);
   const parcelasAntes = await copiar('parcelas', 'compra_id', [id]);
   await alterar('compras_cartao', [id], valores);
@@ -305,6 +305,9 @@ export async function atualizarCompra(id, valores, { parcelas = null, valorDesde
   } else if (valorDesde) {
     const ids = parcelasAntes.filter((p) => p.fatura_mes >= valorDesde.mes).map((p) => p.id);
     if (ids.length) await alterar('parcelas', ids, { valor: valorDesde.valor });
+  } else if (valoresDasParcelas) {
+    // valor novo só em algumas parcelas ("só esta" ou "esta e as próximas")
+    for (const { id: pid, valor } of valoresDasParcelas) await alterar('parcelas', [pid], { valor });
   }
   return async () => {
     const agora = await copiar('parcelas', 'compra_id', [id]);

@@ -192,6 +192,7 @@ async def main():
         ok('sem erros no console', not erros, erros[:3])
         await b.close()
 
-asyncio.run(main())
-for r in R: print(r[0], '|', r[1], '|', r[2] if r[0] != 'PASS' else '')
-print(f"\n{sum(r[0] == 'PASS' for r in R)} passaram, {sum(r[0] != 'PASS' for r in R)} falharam")
+if __name__ == "__main__":
+    asyncio.run(main())
+    for r in R: print(r[0], '|', r[1], '|', r[2] if r[0] != 'PASS' else '')
+    print(f"\n{sum(r[0] == 'PASS' for r in R)} passaram, {sum(r[0] != 'PASS' for r in R)} falharam")

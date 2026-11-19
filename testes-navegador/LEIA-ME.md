@@ -27,3 +27,5 @@ recorrencia_cartao.py (40 checagens: repetir por N meses, sempre, todo ano; para
 Repetição "sempre": o sistema mantém lançados os próximos 12 meses (src/lib/recorrencia.js) e completa ao abrir (manterRecorrencias em api.js).
 ligacao.py (26 checagens: recebimento da Resina vira entrada no Caixa, mudar/excluir acompanha, insumos no cartão ou como saída a pagar,
   quadro do arrendamento a receber no Início, desfazer dos dois lados, celular). Roda igual ao conta_corrente.py.
+parte_produtor_cartao.py (22 checagens: parte do produtor nos insumos, padrão 50%, no Início e na conta corrente;
+  no cartão, mudar o valor de uma parcela ou assinatura "só esta" ou "esta e as próximas"). Roda igual ao conta_corrente.py.

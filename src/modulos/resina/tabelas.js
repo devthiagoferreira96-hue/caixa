@@ -107,6 +107,8 @@ export function conferirResina(entrada, saida, comId, { numero, dataValida, text
     if (!existe('resina_cargas', l.carga_id) || !existe('resina_produtores', l.produtor_id) || tbs === null) { ignorados++; return; }
     saida.resina_carga_itens.push({ ...l, tbs, arrendamento: pct(l.arrendamento), kg_manual: peso(l.kg_manual) });
   });
+  // % do insumo cobrado do produtor; sem o campo (ou inválido) fica de fora e vale 100%
+  const pctProdutor = (v) => { const n = v == null || v === '' ? null : numero(v); return n !== null && n >= 0 && n <= 100 ? n : undefined; };
   lista('resina_insumos').forEach((l0) => {
     const l = comId(l0); if (!l) return;
     const qtd = typeof l.quantidade === 'number' ? l.quantidade : Number(String(l.quantidade ?? '').replace(',', '.'));
@@ -119,6 +121,7 @@ export function conferirResina(entrada, saida, comId, { numero, dataValida, text
       titular_id: ref('resina_titulares', l.titular_id),
       valor_total: total !== null && total >= 0 ? total : Math.round(qtd * unit * 100) / 100,
       entrega_id: typeof l.entrega_id === 'string' && l.entrega_id ? l.entrega_id : l.id,
+      pct_produtor: pctProdutor(l.pct_produtor),
     });
   });
   lista('resina_movimentos').forEach((l0) => {

@@ -1,5 +1,5 @@
 // Editar uma compra do cartão (à vista, parcelada, assinatura ou reembolso), como na edição dos lançamentos do caixa
-import { brl, esc, lerValor, nomeMes, parseISO, dataCompleta, VALOR_MAXIMO, valorMaximoTexto } from '../lib/format.js';
+import { brl, esc, lerValor, nomeMes, parseISO, dataCompleta, valorParaCampo, VALOR_MAXIMO, valorMaximoTexto } from '../lib/format.js';
 import { store, cartoesAtivos, buscar } from '../lib/store.js';
 import { atualizarCompra, pessoaPorNome, parcelasDaCompraSalvas } from '../lib/api.js';
 import { faturaDe, vencimentoFatura, dividirParcelas, parcelasDaCompra } from '../lib/faturas.js';
@@ -8,6 +8,29 @@ import { campoValor, campoDescricao, campoCategoria, erroDeTipo } from './form-l
 import { desfazendo, rodapeDatas } from './lancamento.js';
 
 const MAX_PARCELAS = 420;
+
+/**
+ * Pergunta se o valor novo vale só para esta parcela/cobrança ou também para as próximas.
+ * Retorna 'um', 'todos' ou '' (cancelou).
+ */
+function perguntarAlcance(assinatura, este) {
+  return new Promise((resolver) => {
+    const j = dialogo({
+      titulo: assinatura ? 'Esta assinatura se repete' : 'Esta compra é parcelada',
+      largura: 'max-w-sm',
+      corpo: `<p class="text-stone-600 dark:text-stone-300">Quer mudar o valor só ${esc(este)} ou também ${assinatura ? 'nas próximas cobranças' : 'nas próximas parcelas'}?</p>
+        <p class="mt-2 text-sm text-stone-600 dark:text-stone-400">Descrição, categoria, subcategoria e pessoa mudam na compra inteira.</p>
+        <div class="mt-5 grid gap-2">
+          <button class="btn-primario" data-r="todos">${assinatura ? 'Esta e as próximas cobranças' : 'Esta e as próximas parcelas'}</button>
+          <button class="btn-neutro" data-r="um">Só ${esc(este)}</button>
+          <button class="btn-sec" data-r="">Cancelar</button>
+        </div>`,
+    });
+    let r = '';
+    j.addEventListener('click', (ev) => { const b = ev.target.closest('[data-r]'); if (b) { r = b.dataset.r; j.close(); } });
+    j.addEventListener('close', () => resolver(r));
+  });
+}
 
 /**
  * Abre a compra da parcela `p` (com `p.compra`) para editar.
@@ -21,6 +44,7 @@ export function abrirEdicaoCompra(p, atualizar, { aoExcluir } = {}) {
   const mesDaCobranca = nomeMes(parseISO(p.fatura_mes)).toLowerCase();
   const cartoes = cartoesAtivos().some((x) => x.id === c.cartao_id) ? cartoesAtivos() : [buscar('cartoes', c.cartao_id), ...cartoesAtivos()].filter(Boolean);
   const titulo = estorno ? 'Editar reembolso' : assinatura ? 'Editar assinatura' : 'Editar compra no cartão';
+  const parcelada = !estorno && !assinatura && Number(c.qtd_parcelas) > 1;
 
   const d = dialogo({
     titulo,
@@ -30,7 +54,7 @@ export function abrirEdicaoCompra(p, atualizar, { aoExcluir } = {}) {
         ${campoValor(assinatura ? Number(p.valor) : Number(c.valor_total), estorno ? 'Valor do reembolso' : assinatura ? `Valor ${anual ? 'por ano' : 'por mês'}` : 'Valor total da compra')}
         ${campoDescricao(c.descricao, estorno ? 'Ex.: Estorno da compra da loja X' : 'Ex.: Supermercado')}
         ${campoCategoria(c.categoria_id, 'cartao')}
-        ${assinatura ? `<p class="rounded-xl bg-stone-100 px-3 py-2 text-sm text-stone-700 dark:bg-stone-800 dark:text-stone-300">${icone('calendario', 'mr-1 inline size-4 align-[-3px]')}Assinatura ${anual ? 'anual' : 'mensal'} no ${esc(buscar('cartoes', c.cartao_id)?.nome || 'cartão')}. Um valor novo vale a partir da cobrança de <strong>${esc(mesDaCobranca)}</strong>; as anteriores continuam como estão.</p>` : `
+        ${assinatura ? `<p class="rounded-xl bg-stone-100 px-3 py-2 text-sm text-stone-700 dark:bg-stone-800 dark:text-stone-300">${icone('calendario', 'mr-1 inline size-4 align-[-3px]')}Assinatura ${anual ? 'anual' : 'mensal'} no ${esc(buscar('cartoes', c.cartao_id)?.nome || 'cartão')}. Ao mudar o valor, você escolhe se vale só para a cobrança de <strong>${esc(mesDaCobranca)}</strong> ou também para as próximas. As anteriores continuam como estão.</p>` : `
         <div class="grid gap-4 sm:grid-cols-2">
           <div data-campo><label class="rotulo" for="e-cartao">Cartão</label>
             <select id="e-cartao" name="cartao_id" class="campo">${cartoes.map((x) => `<option value="${x.id}" ${x.id === c.cartao_id ? 'selected' : ''}>${esc(x.nome)}</option>`).join('')}</select></div>
@@ -41,6 +65,9 @@ export function abrirEdicaoCompra(p, atualizar, { aoExcluir } = {}) {
           ${assinatura ? '' : `<div data-campo><label class="rotulo" for="e-parcelas">Parcelas</label>
             <input id="e-parcelas" name="parcelas" type="number" inputmode="numeric" min="1" max="${MAX_PARCELAS}" step="1" class="campo tabular-nums" value="${Number(c.qtd_parcelas) || 1}">
             <p class="dica">1 = à vista.</p></div>`}
+          ${parcelada ? `<div data-campo class="sm:col-span-2"><label class="rotulo" for="e-vparcela">Valor desta parcela (${Number(p.numero)}/${Number(c.qtd_parcelas)})</label>
+            <input id="e-vparcela" name="valor_parcela" class="campo tabular-nums" inputmode="numeric" value="${valorParaCampo(Number(p.valor))}" aria-describedby="dica-vparcela">
+            <p id="dica-vparcela" class="dica">Para uma parcela com valor diferente. Ao salvar, você escolhe se vale só para esta ou também para as próximas.</p></div>` : ''}
           <div data-campo><label class="rotulo" for="e-sub">Subcategoria <span class="font-normal text-stone-600 dark:text-stone-400">(opcional)</span></label>
             <input id="e-sub" name="subcategoria" class="campo" maxlength="60" value="${esc(c.subcategoria || '')}" placeholder="Ex.: Eletrodoméstico"></div>
         </div>
@@ -59,6 +86,7 @@ export function abrirEdicaoCompra(p, atualizar, { aoExcluir } = {}) {
   });
   const form = d.querySelector('form');
   mascaraDinheiro(form.valor);
+  if (form.valor_parcela) mascaraDinheiro(form.valor_parcela);
 
   const qtd = () => (estorno ? 1 : Number(form.parcelas.value));
   const previa = () => {
@@ -94,7 +122,22 @@ export function abrirEdicaoCompra(p, atualizar, { aoExcluir } = {}) {
     else if (erroDeTipo(categoria_id, 'cartao')) { erroNoCampo(form, 'categoria_id', erroDeTipo(categoria_id, 'cartao')); ok = false; }
     if (!assinatura && !form.data_compra.value) { erroNoCampo(form, 'data_compra', 'Escolha a data.'); ok = false; }
     if (!assinatura && !estorno && !(Number.isInteger(qtd()) && qtd() >= 1 && qtd() <= MAX_PARCELAS)) { erroNoCampo(form, 'parcelas', `Digite de 1 a ${MAX_PARCELAS} parcelas.`); ok = false; }
+    const valorParcela = parcelada ? lerValor(form.valor_parcela.value) : null;
+    const mudouValorParcela = parcelada && Math.abs((valorParcela || 0) - Number(p.valor)) > 0.004;
+    if (mudouValorParcela && !(valorParcela > 0)) { erroNoCampo(form, 'valor_parcela', 'Digite o valor da parcela.'); ok = false; }
+    if (ok && mudouValorParcela && (Math.abs(total - Number(c.valor_total)) > 0.004 || qtd() !== Number(c.qtd_parcelas)
+      || form.cartao_id.value !== c.cartao_id || form.data_compra.value !== c.data_compra)) {
+      erroNoCampo(form, 'valor_parcela', 'Mudou também o total, as parcelas, o cartão ou a data. Salve uma coisa de cada vez: primeiro deixe esta parcela como estava.');
+      ok = false;
+    }
     if (!ok) { form.querySelector('[aria-invalid]')?.focus(); return; }
+    // valor novo numa assinatura ou numa parcela: só esta ou esta e as próximas?
+    const mudouAssinatura = assinatura && Math.abs(total - Number(p.valor)) > 0.004;
+    let alcance = '';
+    if (mudouAssinatura || mudouValorParcela) {
+      alcance = await perguntarAlcance(assinatura, assinatura ? `na cobrança de ${mesDaCobranca}` : `nesta parcela (${p.numero}/${c.qtd_parcelas})`);
+      if (!alcance) return;
+    }
 
     const botao = form.querySelector('[type=submit]');
     botao.disabled = true;
@@ -106,8 +149,18 @@ export function abrirEdicaoCompra(p, atualizar, { aoExcluir } = {}) {
       }
       let opcoes = {};
       if (assinatura) {
-        valores.valor_total = total;
-        if (Math.abs(total - Number(p.valor)) > 0.004) opcoes = { valorDesde: { mes: p.fatura_mes, valor: total } };
+        if (mudouAssinatura && alcance === 'um') opcoes = { valoresDasParcelas: [{ id: p.id, valor: total }] }; // as próximas seguem o valor de sempre
+        else {
+          valores.valor_total = total;
+          if (mudouAssinatura) opcoes = { valorDesde: { mes: p.fatura_mes, valor: total } };
+        }
+      } else if (mudouValorParcela) {
+        // só esta parcela, ou esta e as próximas; o total da compra passa a ser a soma das parcelas
+        const salvas = await parcelasDaCompraSalvas(c.id);
+        const mudar = salvas.filter((x) => (alcance === 'um' ? x.id === p.id : Number(x.numero) >= Number(p.numero)));
+        opcoes = { valoresDasParcelas: mudar.map((x) => ({ id: x.id, valor: valorParcela })) };
+        const novos = new Set(mudar.map((x) => x.id));
+        valores.valor_total = Math.round(salvas.reduce((s, x) => s + (novos.has(x.id) ? valorParcela : Number(x.valor)), 0) * 100) / 100;
       } else {
         Object.assign(valores, { valor_total: total, qtd_parcelas: qtd(), cartao_id: form.cartao_id.value, data_compra: form.data_compra.value });
         const mudouParcelas = Math.abs(total - Number(c.valor_total)) > 0.004 || qtd() !== Number(c.qtd_parcelas)

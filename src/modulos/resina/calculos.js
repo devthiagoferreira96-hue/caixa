@@ -125,14 +125,16 @@ export function linhasContaCorrente(cargas, itensPorCarga, movimentos, titularId
       });
     });
   }
-  // insumos são descontados do produtor: entram como débito (a proprietária tem a receber)
+  // a parte do produtor nos insumos é descontada dele: entra como débito (a proprietária tem a receber)
   for (const i of insumos) {
     if ((i.titular_id || null) !== (titularId || null)) continue;
-    const total = totalDoInsumo(i);
+    const debito = parteDoProdutor(i);
+    if (!debito) continue; // 0% do produtor: a proprietária paga tudo, nada a receber
     linhas.push({
       tipo: 'insumo', insumo: i, data: i.data, produtor_id: i.produtor_id, produto_id: i.produto_id,
       quantidade: i.quantidade || 0, valor_unitario: i.valor_unitario || 0, nota: i.nota || '', destino: '', obs: i.obs || '',
-      credito: 0, debito: total,
+      total: totalDoInsumo(i), pct_produtor: pctDoProdutor(i),
+      credito: 0, debito,
     });
   }
   for (const m of movimentos) {
@@ -174,6 +176,12 @@ export function extratoContaCorrente(linhas, inicio, fim, produtorId = null) {
 /** Valor total de um lançamento de insumo: o total guardado, ou quantidade × valor unitário */
 export const totalDoInsumo = (i) => (Number.isFinite(i.valor_total) ? i.valor_total : centavos((i.quantidade || 0) * (i.valor_unitario || 0)));
 
+/** % do insumo que é cobrado do produtor (o resto fica com a proprietária). Lançamentos antigos, sem o campo, valem 100%. */
+export const pctDoProdutor = (i) => (Number.isFinite(i.pct_produtor) ? Math.min(100, Math.max(0, i.pct_produtor)) : 100);
+
+/** Quanto do insumo é descontado do produtor (vai para a conta corrente) */
+export const parteDoProdutor = (i) => centavos(totalDoInsumo(i) * pctDoProdutor(i) / 100);
+
 /** Quanto acima da média de custo por kg um produtor precisa estar para ganhar o alerta */
 export const LIMITE_ALERTA = 0.25;
 
@@ -182,19 +190,21 @@ export const LIMITE_ALERTA = 0.25;
  * `produtores` = resumoDasCargas(...).produtores; `insumos` = lançamentos do mesmo período.
  * - custoPorKg: R$ de insumo para cada kg de resina entregue (menor é melhor)
  * - pctDoValor: quanto do valor da resina dele foi gasto em insumos
- * - liquidoProdutor: parte do produtor na resina − insumos dele (os insumos são descontados do produtor)
+ * - descontado: a parte dos insumos cobrada do produtor (pct_produtor de cada lançamento)
+ * - liquidoProdutor: parte do produtor na resina − insumos descontados dele
  * - alerta: 'sem-producao' (usou insumo e não entregou resina) ou 'acima' (custo/kg 25% ou mais acima da média)
  */
 export function comparativoInsumos(produtores, insumos) {
   const porId = new Map();
   const linha = (id) => porId.get(id) || porId.set(id, {
-    produtor_id: id, cargas: 0, tbs: 0, kg: 0, valor: 0, arrendamento: 0, produtor: 0, gasto: 0, lancamentos: 0, porProduto: new Map(),
+    produtor_id: id, cargas: 0, tbs: 0, kg: 0, valor: 0, arrendamento: 0, produtor: 0, gasto: 0, descontado: 0, lancamentos: 0, porProduto: new Map(),
   }).get(id);
   for (const p of produtores) Object.assign(linha(p.produtor_id), { cargas: p.cargas, tbs: p.tbs, kg: p.kg, valor: p.valor, arrendamento: p.arrendamento, produtor: p.produtor });
   for (const i of insumos) {
     const l = linha(i.produtor_id);
     const total = totalDoInsumo(i);
     l.gasto = centavos(l.gasto + total);
+    l.descontado = centavos(l.descontado + parteDoProdutor(i));
     l.lancamentos++;
     const pp = l.porProduto.get(i.produto_id) || l.porProduto.set(i.produto_id, { quantidade: 0, gasto: 0 }).get(i.produto_id);
     pp.quantidade += i.quantidade || 0;
@@ -203,6 +213,7 @@ export function comparativoInsumos(produtores, insumos) {
   const linhas = [...porId.values()];
   const total = {
     gasto: centavos(linhas.reduce((s, l) => s + l.gasto, 0)),
+    descontado: centavos(linhas.reduce((s, l) => s + l.descontado, 0)),
     kg: linhas.reduce((s, l) => s + l.kg, 0),
     valor: centavos(linhas.reduce((s, l) => s + l.valor, 0)),
     arrendamento: centavos(linhas.reduce((s, l) => s + l.arrendamento, 0)),
@@ -215,7 +226,7 @@ export function comparativoInsumos(produtores, insumos) {
   for (const l of linhas) {
     l.custoPorKg = l.kg > 0 ? l.gasto / l.kg : null;
     l.pctDoValor = l.valor > 0 ? (l.gasto / l.valor) * 100 : null;
-    l.liquidoProdutor = centavos(l.produtor - l.gasto);
+    l.liquidoProdutor = centavos(l.produtor - l.descontado);
     l.vsMedia = l.custoPorKg != null && media ? l.custoPorKg / media - 1 : null;
     l.alerta = l.gasto > 0 && !l.kg ? 'sem-producao' : l.vsMedia != null && l.vsMedia >= LIMITE_ALERTA && l.gasto > 0 ? 'acima' : null;
   }

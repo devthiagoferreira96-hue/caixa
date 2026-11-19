@@ -33,7 +33,7 @@ function alertas(comp) {
     if (l.alerta === 'acima') lista.push(`<strong>${esc(nomeProdutor(l.produtor_id))}</strong> gasta ${porKg(l.custoPorKg)} de insumo, <strong>${pct(l.vsMedia * 100)} acima da média</strong> (${porKg(media)}). Vale conferir se toda a resina coletada está chegando nas cargas.`);
   }
   for (const l of comp.linhas) {
-    if (l.gasto > 0 && l.kg > 0 && l.liquidoProdutor < 0) lista.push(`Os insumos de <strong>${esc(nomeProdutor(l.produtor_id))}</strong> (${brl(l.gasto)}) passaram da parte dele na resina (${brl(l.produtor)}): o desconto vai deixar a conta dele negativa.`);
+    if (l.descontado > 0 && l.kg > 0 && l.liquidoProdutor < 0) lista.push(`A parte dos insumos cobrada de <strong>${esc(nomeProdutor(l.produtor_id))}</strong> (${brl(l.descontado)}) passou da parte dele na resina (${brl(l.produtor)}): o desconto vai deixar a conta dele negativa.`);
   }
   return lista;
 }
@@ -66,7 +66,7 @@ export function secaoComparativo(comp, periodo) {
 
   return `<section class="card grid gap-5" aria-labelledby="t-insumos">${cabecalho}
     <div class="grid grid-cols-2 gap-2 lg:grid-cols-4">
-      ${[['Gasto com insumos', brl(comp.total.gasto)], ['Resina entregue', kg(comp.total.kg)], ['Insumo por kg (média)', porKg(media)], ['Produtores − insumos', brl(comp.total.produtor - comp.total.gasto)]].map(([t, v]) => quadro(t, v)).join('')}
+      ${[['Gasto com insumos', brl(comp.total.gasto)], ['Resina entregue', kg(comp.total.kg)], ['Insumo por kg (média)', porKg(media)], ['Produtores − desconto', brl(comp.total.produtor - comp.total.descontado)]].map(([t, v]) => quadro(t, v)).join('')}
     </div>
 
     ${avisos.length ? `<ul class="grid gap-2" aria-label="Pontos de atenção">${avisos.map((a) =>
@@ -109,19 +109,19 @@ export function secaoComparativo(comp, periodo) {
       <div class="overflow-x-auto px-3 pb-3">
         <table class="tabela-colunas w-full min-w-[52rem] text-sm tabular-nums">
           <thead class="text-left text-xs uppercase text-stone-600 dark:text-stone-400"><tr>
-            ${['Produtor', 'Cargas', 'Tbs', 'Resina', 'Valor da resina', 'Arrendamento', 'Parte do produtor', 'Insumos', 'Insumo por kg', 'Insumo / valor', 'Produtor − insumos'].map((c, i) =>
+            ${['Produtor', 'Cargas', 'Tbs', 'Resina', 'Valor da resina', 'Arrendamento', 'Parte do produtor', 'Insumos', 'Insumo por kg', 'Insumo / valor', 'Produtor − desconto'].map((c, i) =>
               `<th scope="col" class="px-2 py-1.5 font-semibold ${i ? 'text-right' : ''} ${INICIO_GRUPO.has(i) ? 'grupo' : ''}">${c}</th>`).join('')}</tr></thead>
           <tbody>${linhas.map((l) => `<tr>
             <td class="px-2 py-2">${rotuloProdutor(l.produtor_id)}</td>
             <td class="grupo px-2 py-2 text-right">${numero(l.cargas)}</td><td class="px-2 py-2 text-right">${numero(l.tbs)}</td>
             <td class="whitespace-nowrap px-2 py-2 text-right">${kg(l.kg)}</td><td class="grupo whitespace-nowrap px-2 py-2 text-right">${brl(l.valor)}</td>
-            <td class="whitespace-nowrap px-2 py-2 text-right">${brl(l.arrendamento)}</td><td class="whitespace-nowrap px-2 py-2 text-right">${brl(l.produtor)}</td><td class="grupo whitespace-nowrap px-2 py-2 text-right font-semibold">${brl(l.gasto)}</td>
+            <td class="whitespace-nowrap px-2 py-2 text-right">${brl(l.arrendamento)}</td><td class="whitespace-nowrap px-2 py-2 text-right">${brl(l.produtor)}</td><td class="grupo whitespace-nowrap px-2 py-2 text-right"><span class="font-semibold">${brl(l.gasto)}</span>${l.gasto && Math.abs(l.descontado - l.gasto) > 0.004 ? `<span class="block text-xs text-stone-600 dark:text-stone-400">${brl(l.descontado)} do produtor</span>` : ''}</td>
             <td class="whitespace-nowrap px-2 py-2 text-right">${l.alerta ? icone('alerta', 'mr-1 inline size-3.5 align-[-2px] text-amber-700 dark:text-amber-300') : ''}${porKg(l.custoPorKg)}</td>
             <td class="whitespace-nowrap px-2 py-2 text-right">${l.pctDoValor == null ? '—' : pct(l.pctDoValor)}</td>
             <td class="grupo whitespace-nowrap px-2 py-2 text-right ${l.liquidoProdutor < 0 ? 'font-semibold text-red-700 dark:text-red-400' : ''}">${brl(l.liquidoProdutor)}</td>
           </tr>`).join('')}</tbody>
         </table>
-        <p class="dica mt-2">Os insumos são descontados do produtor (entram como débito na conta corrente). "Produtor − insumos" é o que sobra para ele depois do desconto.</p>
+        <p class="dica mt-2">"Insumos" é o valor cheio das notas. Só a parte do produtor (o % escolhido em cada entrega) é descontada dele e entra como débito na conta corrente. "Produtor − desconto" é o que sobra para ele depois do desconto.</p>
       </div>
     </details>
 

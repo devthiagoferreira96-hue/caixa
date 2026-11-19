@@ -184,4 +184,5 @@ async def main():
     for r in R: print(r[0], r[1], '' if r[0] == 'PASS' else r[2])
     print(f"{sum(r[0] == 'PASS' for r in R)} passaram, {sum(r[0] != 'PASS' for r in R)} falharam")
 
-asyncio.run(main())
+if __name__ == "__main__":
+    asyncio.run(main())
