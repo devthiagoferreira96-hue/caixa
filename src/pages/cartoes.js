@@ -8,6 +8,7 @@ import { prepararNovo } from './novo.js';
 import { icone, toast, dialogo, confirmar, estadoVazio, semRepetir } from '../lib/ui.js';
 import { opcoesConta } from '../components/form-lancamento.js';
 import { desfazendo } from '../components/lancamento.js';
+import { abrirEdicaoCompra } from '../components/compra-cartao.js';
 
 export default {
   titulo: 'Cartões',
@@ -17,6 +18,7 @@ export default {
     <p>Quando pagar a fatura, toque em <strong>Pagar fatura</strong> e escolha de qual conta saiu o dinheiro. O valor é descontado do saldo dessa conta.</p>
     <p>Em <strong>Próximas faturas</strong> você vê quanto já está comprometido nos próximos meses por causa das parcelas.</p>
     <p>Pagou parte da fatura antes, ou recebeu um estorno? Toque em <strong>Reembolso ou adiantamento</strong>. O adiantamento sai da conta e abate o que falta pagar; o reembolso abate o total da fatura.</p>
+    <p>Toque numa compra (ou no lápis) para <strong>editar</strong>: valor, descrição, categoria, data, cartão, parcelas, subcategoria e pessoa. Se mudar o valor, as parcelas ou a data, as parcelas são refeitas. Numa assinatura, o valor novo vale a partir da cobrança que você abriu.</p>
     <p>Toque na lixeira de uma compra parcelada ou de uma assinatura para escolher: <strong>só esta parcela</strong>, <strong>esta e as próximas</strong> (cancela a assinatura) ou <strong>a compra inteira</strong>.</p>`,
 
   async render(el, ctx) {
@@ -63,13 +65,16 @@ export default {
 
           ${itens.length ? `<ul class="mt-3">${itens.map((p) => `
             <li class="flex items-center gap-2 border-t border-stone-100 py-2.5 dark:border-stone-800">
-              <div class="min-w-0 flex-1">
+              <button type="button" data-editar-compra="${p.id}" class="min-w-0 flex-1 cursor-pointer rounded-lg px-1 py-0.5 text-left transition hover:bg-stone-50 dark:hover:bg-stone-800/60"
+                aria-label="Abrir ${p.compra.tipo === 'estorno' ? 'o reembolso' : 'a compra'} “${esc(p.compra.descricao)}” para ver ou editar">
                 <p class="line-clamp-2 font-medium">${esc(p.compra.descricao)}${seloDaParcela(p)}</p>
                 <p class="line-clamp-2 text-sm text-stone-600 dark:text-stone-400">${diaMes(p.compra.data_compra)} · ${esc(nomeCategoria(p.compra.categoria_id))}${p.compra.subcategoria ? ` / ${esc(p.compra.subcategoria)}` : ''}${p.compra.pessoa_id && buscar('pessoas', p.compra.pessoa_id) ? ` · ${esc(buscar('pessoas', p.compra.pessoa_id).nome)}` : ''}</p>
-              </div>
+              </button>
               <div class="flex shrink-0 flex-col items-end">
                 <span class="text-sm font-semibold tabular-nums sm:text-base ${p.valor < 0 ? 'valor-entrada' : ''}">${p.valor < 0 ? `+ ${brl(-p.valor)}` : brl(p.valor)}</span>
                 <span class="flex items-center gap-0.5">
+                  <button type="button" class="btn-icone size-9 text-stone-500 hover:text-brand-700 dark:text-stone-400" data-editar-compra="${p.id}"
+                    aria-label="Editar ${p.compra.tipo === 'estorno' ? 'o reembolso' : 'a compra'} ${esc(p.compra.descricao)}" title="Editar">${icone('editar', 'size-4')}</button>
                   <button type="button" class="btn-icone size-9 text-stone-500 hover:text-red-700 dark:text-stone-400" data-excluir-parcela="${p.id}"
                     aria-label="Excluir ${p.compra.tipo === 'estorno' ? 'o reembolso' : 'a compra'} ${esc(p.compra.descricao)}" title="Excluir">${icone('lixo', 'size-4')}</button></span>
               </div>
@@ -108,6 +113,12 @@ export default {
         location.hash = '#novo';
         return;
       }
+      const editar = e.target.closest('[data-editar-compra]');
+      if (editar) {
+        const p = parcelas.find((x) => x.id === editar.dataset.editarCompra);
+        abrirEdicaoCompra(p, ctx.atualizar, { aoExcluir: () => excluirComEscolha(p, ctx) });
+        return;
+      }
       const excluir = e.target.closest('[data-excluir-parcela]');
       if (excluir) {
         const p = parcelas.find((x) => x.id === excluir.dataset.excluirParcela);
@@ -134,7 +145,7 @@ export default {
 };
 
 /** Paga a fatura. Se já existe um pagamento agendado (não pago), ele é marcado como pago em vez de criar outro. */
-function pagarFatura(cartao, total, mes, ctx, agendado, restante = false) {
+export function pagarFatura(cartao, total, mes, ctx, agendado, restante = false) {
   const venc = vencimentoFatura(cartao, mes);
   const sugestao = venc < hojeISO() ? venc : hojeISO();
   const d = dialogo({

@@ -32,3 +32,14 @@ export function dividirParcelas(total, n) {
     i === n - 1 ? Math.round((total - base * (n - 1)) * 100) / 100 : base,
   );
 }
+
+/**
+ * Parcelas de uma compra à vista ou parcelada, ou de um reembolso (assinatura não: ela tem regra própria).
+ * `manter` (opcional) = números das parcelas que ainda existem, para não trazer de volta uma parcela excluída.
+ */
+export function parcelasDaCompra(cartao, { data_compra, valor_total, qtd_parcelas, tipo }, manter = null) {
+  const todas = tipo === 'estorno'
+    ? [{ numero: 1, valor: -Number(valor_total), fatura_mes: faturaDe(cartao, data_compra, 0) }]
+    : dividirParcelas(Number(valor_total), qtd_parcelas).map((valor, i) => ({ numero: i + 1, valor, fatura_mes: faturaDe(cartao, data_compra, i) }));
+  return manter ? todas.filter((p) => manter.has(p.numero)) : todas;
+}

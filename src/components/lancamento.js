@@ -27,10 +27,14 @@ function situacao(l) {
   return ['selo-aberto', entrada ? 'A receber' : 'A pagar'];
 }
 
-export function itemLancamento(l, { mostrarPrazo = false } = {}) {
+/** `selecao`: undefined = sem caixinha; true/false = mostra a caixinha de "selecionar para somar" (marcada ou não) */
+export function itemLancamento(l, { mostrarPrazo = false, selecao } = {}) {
   const entrada = l.tipo === 'entrada';
   const [classeSelo, textoSelo] = situacao(l);
-  const detalhes = [
+  const detalhes = l.virtual === 'fatura' ? [
+    'Fatura do cartão',
+    l.adiantado > 0 && `total ${brl(l.total)}, já adiantado ${brl(l.adiantado)}`,
+  ].filter(Boolean) : [
     l.fatura_cartao_id ? (l.adiantamento ? 'Adiantamento de fatura' : 'Pagamento de fatura') : buscar('categorias', l.categoria_id)?.nome,
     buscar('contas', l.conta_id)?.nome,
     buscar('pessoas', l.pessoa_id)?.nome,
@@ -45,13 +49,16 @@ export function itemLancamento(l, { mostrarPrazo = false } = {}) {
   ].filter(Boolean);
   const verbo = entrada ? 'recebido' : 'pago';
   return `
-  <li class="@container border-t border-stone-100 py-3 first:border-t-0 dark:border-stone-800">
+  <li class="@container border-t border-stone-100 py-3 first:border-t-0 dark:border-stone-800 ${selecao ? 'bg-brand-50/70 dark:bg-brand-950/40' : ''}">
    <div class="flex flex-wrap items-center gap-x-1 gap-y-1">
+    ${selecao === undefined ? '' : `<label class="flex size-9 shrink-0 cursor-pointer items-center justify-center" title="Selecionar para somar">
+      <input type="checkbox" data-sel="${l.id}" class="size-5 cursor-pointer accent-brand-600" ${selecao ? 'checked' : ''}>
+      <span class="sr-only">Selecionar “${esc(l.descricao)}” (${brl(l.valor)}) para somar</span></label>`}
     <button type="button" data-pagar="${l.id}" class="check ${l.pago ? 'ligado' : ''}" aria-pressed="${l.pago}"
       aria-label="${l.pago ? `Desmarcar “${esc(l.descricao)}” como ${verbo}` : `Marcar “${esc(l.descricao)}” como ${verbo}`}"
       title="${l.pago ? 'Desmarcar' : `Marcar como ${verbo}`}">${l.pago ? icone('check', 'size-4') : ''}</button>
     <button type="button" data-editar="${l.id}" class="min-w-[42%] flex-1 cursor-pointer rounded-lg px-2 py-1 text-left transition hover:bg-stone-50 dark:hover:bg-stone-800/60"
-      aria-label="Abrir “${esc(l.descricao)}” para ver ou editar">
+      aria-label="${l.virtual === 'fatura' ? `Ver a “${esc(l.descricao)}” na tela Cartões` : `Abrir “${esc(l.descricao)}” para ver ou editar`}">
       <span class="line-clamp-2 font-medium">${esc(l.descricao)}</span>
       <span class="line-clamp-2 text-sm text-stone-600 dark:text-stone-400">${l.pago && l.data_pagamento && l.data_pagamento !== l.vencimento ? 'vence ' : ''}${diaMes(l.vencimento)}${mostrarPrazo && !l.pago ? ` · ${quandoVence(l.vencimento)}` : ''} · ${detalhes.map(esc).join(' · ')}</span>
       ${l.observacao ? `<span class="line-clamp-1 text-sm italic text-stone-600 dark:text-stone-400" title="${esc(l.observacao)}">Obs.: ${esc(l.observacao)}</span>` : ''}

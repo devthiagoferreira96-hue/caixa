@@ -233,6 +233,9 @@ export const lancamentosDaDivisao = async (divisao) =>
 export const lancamentosDoGrupo = async (grupo, aPartirDe) =>
   ok(await local.from('lancamentos').select('*').eq('grupo', grupo).gte('vencimento', aPartirDe));
 
+/** Tudo que já foi pago ou recebido (todas as datas), para o saldo dia a dia do Extrato */
+export const lancamentosPagos = async () => ok(await local.from('lancamentos').select('*').eq('pago', true));
+
 /** Saldo de cada conta: saldo inicial + entradas pagas − saídas pagas. Retorna Map(conta_id → saldo) */
 export async function saldosContas() {
   const pagos = ok(await local.from('lancamentos').select('*').eq('pago', true));
@@ -281,6 +284,33 @@ export async function excluirParcelas(compraId, { parcelaId = null, aPartirDe = 
   return async () => {
     await reinserir('parcelas', sair);
     if (cancelar) await alterar('compras_cartao', [compraId], { recorrente: true });
+  };
+}
+
+/** Parcelas salvas de uma compra */
+export const parcelasDaCompraSalvas = async (compraId) => ok(await local.from('parcelas').select('*').eq('compra_id', compraId));
+
+/**
+ * Altera uma compra do cartão. `parcelas` (opcional) = parcelas novas, que trocam todas as antigas
+ * (quando mudou valor, parcelas, data ou cartão). `valorDesde` = { mes, valor }: na assinatura, muda o valor
+ * das cobranças a partir dessa fatura. Retorna `desfazer()`.
+ */
+export async function atualizarCompra(id, valores, { parcelas = null, valorDesde = null } = {}) {
+  const [antes] = await copiar('compras_cartao', 'id', [id]);
+  const parcelasAntes = await copiar('parcelas', 'compra_id', [id]);
+  await alterar('compras_cartao', [id], valores);
+  if (parcelas) {
+    await remover('parcelas', parcelasAntes.map((p) => p.id));
+    await inserir('parcelas', parcelas.map((p) => ({ ...p, compra_id: id })));
+  } else if (valorDesde) {
+    const ids = parcelasAntes.filter((p) => p.fatura_mes >= valorDesde.mes).map((p) => p.id);
+    if (ids.length) await alterar('parcelas', ids, { valor: valorDesde.valor });
+  }
+  return async () => {
+    const agora = await copiar('parcelas', 'compra_id', [id]);
+    await remover('parcelas', agora.map((p) => p.id));
+    await reinserir('parcelas', parcelasAntes);
+    await alterar('compras_cartao', [id], valoresAnteriores(antes, valores));
   };
 }
 

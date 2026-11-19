@@ -120,5 +120,44 @@ export function dataDeReferencia(l, base = 'vencimento') {
 /** Dia em que o lançamento aparece no Extrato: o que já foi pago, no dia do pagamento; o que está em aberto, no vencimento */
 export const dataNoExtrato = (l) => (l.pago ? l.data_pagamento || l.vencimento : l.vencimento);
 
+/**
+ * Faturas do mês que ainda faltam pagar, para o Extrato mostrar como uma saída "a pagar" no dia do vencimento.
+ * O valor é o que falta, já tirando os adiantamentos (que aparecem no Extrato no dia em que foram pagos).
+ * Fatura paga, sem compras, com crédito ou com pagamento agendado (que já é um lançamento) não entra.
+ * Retorna lançamentos que não existem no banco: `virtual: 'fatura'` e id `fatura:<cartão>`.
+ */
+export function faturasAPagar(cartoes, parcelasDoMes, pagamentos, mes, vencimentoDe) {
+  return cartoes.flatMap((c) => {
+    const total = totalDoCartao(parcelasDoMes, c.id);
+    const sit = situacaoFatura(total, pagamentos.filter((p) => p.fatura_cartao_id === c.id && p.fatura_mes === mes));
+    if (sit.estado !== 'aberta' && sit.estado !== 'parcial') return [];
+    return [{
+      id: `fatura:${c.id}`, virtual: 'fatura', tipo: 'saida', valor: sit.falta, total: Math.round(total * 100) / 100, adiantado: sit.pago,
+      descricao: `Fatura ${c.nome}`, vencimento: vencimentoDe(c, mes), pago: false, data_pagamento: null,
+      fatura_cartao_id: c.id, fatura_mes: mes, conta_id: null, categoria_id: null,
+    }];
+  });
+}
+
+/**
+ * Saldo das contas ao fim de cada dia, como no extrato do banco: saldo inicial + o que foi pago ou recebido até o dia.
+ * `pagos` = lançamentos pagos (de todas as datas); `contas` = contas que entram na conta. Retorna Map(dia → saldo).
+ */
+export function saldoAoFimDoDia(dias, pagos, contas) {
+  const ids = new Set(contas.map((c) => c.id));
+  let saldo = contas.reduce((s, c) => s + Number(c.saldo_inicial || 0), 0);
+  const movimentos = pagos
+    .filter((l) => l.pago && ids.has(l.conta_id))
+    .map((l) => [dataNoExtrato(l), (l.tipo === 'entrada' ? 1 : -1) * Number(l.valor || 0)])
+    .sort((a, b) => a[0].localeCompare(b[0]));
+  const r = new Map();
+  let i = 0;
+  for (const dia of [...dias].sort()) {
+    while (i < movimentos.length && movimentos[i][0] <= dia) saldo += movimentos[i++][1];
+    r.set(dia, Math.round(saldo * 100) / 100);
+  }
+  return r;
+}
+
 /** "AAAA-MM" do lançamento na base escolhida, ou null */
 export const mesDeReferencia = (l, base = 'vencimento') => dataDeReferencia(l, base)?.slice(0, 7) ?? null;

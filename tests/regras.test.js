@@ -1,12 +1,12 @@
 // Testes das regras de negócio (faturas, parcelas, datas, valores e somas).
 // Rode com: npm test
-import { faturaDe, vencimentoFatura, dividirParcelas } from '../src/lib/faturas.js';
+import { faturaDe, vencimentoFatura, dividirParcelas, parcelasDaCompra } from '../src/lib/faturas.js';
 import { somarMeses, lerValor, valorParaCampo, brl, esc, diasAte, quandoVence, somarDias, nomeMes } from '../src/lib/format.js';
 import { PALETAS, calcularTema, contraste, oklch, hexDe, coresDasPreferencias } from '../src/lib/temas.js';
 import { calcularCarga, diferencaDePeso, precoNaData, proximoNumero, codigoCarga, resumoDasCargas, linhasContaCorrente, extratoContaCorrente, comparativoInsumos, totalDoInsumo, aReceberPorConta } from '../src/modulos/resina/calculos.js';
 import { numeroBR, dataDaCelula, lerPlanilhaConta, entenderLinha, produtorDaLinha, produtoParecido, montarImportacao } from '../src/modulos/resina/importar-conta.js';
 import { proximasDatas, completarLancamentos, completarAssinaturas, limiteRecorrencia, mesesEntre, SEMANAL, mudancasNaSequencia } from '../src/lib/recorrencia.js';
-import { gastosPorCategoria, itensDaCategoria, saidasReais, totalDoCartao, resumoPorArea, entradasPorCategoria, situacaoFatura, dividirAjustes } from '../src/lib/calculos.js';
+import { gastosPorCategoria, itensDaCategoria, saidasReais, totalDoCartao, resumoPorArea, entradasPorCategoria, situacaoFatura, dividirAjustes, saldoAoFimDoDia, faturasAPagar } from '../src/lib/calculos.js';
 let ok=0, falhas=[];
 const t=(nome, obtido, esperado)=>{ const a=JSON.stringify(obtido), b=JSON.stringify(esperado); a===b?ok++:falhas.push(`${nome}: obtido ${a}, esperado ${b}`); };
 const MP={dia_fechamento:3,dia_vencimento:10}, VIRA={dia_fechamento:25,dia_vencimento:5}, F31={dia_fechamento:31,dia_vencimento:10}, IGUAL={dia_fechamento:10,dia_vencimento:10};
@@ -362,6 +362,38 @@ t('preferência inválida volta ao padrão',coresDasPreferencias({paleta:'person
   const r = aReceberPorConta([c], itens, movs, ins, ['cnpj', 'cpf'], '2026-11-18');
   t('ligação: a receber = arrendamento + insumos − recebido', r.map((x) => [x.titular_id, x.aReceber]), [['cnpj', 2000 + 100 - 500], ['cpf', 0]]);
   t('ligação: só até a data', aReceberPorConta([c], itens, movs, ins, ['cnpj'], '2026-11-03')[0].aReceber, 2000);
+}
+// Extrato: saldo das contas no fim de cada dia
+{
+  const contas = [{ id: 'a', saldo_inicial: 1000 }, { id: 'b', saldo_inicial: 200 }];
+  const pagos = [
+    { conta_id: 'a', tipo: 'saida', valor: 100, pago: true, vencimento: '2026-11-01', data_pagamento: '2026-11-03' },
+    { conta_id: 'b', tipo: 'entrada', valor: 50.1, pago: true, vencimento: '2026-11-03' },
+    { conta_id: 'a', tipo: 'saida', valor: 30.2, pago: true, vencimento: '2026-10-20', data_pagamento: '2026-10-20' },
+    { conta_id: 'x', tipo: 'saida', valor: 999, pago: true, vencimento: '2026-11-02' },
+  ];
+  const r = saldoAoFimDoDia(['2026-11-05', '2026-11-02', '2026-11-03'], pagos, contas);
+  t('saldo do dia: conta o que foi pago antes do mês e usa a data do pagamento', r.get('2026-11-02'), 1169.8);
+  t('saldo do dia: no dia do pagamento', r.get('2026-11-03'), 1119.9);
+  t('saldo do dia: dia sem movimento repete o saldo', r.get('2026-11-05'), 1119.9);
+  t('saldo do dia: só a conta filtrada', saldoAoFimDoDia(['2026-11-03'], pagos, [contas[1]]).get('2026-11-03'), 250.1);
+}
+// Cartão: editar a compra refaz as parcelas; Extrato mostra a fatura a pagar no vencimento
+{
+  const C = { id: 'k', nome: 'Nubank', dia_fechamento: 3, dia_vencimento: 10 };
+  t('editar compra: refaz parcelas', parcelasDaCompra(C, { data_compra: '2026-11-04', valor_total: 100, qtd_parcelas: 3 }),
+    [{ numero: 1, valor: 33.33, fatura_mes: '2026-12-01' }, { numero: 2, valor: 33.33, fatura_mes: '2027-01-01' }, { numero: 3, valor: 33.34, fatura_mes: '2027-02-01' }]);
+  t('editar compra: não traz de volta parcela excluída', parcelasDaCompra(C, { data_compra: '2026-11-04', valor_total: 90, qtd_parcelas: 3 }, new Set([1, 3])).map((p) => p.numero), [1, 3]);
+  t('editar reembolso: valor negativo', parcelasDaCompra(C, { data_compra: '2026-11-01', valor_total: 20, qtd_parcelas: 1, tipo: 'estorno' }), [{ numero: 1, valor: -20, fatura_mes: '2026-11-01' }]);
+  const C2 = { id: 'j', nome: 'Inter', dia_fechamento: 25, dia_vencimento: 5 };
+  const ps = [{ valor: 300, compra: { cartao_id: 'k' } }, { valor: 50.5, compra: { cartao_id: 'k' } }, { valor: 80, compra: { cartao_id: 'j' } }];
+  const adi = { fatura_cartao_id: 'k', fatura_mes: '2026-11-01', pago: true, valor: 100, adiantamento: true };
+  const f = faturasAPagar([C, C2], ps, [adi], '2026-11-01', vencimentoFatura);
+  t('extrato: fatura a pagar no vencimento, sem o adiantamento', f.map((x) => [x.id, x.vencimento, x.valor, x.adiantado, x.total]),
+    [['fatura:k', '2026-11-10', 250.5, 100, 350.5], ['fatura:j', '2026-11-05', 80, 0, 80]]);
+  t('extrato: fatura paga não aparece', faturasAPagar([C], ps, [{ ...adi, valor: 350.5, adiantamento: false }], '2026-11-01', vencimentoFatura), []);
+  t('extrato: fatura agendada não aparece (o agendado já é lançamento)', faturasAPagar([C], ps, [{ ...adi, pago: false, adiantamento: false }], '2026-11-01', vencimentoFatura), []);
+  t('extrato: cartão sem compras não aparece', faturasAPagar([{ ...C, id: 'z' }], ps, [], '2026-11-01', vencimentoFatura), []);
 }
 console.log(`${ok} passaram, ${falhas.length} falharam`); falhas.forEach(f=>console.log(' FALHA',f));
 if (falhas.length) process.exit(1);
