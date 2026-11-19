@@ -44,17 +44,20 @@ async def nova_carga(pg, data, peso, linhas):
     return await ultimo_toast(pg)
 
 async def lancar(pg, produtor, data, itens, so_total=False):
-    """itens = [(produto, quantidade, valor)] valor = unitário (ou total se so_total) em centavos digitados"""
+    """itens = [(produto, quantidade, valor[, produtor[, % do produtor]])] valor = unitário (ou total se so_total) em centavos digitados.
+    Sem produtor no item, vale o `produtor` da entrega."""
     await ir(pg, 'insumos'); await limpar_toasts(pg)
-    await pg.click('[data-lancar]'); await pg.wait_for_selector('dialog[open] #in-prod')
-    await pg.select_option('#in-prod', label=produtor); await pg.fill('#in-data', data)
-    for n, (prod, qtd, valor) in enumerate(itens):
+    await pg.click('[data-lancar]'); await pg.wait_for_selector('dialog[open] #in-data')
+    await pg.fill('#in-data', data)
+    for n, (prod, qtd, valor, *resto) in enumerate(itens):
         if n: await pg.click('dialog[open] [data-mais-linha]'); await pg.wait_for_timeout(100)
         li = pg.locator('dialog[open] [data-linha]').nth(n)
         sel = li.locator('[data-c=produto_id]')
         valor_op = await sel.evaluate("(s, n) => [...s.options].find(o => o.text.startsWith(n))?.value", prod)
         await sel.select_option(valor_op); await pg.wait_for_timeout(150)
         li = pg.locator('dialog[open] [data-linha]').nth(n)
+        await li.locator('[data-c=produtor_id]').select_option(label=resto[0] if resto else produtor)
+        if len(resto) > 1: await li.locator('[data-c=pct]').fill(str(resto[1]))
         await li.locator('[data-c=quantidade]').fill(str(qtd))
         if valor is not None:
             await li.locator('[data-c=valor_total]' if so_total else '[data-c=valor_unitario]').fill(str(valor))
@@ -98,12 +101,13 @@ async def main():
         total, t = await lancar(pg, 'Carlos', '2026-11-06', [('Saco coletor', 10, '500')])
         ok('lançamento com unitário digitado', total == 'R$ 50,00', total)
         # validações
-        await pg.click('[data-lancar]'); await pg.wait_for_selector('dialog[open] #in-prod')
-        await pg.click('dialog[open] button[type=submit]'); await pg.wait_for_timeout(300)
-        ok('sem produtor bloqueado', 'Escolha o produtor' in await pg.inner_text('dialog[open]'))
-        await pg.select_option('#in-prod', label='João'); await limpar_toasts(pg)
+        await pg.click('[data-lancar]'); await pg.wait_for_selector('dialog[open] #in-data'); await limpar_toasts(pg)
         await pg.click('dialog[open] button[type=submit]'); await pg.wait_for_timeout(300)
         ok('sem produto bloqueado', 'Escolha o produto' in await ultimo_toast(pg), await ultimo_toast(pg))
+        sel = pg.locator('dialog[open] [data-linha] [data-c=produto_id]').first
+        await sel.select_option(await sel.evaluate("s => s.options[1].value")); await limpar_toasts(pg)
+        await pg.click('dialog[open] button[type=submit]'); await pg.wait_for_timeout(300)
+        ok('sem produtor bloqueado', 'Escolha o produtor' in await ultimo_toast(pg), await ultimo_toast(pg))
         await pg.keyboard.press('Escape'); await pg.wait_for_timeout(300)
 
         txt = await pg.inner_text('#conteudo')

@@ -93,8 +93,8 @@ async def main():
 
         # 4. insumos → compra no cartão
         await ir(pg, 'insumos'); await limpar_toasts(pg)
-        await pg.click('[data-lancar]'); await pg.wait_for_selector('dialog[open] #in-prod')
-        await pg.select_option('#in-prod', label='Carlos')
+        await pg.click('[data-lancar]'); await pg.wait_for_selector('dialog[open] #in-data')
+        await pg.locator('dialog[open] [data-linha] [data-c=produtor_id]').first.select_option(label='Carlos')
         sel = pg.locator('dialog[open] [data-linha] [data-c=produto_id]').first
         v = await sel.evaluate("s => [...s.options].find(o => o.text.startsWith('Pasta'))?.value")
         await sel.select_option(v); await pg.wait_for_timeout(150)
@@ -112,7 +112,7 @@ async def main():
 
         # 5. trocar para saída de conta (a pagar): sai do cartão e entra no extrato
         await ir(pg, 'insumos'); await mes(pg, 0)
-        await pg.click('#conteudo [data-entrega]'); await pg.wait_for_selector('dialog[open] #in-prod')
+        await pg.click('#conteudo [data-entrega]'); await pg.wait_for_selector('dialog[open] #in-data')
         ok('editar: já vem no cartão', await pg.is_checked('dialog[open] [name=cx_modo][value=cartao]'))
         await pg.click('dialog[open] [name=cx_modo][value=saida]'); await pg.wait_for_timeout(150)
         await pg.uncheck('dialog[open] [name=cx_pago]')

@@ -197,6 +197,21 @@ export const pctDoProdutor = (i) => (Number.isFinite(i.pct_produtor) ? Math.min(
 /** Quanto do insumo é descontado do produtor (vai para a conta corrente) */
 export const parteDoProdutor = (i) => centavos(totalDoInsumo(i) * pctDoProdutor(i) / 100);
 
+/**
+ * Divide uma entrega (uma nota com um ou mais produtores) por produtor, na ordem em que aparecem:
+ * [{ produtor_id, total (o valor cheio dos produtos dele), parte (o que é cobrado dele), itens }].
+ */
+export function divisaoDaEntrega(itens) {
+  const porProdutor = new Map();
+  for (const i of itens) {
+    const d = porProdutor.get(i.produtor_id) || porProdutor.set(i.produtor_id, { produtor_id: i.produtor_id, total: 0, parte: 0, itens: [] }).get(i.produtor_id);
+    d.total = centavos(d.total + totalDoInsumo(i));
+    d.parte = centavos(d.parte + parteDoProdutor(i));
+    d.itens.push(i);
+  }
+  return [...porProdutor.values()];
+}
+
 /** Quanto acima da média de custo por kg um produtor precisa estar para ganhar o alerta */
 export const LIMITE_ALERTA = 0.25;
 

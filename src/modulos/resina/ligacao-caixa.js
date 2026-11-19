@@ -131,8 +131,8 @@ export function camposAReceber(ligado) {
   return `<fieldset class="grid gap-3 rounded-xl border border-stone-200 p-3 dark:border-stone-700" data-caixa-receber>
     <legend class="px-1 text-sm font-semibold">Caixa da Família: parte do produtor</legend>
     <label class="flex cursor-pointer items-start gap-3"><input type="checkbox" name="cx_receber" class="mt-0.5 size-5 accent-brand-600" ${marcado ? 'checked' : ''}>
-      <span><span class="block font-semibold">Lançar a parte do produtor como "a receber" no Caixa</span>
-      <span class="block text-sm text-stone-600 dark:text-stone-400">Quando ele pagar, marque como recebido no Extrato: o dinheiro entra no saldo e a conta corrente baixa sozinha.${ligado?.pago ? ' <strong>Já foi recebido.</strong>' : ''}</span></span></label>
+      <span><span class="block font-semibold">Lançar a parte de cada produtor como "a receber" no Caixa</span>
+      <span class="block text-sm text-stone-600 dark:text-stone-400">Uma entrada para cada produtor da nota. Quando ele pagar, marque como recebido no Extrato: o dinheiro entra no saldo e a conta corrente baixa sozinha.${ligado?.pago ? ' <strong>Já foi recebido (pelo menos um).</strong>' : ''}</span></span></label>
     <div class="grid gap-3 sm:grid-cols-2" data-receber-campos>
       <div data-campo><label class="rotulo" for="cx-conta-r">Vai entrar em qual conta?</label><select id="cx-conta-r" name="cx_conta_receber" class="campo">${opcoesConta(conta)}</select></div>
       <div data-campo><label class="rotulo" for="cx-cat-r">Categoria de entrada <span class="font-normal text-stone-600 dark:text-stone-400">(opcional)</span></label><select id="cx-cat-r" name="cx_cat_receber" class="campo">${opcoesCategoria(cat, 'entrada')}</select></div>
@@ -156,30 +156,40 @@ export function lerAReceber(form, erroNoCampo) {
 }
 
 /**
- * Cria, muda ou apaga a entrada "a receber" com a parte do produtor. Se já foi recebida, continua recebida.
- * `dados` = { valor, data, texto, titular_id, produtor_id, nota }. Retorna `desfazer()`.
+ * Cria, muda ou apaga as entradas "a receber" da entrega: uma por produtor, com a parte dele.
+ * O que já foi recebido continua recebido (só o valor e a descrição acompanham).
+ * `partes` = [{ produtor_id, valor, texto }]; `comum` = { data, titular_id, nota }. Retorna `desfazer()`.
  */
-export async function gravarAReceber(entregaId, escolha, dados) {
+export async function gravarAReceber(entregaId, escolha, partes = [], comum = {}) {
   if (!escolha) escolha = { sem: true };
-  if (!escolha.sem) { lembrado.contaAReceber = escolha.conta_id; lembrado.catAReceber = escolha.categoria_id; }
-  lembrado.aReceber = !escolha.sem;
+  if (!escolha.sem) { lembrado.contaAReceber = escolha.conta_id; lembrado.catAReceber = escolha.categoria_id; lembrado.aReceber = true; }
+  else if (partes.length) lembrado.aReceber = false; // excluir a entrega não muda a escolha lembrada
   const antes = ok(await local.from('lancamentos').select('*').eq('resina_receber_id', entregaId));
-  if (escolha.sem || !(dados.valor > 0)) {
-    if (!antes.length) return async () => {};
-    return excluirLancamentos(antes.map((l) => l.id));
+  const validas = escolha.sem ? [] : partes.filter((p) => p.valor > 0);
+  // cada parte reaproveita a entrada do mesmo produtor; se não houver, uma que sobrou (ex.: trocou o produtor)
+  const sobra = [...antes];
+  const pares = validas.map((p) => {
+    const n = sobra.findIndex((l) => (l.resina_produtor_id || null) === (p.produtor_id || null));
+    return { p, l: n >= 0 ? sobra.splice(n, 1)[0] : null };
+  });
+  for (const par of pares) if (!par.l && sobra.length) par.l = sobra.shift();
+
+  const voltar = [];
+  const criar = [];
+  for (const { p, l } of pares) {
+    const valores = {
+      tipo: 'entrada', valor: p.valor, descricao: p.texto.slice(0, 120), conta_id: escolha.conta_id, categoria_id: escolha.categoria_id,
+      resina_titular_id: comum.titular_id || null, resina_produtor_id: p.produtor_id || null, resina_nota: comum.nota || '',
+    };
+    if (l) voltar.push((await atualizarLancamento(l.id, l.pago ? valores : { ...valores, vencimento: comum.data })).desfazer);
+    else criar.push({ ...valores, vencimento: comum.data, pago: false, data_pagamento: null, pessoa_id: null, resina_receber_id: entregaId });
   }
-  const valores = {
-    tipo: 'entrada', valor: dados.valor, descricao: dados.texto.slice(0, 120), conta_id: escolha.conta_id, categoria_id: escolha.categoria_id,
-    resina_titular_id: dados.titular_id || null, resina_produtor_id: dados.produtor_id || null, resina_nota: dados.nota || '',
-  };
-  if (antes.length) {
-    const [l, ...sobra] = antes;
-    const voltarSobra = sobra.length ? await excluirLancamentos(sobra.map((x) => x.id)) : null;
-    const r = await atualizarLancamento(l.id, l.pago ? valores : { ...valores, vencimento: dados.data });
-    return async () => { await r.desfazer(); if (voltarSobra) await voltarSobra(); };
+  if (sobra.length) voltar.push(await excluirLancamentos(sobra.map((x) => x.id)));
+  if (criar.length) {
+    const novos = await criarLancamentos(criar);
+    voltar.push(() => excluirLancamentos(novos.map((x) => x.id)));
   }
-  const [novo] = await criarLancamentos([{ ...valores, vencimento: dados.data, pago: false, data_pagamento: null, pessoa_id: null, resina_receber_id: entregaId }]);
-  return () => excluirLancamentos([novo.id]);
+  return async () => { for (const v of voltar.reverse()) await v(); };
 }
 
 // ---------- Compra de insumos → saída ou cartão no Caixa

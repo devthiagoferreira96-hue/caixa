@@ -3,7 +3,7 @@
 import { faturaDe, vencimentoFatura, dividirParcelas, parcelasDaCompra } from '../src/lib/faturas.js';
 import { somarMeses, lerValor, valorParaCampo, brl, esc, diasAte, quandoVence, somarDias, nomeMes } from '../src/lib/format.js';
 import { PALETAS, calcularTema, contraste, oklch, hexDe, coresDasPreferencias } from '../src/lib/temas.js';
-import { calcularCarga, diferencaDePeso, precoNaData, proximoNumero, codigoCarga, resumoDasCargas, linhasContaCorrente, extratoContaCorrente, comparativoInsumos, totalDoInsumo, pctDoProdutor, parteDoProdutor, creditosDoCaixa, aReceberPorConta } from '../src/modulos/resina/calculos.js';
+import { calcularCarga, diferencaDePeso, precoNaData, proximoNumero, codigoCarga, resumoDasCargas, linhasContaCorrente, extratoContaCorrente, comparativoInsumos, totalDoInsumo, pctDoProdutor, parteDoProdutor, divisaoDaEntrega, creditosDoCaixa, aReceberPorConta } from '../src/modulos/resina/calculos.js';
 import { numeroBR, dataDaCelula, lerPlanilhaConta, entenderLinha, produtorDaLinha, produtoParecido, montarImportacao } from '../src/modulos/resina/importar-conta.js';
 import { proximasDatas, completarLancamentos, completarAssinaturas, limiteRecorrencia, mesesEntre, SEMANAL, mudancasNaSequencia } from '../src/lib/recorrencia.js';
 import { gastosPorCategoria, itensDaCategoria, saidasReais, totalDoCartao, resumoPorArea, entradasPorCategoria, situacaoFatura, dividirAjustes, saldoAoFimDoDia, faturasAPagar } from '../src/lib/calculos.js';
@@ -213,6 +213,15 @@ t('preferência inválida volta ao padrão',coresDasPreferencias({paleta:'person
   t('caixa: só o a receber já recebido vira crédito', cred.map((m) => [m.tipo, m.valor, m.data, m.titular_id, m.produtor_id]), [['credito', 60, '2026-11-20', 'cnpj', 'a']]);
   t('caixa: recebido no Caixa zera o falta receber', aReceberPorConta([], new Map(), cred, meio, ['cnpj'], '2027-01-01')[0].aReceber, 0);
   t('conta: a receber com 50%', aReceberPorConta([], new Map(), [], meio, ['cnpj'], '2027-01-01')[0].aReceber, 60);
+  // uma nota com vários produtores: cada produto tem o seu produtor e a sua %
+  const nota = [
+    { id: 'n1', entrega_id: 'e9', data: '2026-11-08', produtor_id: 'a', produto_id: 'arame', titular_id: 'cnpj', quantidade: 1, valor_unitario: 100, valor_total: 100, pct_produtor: 50, criado_em: '4' },
+    { id: 'n2', entrega_id: 'e9', data: '2026-11-08', produtor_id: 'b', produto_id: 'pasta', titular_id: 'cnpj', quantidade: 1, valor_unitario: 300, valor_total: 300, pct_produtor: 30, criado_em: '5' },
+    { id: 'n3', entrega_id: 'e9', data: '2026-11-08', produtor_id: 'a', produto_id: 'pasta', titular_id: 'cnpj', quantidade: 1, valor_unitario: 10, valor_total: 10, pct_produtor: 100, criado_em: '6' },
+  ];
+  t('nota com 2 produtores: divisão por produtor', divisaoDaEntrega(nota).map((d) => [d.produtor_id, d.total, d.parte, d.itens.length]), [['a', 110, 60, 2], ['b', 300, 90, 1]]);
+  t('nota com 2 produtores: cada um com o seu débito na conta', linhasContaCorrente([], new Map(), [], 'cnpj', nota).map((l) => [l.produtor_id, l.debito]), [['a', 50], ['b', 90], ['a', 10]]);
+  t('nota com 2 produtores: comparativo com o valor cheio de cada um', comparativoInsumos([], nota).linhas.map((l) => [l.produtor_id, l.gasto, l.descontado]).sort(), [['a', 110, 60], ['b', 300, 90]]);
   const cm = comparativoInsumos([{ produtor_id: 'a', cargas: 1, tbs: 1, kg: 100, valor: 500, arrendamento: 200, produtor: 300 }], meio);
   t('comp: gasto cheio, desconto só da parte dele', [cm.linhas[0].gasto, cm.linhas[0].descontado, cm.linhas[0].liquidoProdutor], [240, 60, 240]);
 }
