@@ -5,7 +5,7 @@ import { icone, estadoVazio, toast, confirmar, dialogo, mascaraDinheiro, erroNoC
 import { desfazendo } from '../../components/lancamento.js';
 import { insumosEntre, salvarInsumos, excluirInsumos } from './dados.js';
 import { totalDoInsumo, pctDoProdutor, parteDoProdutor } from './calculos.js';
-import { camposPagamentoInsumos, ligarPagamentoInsumos, lerPagamentoInsumos, gravarPagamentoInsumos, desligar, lerLigacao } from './ligacao-caixa.js';
+import { camposPagamentoInsumos, ligarPagamentoInsumos, lerPagamentoInsumos, gravarPagamentoInsumos, desligar, lerLigacao, camposAReceber, ligarAReceber, lerAReceber, gravarAReceber } from './ligacao-caixa.js';
 import { numero, quadro, bolinha, nomeProdutor, corProdutor, nomeTitular, seDesligado } from './comum.js';
 
 export const produto = (id) => store.resina_produtos.find((p) => p.id === id);
@@ -41,6 +41,7 @@ export default {
     <p><strong>Parte do produtor</strong>: quanto da nota é cobrado do produtor (vem 50%: metade dele, metade da proprietária). Só essa parte entra como débito na <strong>Conta corrente</strong> da conta escolhida (CNPJ ou CPF) e aparece no Início como "falta receber". Quando ele pagar, lance em <strong>Conta corrente &gt; Lançar recebimento</strong>, marcando "Lançar também como entrada no Caixa".</p>
     <p>Em <strong>Lançar insumos</strong>, escolha o produtor, a conta e a data e adicione um produto por linha: a <strong>quantidade</strong> e o <strong>valor unitário</strong> (vem do cadastro) dão o <strong>valor total</strong>. Se você souber só o total, digite o total e o valor unitário é calculado.</p>
     <p>Toque numa entrega para mudar ou excluir.</p>
+    <p><strong>Parte do produtor no Caixa</strong>: deixe marcado "Lançar a parte do produtor como a receber" e o Caixa ganha uma entrada em aberto com essa parte. Quando ele pagar, marque como recebido no <strong>Extrato</strong>: o dinheiro entra no saldo e a conta corrente baixa sozinha (não precisa lançar o recebimento de novo).</p>
     <p><strong>Caixa da Família</strong>: no fim do lançamento, escolha como a compra foi paga: <strong>saída de uma conta</strong> (pode ficar para pagar no vencimento da nota) ou <strong>compra no cartão</strong>. O valor <strong>cheio</strong> da nota entra no Caixa como gasto, porque é o que foi pago ao fornecedor. Dar baixa no Extrato só marca a nota como paga: não baixa o que o produtor deve. Mudar ou excluir a entrega aqui muda ou exclui lá.</p>
     <p>A comparação entre produtores (quem gasta mais insumo para cada kg de resina) fica em <strong>Produção</strong>.</p>`,
 
@@ -117,8 +118,8 @@ export default {
 // ---------- lançar ou mudar uma entrega
 let seq = 0;
 async function editarEntrega(entrega, ctx) {
-  const ligacao = entrega ? await lerLigacao('resina_entrega_id', entrega.id) : { lancamentos: [], compras: [] };
-  const temNoCaixa = ligacao.lancamentos.length + ligacao.compras.length > 0;
+  const ligacao = entrega ? await lerLigacao('resina_entrega_id', entrega.id) : { lancamentos: [], compras: [], receber: [] };
+  const temNoCaixa = ligacao.lancamentos.length + ligacao.compras.length + ligacao.receber.length > 0;
   const nova = !entrega;
   const produtores = store.resina_produtores.filter((p) => p.ativo !== false || p.id === entrega?.produtor_id);
   const titulares = store.resina_titulares.filter((t) => t.ativo !== false || t.id === entrega?.titular_id);
@@ -148,6 +149,7 @@ async function editarEntrega(entrega, ctx) {
       <div data-campo><label class="rotulo" for="in-obs">Observação <span class="font-normal text-stone-600 dark:text-stone-400">(opcional)</span></label><input id="in-obs" name="obs" class="campo" maxlength="120" value="${esc(entrega?.obs || '')}"></div>
       <p class="rounded-xl bg-stone-50 px-3 py-2 text-right dark:bg-stone-800/60">Total da entrega: <strong class="tabular-nums" data-total-geral></strong><span class="block text-sm tabular-nums text-stone-600 dark:text-stone-400" data-divisao></span></p>
       ${camposPagamentoInsumos(ligacao)}
+      ${camposAReceber(ligacao.receber[0])}
       <div class="flex flex-col-reverse gap-2 sm:flex-row sm:items-center">
         ${nova ? '' : `<button type="button" class="btn-neutro text-red-700 dark:text-red-400" data-excluir-entrega>${icone('lixo')} Excluir entrega</button>`}
         <span class="flex-1"></span>
@@ -158,6 +160,7 @@ async function editarEntrega(entrega, ctx) {
   const f = d.querySelector('form');
   const ul = f.querySelector('[data-linhas]');
   ligarPagamentoInsumos(f);
+  ligarAReceber(f);
 
   const opcoes = (l) => `<option value="">Escolha…</option>${store.resina_produtos.filter((p) => p.ativo !== false || p.id === l.produto_id).map((p) =>
     `<option value="${p.id}" ${p.id === l.produto_id ? 'selected' : ''}>${esc(p.nome)} (${esc(p.unidade)})</option>`).join('')}`;
@@ -234,8 +237,9 @@ async function editarEntrega(entrega, ctx) {
       if (!(await confirmar(`A entrega de ${nomeProdutor(entrega.produtor_id)} em ${dataCompleta(entrega.data)} será excluída.${temNoCaixa ? ' O gasto ligado a ela no Caixa também.' : ''}`, { botao: 'Excluir', perigo: true }))) return;
       try {
         const voltarCaixa = await desligar('resina_entrega_id', entrega.id);
+        const voltarReceber = await gravarAReceber(entrega.id, { sem: true }, {});
         const voltarInsumos = await excluirInsumos(entrega.itens.map((i) => i.id));
-        const desfazer = async () => { await voltarInsumos(); await voltarCaixa(); };
+        const desfazer = async () => { await voltarInsumos(); await voltarReceber(); await voltarCaixa(); };
         toast(temNoCaixa ? 'Entrega excluída (e o gasto no Caixa)' : 'Entrega excluída', { acao: desfazendo(desfazer, ctx.atualizar) });
         ctx.atualizar();
       } catch (err) { toast(err.message, { tipo: 'erro' }); }
@@ -263,6 +267,8 @@ async function editarEntrega(entrega, ctx) {
     if (f.titular_id && !f.titular_id.value && nova) { erroNoCampo(f, 'titular_id', 'Escolha a conta.'); return f.titular_id.focus(); }
     const caixa = lerPagamentoInsumos(f, erroNoCampo, f.data.value);
     if (!caixa) return;
+    const receber = lerAReceber(f, erroNoCampo);
+    if (!receber) return;
     const base = { produtor_id: f.produtor_id.value, data: f.data.value, obs: f.obs.value.trim(), nota: f.nota.value.trim(), titular_id: f.titular_id?.value || null, entrega_id, pct_produtor: pctProdutor };
     try {
       const voltarInsumos = await salvarInsumos(
@@ -274,12 +280,17 @@ async function editarEntrega(entrega, ctx) {
       const voltarCaixa = await gravarPagamentoInsumos(entrega_id, caixa, {
         total, data: base.data, texto: `Insumos resina · ${produtos} · ${nomeProdutor(base.produtor_id)}${base.nota ? ` · ${base.nota}` : ''}`,
       });
-      const desfazer = async () => { await voltarCaixa(); await voltarInsumos(); };
+      const doProdutor = Math.round(total * pctProdutor) / 100;
+      const voltarReceber = await gravarAReceber(entrega_id, receber, {
+        valor: doProdutor, data: base.data, titular_id: base.titular_id, produtor_id: base.produtor_id, nota: base.nota,
+        texto: `A receber · ${pctProdutor.toLocaleString('pt-BR')}% dos insumos · ${nomeProdutor(base.produtor_id)}${base.nota ? ` · ${base.nota}` : ''}`,
+      });
+      const desfazer = async () => { await voltarReceber(); await voltarCaixa(); await voltarInsumos(); };
       d.close();
       if (base.titular_id) ultimaConta = base.titular_id;
       ultimoPct = pctProdutor;
-      const onde = caixa.modo === 'saida' ? ' (e no Caixa)' : caixa.modo === 'cartao' ? ' (e no cartão)' : '';
-      toast(`${nova ? 'Lançado' : 'Atualizado'}: ${brl(total)} para ${nomeProdutor(base.produtor_id)}${onde}`, { acao: desfazendo(desfazer, ctx.atualizar) });
+      const onde = [caixa.modo === 'saida' ? 'no Caixa' : caixa.modo === 'cartao' ? 'no cartão' : '', !receber.sem && doProdutor > 0 ? `${brl(doProdutor)} a receber` : ''].filter(Boolean).join(', ');
+      toast(`${nova ? 'Lançado' : 'Atualizado'}: ${brl(total)} para ${nomeProdutor(base.produtor_id)}${onde ? ` (${onde})` : ''}`, { acao: desfazendo(desfazer, ctx.atualizar) });
       ctx.atualizar();
     } catch (err) { toast(err.message, { tipo: 'erro' }); }
   });

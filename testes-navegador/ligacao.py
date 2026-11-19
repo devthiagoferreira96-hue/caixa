@@ -105,7 +105,7 @@ async def main():
         await pg.screenshot(path=os.path.join(SAIDA, 'ligacao-insumos.png'), full_page=True)
         await pg.click('dialog[open] button[type=submit]'); await pg.wait_for_timeout(800)
         t = await ultimo_toast(pg)
-        ok('insumos lançados no cartão', 'e no cartão' in t, t)
+        ok('insumos lançados no cartão', 'no cartão' in t, t)
         await ir(pg, 'cartoes'); await mes(pg, 1)
         c = await conteudo(pg)
         ok('cartão tem a compra de insumos com selo Resina', 'Insumos resina · Pasta · Carlos' in c and 'Resina' in c and '1/2' in c, c[:800])

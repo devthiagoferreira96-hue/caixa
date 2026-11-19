@@ -9,14 +9,14 @@ import { icone, estadoVazio } from '../lib/ui.js';
 import { local } from '../lib/local-db.js';
 import { fazerBackup } from '../components/backup.js';
 import { vencimentoFatura } from '../lib/faturas.js';
-import { resinaAtiva, todasAsCargas, lerMovimentos, insumosEntre } from '../modulos/resina/dados.js';
+import { resinaAtiva, todasAsCargas, movimentosComCaixa, insumosEntre } from '../modulos/resina/dados.js';
 import { aReceberPorConta } from '../modulos/resina/calculos.js';
 
 /** Arrendamento a receber da Resina (só quando o módulo está ligado e há contas CNPJ/CPF) */
 async function resumoResina() {
   const titulares = store.resina_titulares.filter((t) => t.ativo !== false);
   if (!resinaAtiva() || !titulares.length) return null;
-  const [{ cargas, itensPorCarga }, movimentos, insumos] = await Promise.all([todasAsCargas(), lerMovimentos(), insumosEntre('0000-01-01', '9999-12-31')]);
+  const [{ cargas, itensPorCarga }, movimentos, insumos] = await Promise.all([todasAsCargas(), movimentosComCaixa(), insumosEntre('0000-01-01', '9999-12-31')]);
   if (!cargas.length && !movimentos.length && !insumos.length) return null;
   return aReceberPorConta(cargas, itensPorCarga, movimentos, insumos, titulares.map((t) => t.id), somarDias(1))
     .map((r) => ({ ...r, nome: titulares.find((t) => t.id === r.titular_id).nome }));

@@ -8,7 +8,7 @@ import { local } from '../../lib/local-db.js';
 import { store } from '../../lib/store.js';
 import { dataCompleta } from '../../lib/format.js';
 import { E, T, N, D, F, coluna } from '../../lib/exportar-excel.js';
-import { calcularCarga, linhasContaCorrente, extratoContaCorrente } from './calculos.js';
+import { calcularCarga, linhasContaCorrente, extratoContaCorrente, creditosDoCaixa } from './calculos.js';
 import { abaContaCorrente, nomeDeAba } from './exportar-conta.js';
 import { safraDe } from './importar-safras.js';
 
@@ -111,7 +111,7 @@ export function abasResina(periodo, { producao = true, conta = true } = {}) {
   if (conta) {
     // uma aba por conta (CNPJ/CPF) que tenha movimento; e uma "Sem conta" se houver itens sem conta
     const insumos = t.resina_insumos;
-    const movimentos = t.resina_movimentos;
+    const movimentos = [...t.resina_movimentos, ...creditosDoCaixa(t.lancamentos)];
     const cargas = t.resina_cargas;
     const ids = [...store.resina_titulares.map((x) => x.id), null];
     const textoPeriodo = periodo.id === 'tudo' ? '' : `${dataCompleta(periodo.inicio)} a ${dataCompleta(ultimoDia(periodo.fim))}`;

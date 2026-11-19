@@ -172,6 +172,21 @@ export function extratoContaCorrente(linhas, inicio, fim, produtorId = null) {
   return { saldoAnterior, linhas: periodo, credito, debito, saldoFinal: saldo };
 }
 
+/**
+ * A parte do produtor nos insumos que já foi recebida no Caixa (entrada "a receber" marcada como recebida)
+ * vira crédito na conta corrente. Recebe os lançamentos do Caixa e devolve "movimentos" de crédito
+ * (com `caixa_id`), para juntar aos lançamentos manuais.
+ */
+export function creditosDoCaixa(lancamentos) {
+  return lancamentos
+    .filter((l) => l.resina_receber_id && l.pago && l.tipo === 'entrada')
+    .map((l) => ({
+      id: `caixa-${l.id}`, caixa_id: l.id, tipo: 'credito', valor: Number(l.valor), data: l.data_pagamento || l.vencimento,
+      titular_id: l.resina_titular_id || null, produtor_id: l.resina_produtor_id || null,
+      descricao: 'Recebido no Caixa · parte dos insumos', nota: l.resina_nota || '', criado_em: l.criado_em || '',
+    }));
+}
+
 // ---------- Insumos (produtos usados para coletar a resina)
 /** Valor total de um lançamento de insumo: o total guardado, ou quantidade × valor unitário */
 export const totalDoInsumo = (i) => (Number.isFinite(i.valor_total) ? i.valor_total : centavos((i.quantidade || 0) * (i.valor_unitario || 0)));

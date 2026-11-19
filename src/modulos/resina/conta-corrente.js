@@ -6,7 +6,7 @@ import { store } from '../../lib/store.js';
 import { icone, estadoVazio, toast, confirmar, dialogo, mascaraDinheiro, erroNoCampo, limparErros, semRepetir } from '../../lib/ui.js';
 import { desfazendo } from '../../components/lancamento.js';
 import { entregar } from '../../components/backup.js';
-import { todasAsCargas, lerMovimentos, salvarMovimento, excluirMovimento, insumosEntre } from './dados.js';
+import { todasAsCargas, lerMovimentos, movimentosComCaixa, salvarMovimento, excluirMovimento, insumosEntre } from './dados.js';
 import { nomeProduto, quantidade, abrirEntrega } from './insumos.js';
 import { importarQualquerPlanilha } from '../../components/importar.js';
 import { camposRecebimento, ligarRecebimento, lerRecebimento, gravarRecebimento, desligar, lerLigacao, idsLigados } from './ligacao-caixa.js';
@@ -30,7 +30,7 @@ export default {
   ajuda: `
     <p>A conta corrente do <strong>arrendamento</strong>, no mesmo formato da planilha da empresa. Existe uma conta para cada cadastro em <em>Cadastros &gt; Contas</em> (o CNPJ e o CPF da proprietária).</p>
     <p><strong>Débito</strong>: cada produtor de cada carga vira uma linha, e o débito é o arrendamento dele, ou seja, o que a proprietária tem para receber. Dos <strong>insumos</strong>, entra como débito só a parte cobrada do produtor (o % escolhido na entrega, por exemplo 50%). O resto fica com a proprietária.</p>
-    <p><strong>Crédito</strong>: o que ela já recebeu. Lance em <strong>Lançar recebimento</strong>. Ali também dá para lançar um valor a receber que não veio de carga.</p>
+    <p><strong>Crédito</strong>: o que ela já recebeu. A parte do produtor nos insumos vira um "a receber" no Caixa: quando ele pagar, marque como recebido no <strong>Extrato</strong> e o crédito aparece aqui sozinho. Outros recebimentos, lance em <strong>Lançar recebimento</strong>. Ali também dá para lançar um valor a receber que não veio de carga.</p>
     <p><strong>Ligado ao Caixa</strong>: o recebimento pode entrar também como <strong>entrada</strong> numa conta do Caixa da Família (marque "Lançar também como entrada no Caixa"). Mudar ou excluir aqui muda ou exclui lá. As linhas lançadas no Caixa mostram "no Caixa".</p>
     <p><strong>Saldo</strong>: vem desde a primeira carga. Negativo quer dizer que ainda falta receber.</p>
     <p><strong>UNI.</strong> é o valor de um tambor (média de kg por tambor × preço do kg). Assim, débito = tambores × UNI. × % do arrendamento.</p>
@@ -39,7 +39,7 @@ export default {
 
   async render(el, ctx) {
     if (seDesligado(el)) return;
-    const [{ cargas, itensPorCarga }, movimentos, insumos] = await Promise.all([todasAsCargas(), lerMovimentos(), insumosEntre('0000-01-01', '9999-12-31')]);
+    const [{ cargas, itensPorCarga }, movimentos, insumos] = await Promise.all([todasAsCargas(), movimentosComCaixa(), insumosEntre('0000-01-01', '9999-12-31')]);
     if (!ctx.aindaAtual()) return;
 
     // contas que aparecem: as em uso, as que já têm dados e "Sem conta" se houver cargas sem conta
@@ -166,6 +166,7 @@ function descricaoHTML(l) {
   const noCaixa = (sim) => (sim ? '<span class="selo selo-neutro shrink-0">no Caixa</span>' : '');
   if (l.tipo === 'insumo') return `<button type="button" class="flex cursor-pointer items-center gap-2 text-left font-medium underline-offset-2 hover:underline" data-entrega="${esc(l.insumo.entrega_id || l.insumo.id)}" aria-label="Mudar a entrega de insumos ${texto}">${cor}<span>${texto}</span>${noCaixa(ligados.entregas.has(l.insumo.entrega_id))}${icone('editar', 'size-4 shrink-0 text-stone-500')}</button>`;
   if (l.tipo === 'carga') return `<a href="#carga/${l.carga_id}" class="flex items-center gap-2 font-medium underline-offset-2 hover:underline">${cor}<span>${texto}</span></a>`;
+  if (l.movimento.caixa_id) return `<a href="#extrato" class="flex items-center gap-2 font-medium underline-offset-2 hover:underline" title="Recebido no Extrato do Caixa: para mudar, abra o lançamento lá">${cor}<span>${texto}</span>${noCaixa(true)}</a>`;
   return `<button type="button" class="flex cursor-pointer items-center gap-2 text-left font-medium underline-offset-2 hover:underline" data-movimento="${l.movimento.id}" aria-label="Mudar o lançamento ${texto}">${cor}<span>${texto}</span>${noCaixa(ligados.movimentos.has(l.movimento.id))}${icone('editar', 'size-4 shrink-0 text-stone-500')}</button>`;
 }
 

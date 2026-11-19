@@ -41,7 +41,7 @@ export function itemLancamento(l, { mostrarPrazo = false, selecao } = {}) {
     l.parcela && `parcela ${l.parcela}`,
     l.recorrente && nomesDoPasso(passoDe(l)).todo,
     l.divisao && 'pagamento dividido',
-    (l.resina_movimento_id || l.resina_entrega_id) && 'veio da Resina',
+    (l.resina_movimento_id || l.resina_entrega_id || l.resina_receber_id) && 'veio da Resina',
     l.competencia && l.competencia !== l.vencimento && `competência ${dataCompleta(l.competencia)}`,
     l.pago && l.data_pagamento && l.data_pagamento !== l.vencimento && `${entrada ? 'recebido' : 'pago'} em ${diaMes(l.data_pagamento)}`,
     Number(l.desconto) > 0 && `desconto ${brl(l.desconto)}`,
@@ -230,6 +230,7 @@ export function abrirEdicao(l, atualizar, { duplicar = false } = {}) {
     corpo: `
       <form class="grid gap-4" novalidate>
         ${duplicar ? `<p class="rounded-xl bg-stone-100 px-3 py-2 text-sm text-stone-700 dark:bg-stone-800 dark:text-stone-300">${icone('copiar', 'mr-1 inline size-4 align-[-3px]')}Cópia de “${esc(original.descricao)}”. Mude o que precisar e salve: o original continua como está.</p>` : ''}
+        ${l.resina_receber_id && !duplicar ? `<p class="rounded-xl bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:bg-amber-900/30 dark:text-amber-100">${icone('alerta', 'mr-1 inline size-4 align-[-3px]')}Parte do produtor nos <a href="#insumos" class="font-semibold underline">Insumos</a>. Quando ele pagar, marque como recebido: o crédito entra sozinho na Conta corrente da Resina.</p>` : ''}
         ${l.resina_movimento_id || l.resina_entrega_id ? `<p class="rounded-xl bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:bg-amber-900/30 dark:text-amber-100">${icone('alerta', 'mr-1 inline size-4 align-[-3px]')}Este lançamento veio da Resina (${l.resina_movimento_id ? 'recebimento da <a href="#conta-corrente" class="font-semibold underline">Conta corrente</a>' : 'compra de <a href="#insumos" class="font-semibold underline">Insumos</a>'}). Se mudar lá, ele é refeito aqui. Mudanças feitas só aqui não voltam para a Resina.</p>` : ''}
         <fieldset class="grid grid-cols-2 gap-2">
           <legend class="sr-only">Tipo</legend>

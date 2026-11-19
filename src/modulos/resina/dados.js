@@ -6,7 +6,7 @@ import { local } from '../../lib/local-db.js';
 import { traduzirErro, carregarCadastros } from '../../lib/api.js';
 import { mesISO } from '../../lib/format.js';
 import { store } from '../../lib/store.js';
-import { proximoNumero } from './calculos.js';
+import { proximoNumero, creditosDoCaixa } from './calculos.js';
 import { lerPreferencias } from '../../lib/preferencias.js';
 
 const ok = ({ data, error }) => {
@@ -109,6 +109,9 @@ export async function destinosUsados() {
 }
 
 export const lerMovimentos = async () => ok(await local.from('resina_movimentos').select('*').order('data'));
+
+/** Lançamentos da conta corrente + a parte dos insumos já recebida no Caixa (para os saldos; os do Caixa não se editam aqui) */
+export const movimentosComCaixa = async () => [...await lerMovimentos(), ...creditosDoCaixa(local.tabelas().lancamentos)];
 
 /** Cria ou atualiza um lançamento manual da conta corrente. Retorna o salvo com `desfazer()`. */
 export async function salvarMovimento(mov) {

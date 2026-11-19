@@ -10,6 +10,20 @@ import { opcoesConta } from '../components/form-lancamento.js';
 import { desfazendo } from '../components/lancamento.js';
 import { abrirEdicaoCompra } from '../components/compra-cartao.js';
 
+// A busca fica guardada enquanto o sistema estiver aberto (trocar de mês não apaga)
+let busca = '';
+const semAcento = (t) => String(t || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/ /g, ' ');
+
+/** Tudo o que a busca encontra numa parcela: descrição, categoria, subcategoria, pessoa, cartão e os valores (da parcela e da compra) */
+function textoDaBusca(p) {
+  const c = p.compra;
+  const valores = [Math.abs(p.valor), Math.abs(Number(c.valor_total))].map((v) => `${brl(v)} ${v.toFixed(2).replace('.', ',')}`);
+  return semAcento([c.descricao, nomeCategoria(c.categoria_id), c.subcategoria, buscar('pessoas', c.pessoa_id)?.nome, buscar('cartoes', c.cartao_id)?.nome, ...valores].join(' '));
+}
+
+/** A parcela combina com a busca? Cada palavra digitada precisa aparecer ("89,90", "mercado maria"...) */
+const combina = (texto, termo) => semAcento(termo).split(/\s+/).map((x) => x.replace(/^r\$/, '')).filter(Boolean).every((palavra) => texto.includes(palavra));
+
 export default {
   titulo: 'Cartões',
   usaMes: true,
@@ -19,6 +33,7 @@ export default {
     <p>Em <strong>Próximas faturas</strong> você vê quanto já está comprometido nos próximos meses por causa das parcelas.</p>
     <p>Pagou parte da fatura antes, ou recebeu um estorno? Toque em <strong>Reembolso ou adiantamento</strong>. O adiantamento sai da conta e abate o que falta pagar; o reembolso abate o total da fatura.</p>
     <p>Toque numa compra (ou no lápis) para <strong>editar</strong>: valor, descrição, categoria, data, cartão, parcelas, subcategoria e pessoa. Se mudar o valor, as parcelas ou a data, as parcelas são refeitas. Numa assinatura, o valor novo vale a partir da cobrança que você abriu.</p>
+    <p>Use a <strong>busca</strong> (lupa) para achar uma compra pela descrição, categoria, pessoa ou pelo <strong>valor</strong> (por exemplo, 89,90). Ela filtra a fatura do mês e mostra também o que foi encontrado nas outras faturas.</p>
     <p>Toque na lixeira de uma compra parcelada ou de uma assinatura para escolher: <strong>só esta parcela</strong>, <strong>esta e as próximas</strong> (cancela a assinatura) ou <strong>a compra inteira</strong>.</p>`,
 
   async render(el, ctx) {
@@ -42,6 +57,14 @@ export default {
       <button type="button" class="cursor-pointer font-semibold underline" data-desfazer="${p.id}" aria-label="Desfazer o pagamento de ${brl(p.valor)}">Desfazer</button></li>`;
 
     el.innerHTML = `
+    <div class="mb-4 grid gap-2 animate-entrar">
+      <div class="relative max-w-xl">
+        <label for="c-busca" class="sr-only">Buscar compra no cartão pela descrição, categoria, pessoa ou valor</label>
+        <span class="pointer-events-none absolute inset-y-0 left-3 flex items-center text-stone-400">${icone('busca')}</span>
+        <input id="c-busca" type="search" class="campo pl-10" placeholder="Buscar compra ou valor (ex.: 89,90)…" value="${esc(busca)}" autocomplete="off">
+      </div>
+      <div data-outras aria-live="polite"></div>
+    </div>
     <div class="grid items-start gap-4 md:grid-cols-2 xl:grid-cols-3 animate-entrar">
       ${cartoes.map((c) => {
         const itens = doMes.filter((p) => p.compra.cartao_id === c.id);
@@ -60,11 +83,12 @@ export default {
             <span class="selo shrink-0 ${{ sem: 'selo-neutro', credito: 'selo-ok', paga: 'selo-ok' }[sit.estado] || 'selo-aberto'}">${{ sem: 'Sem compras', credito: 'Crédito', paga: 'Paga', agendada: 'Agendada', parcial: 'Adiantada em parte', aberta: 'Em aberto' }[sit.estado]}</span>
           </div>
           <p class="mt-3 text-2xl font-bold tabular-nums sm:text-3xl">${brl(total)}</p>
-          <p class="text-sm text-stone-600 dark:text-stone-400">${itens.length} ${itens.length === 1 ? 'item' : 'itens'} na fatura de ${esc(nomeMes(store.mes).toLowerCase())}</p>
+          <p class="text-sm text-stone-600 dark:text-stone-400" data-contagem="${itens.length}">${itens.length} ${itens.length === 1 ? 'item' : 'itens'} na fatura de ${esc(nomeMes(store.mes).toLowerCase())}</p>
           <button type="button" class="btn-neutro mt-2 min-h-9 px-3 py-1.5 text-sm" data-recebimento="${c.id}">${icone('entrada', 'size-4')} Reembolso ou adiantamento</button>
 
+          <p class="mt-3 hidden rounded-xl bg-stone-100 px-3 py-2 text-sm text-stone-600 dark:bg-stone-800 dark:text-stone-400" data-nada>Nada neste cartão combina com a busca.</p>
           ${itens.length ? `<ul class="mt-3">${itens.map((p) => `
-            <li class="flex items-center gap-2 border-t border-stone-100 py-2.5 dark:border-stone-800">
+            <li class="flex items-center gap-2 border-t border-stone-100 py-2.5 dark:border-stone-800" data-busca="${esc(textoDaBusca(p))}">
               <button type="button" data-editar-compra="${p.id}" class="min-w-0 flex-1 cursor-pointer rounded-lg px-1 py-0.5 text-left transition hover:bg-stone-50 dark:hover:bg-stone-800/60"
                 aria-label="Abrir ${p.compra.tipo === 'estorno' ? 'o reembolso' : 'a compra'} “${esc(p.compra.descricao)}” para ver ou editar">
                 <p class="line-clamp-2 font-medium">${esc(p.compra.descricao)}${seloDaParcela(p)}</p>
@@ -105,6 +129,48 @@ export default {
         </section>`;
       }).join('')}
     </div>`;
+
+    // ---------- busca: filtra as listas do mês e procura nas outras faturas
+    const mesDe = (p) => nomeMes(new Date(`${p.fatura_mes}T12:00:00`));
+    let todas = null; // parcelas de todos os meses, lidas na primeira busca
+    let vez = 0;
+    const filtrar = async () => {
+      const termo = busca.trim();
+      const fatura = nomeMes(store.mes).toLowerCase();
+      el.querySelectorAll('section.card').forEach((sec) => {
+        let vistos = 0;
+        sec.querySelectorAll('li[data-busca]').forEach((li) => { const v = !termo || combina(li.dataset.busca, termo); li.hidden = !v; vistos += v; });
+        const cont = sec.querySelector('[data-contagem]');
+        const n = Number(cont.dataset.contagem);
+        cont.textContent = termo ? `${vistos} de ${n} ${n === 1 ? 'item' : 'itens'} combinam com a busca (fatura de ${fatura})` : `${n} ${n === 1 ? 'item' : 'itens'} na fatura de ${fatura}`;
+        sec.querySelector('[data-nada]').classList.toggle('hidden', !termo || vistos > 0 || !n);
+      });
+      const area = el.querySelector('[data-outras]');
+      if (!termo) { area.innerHTML = ''; return; }
+      const minha = ++vez;
+      todas ??= await parcelasEntre('0000-01-01', '9999-12-31');
+      if (minha !== vez || !ctx.aindaAtual()) return;
+      const achadas = todas.filter((p) => p.fatura_mes !== mesAtual && combina(textoDaBusca(p), termo))
+        .sort((a, b) => (a.fatura_mes === b.fatura_mes ? 0 : a.fatura_mes < b.fatura_mes ? 1 : -1));
+      const MAX = 30;
+      area.innerHTML = !achadas.length ? '<p class="text-sm text-stone-600 dark:text-stone-400">Nas outras faturas: nada encontrado.</p>'
+        : `<details class="card p-0" open><summary class="cursor-pointer px-4 py-3 font-semibold">Nas outras faturas: ${achadas.length} ${achadas.length === 1 ? 'resultado' : 'resultados'}</summary>
+          <ul class="px-4 pb-3">${achadas.slice(0, MAX).map((p) => `<li class="border-t border-stone-100 dark:border-stone-800">
+            <button type="button" class="flex w-full cursor-pointer items-center justify-between gap-3 rounded-lg px-1 py-2.5 text-left hover:bg-stone-50 dark:hover:bg-stone-800/60" data-editar-outra="${p.id}" aria-label="Abrir “${esc(p.compra.descricao)}”, fatura de ${esc(mesDe(p))}">
+              <span class="min-w-0"><span class="block font-medium">${esc(p.compra.descricao)}${seloDaParcela(p)}</span>
+                <span class="block text-sm text-stone-600 dark:text-stone-400">Fatura de ${esc(mesDe(p).toLowerCase())} · ${esc(buscar('cartoes', p.compra.cartao_id)?.nome || 'Cartão')} · compra em ${dataCompleta(p.compra.data_compra)} · ${esc(nomeCategoria(p.compra.categoria_id))}</span></span>
+              <span class="shrink-0 font-semibold tabular-nums ${p.valor < 0 ? 'valor-entrada' : ''}">${p.valor < 0 ? `+ ${brl(-p.valor)}` : brl(p.valor)}</span>
+            </button></li>`).join('')}</ul>
+          ${achadas.length > MAX ? `<p class="px-4 pb-3 text-sm text-stone-600 dark:text-stone-400">Mostrando os ${MAX} mais recentes. Digite mais para afinar a busca.</p>` : ''}</details>`;
+      area.onclick = (e) => {
+        const b = e.target.closest('[data-editar-outra]');
+        if (!b) return;
+        const p = todas.find((x) => x.id === b.dataset.editarOutra);
+        abrirEdicaoCompra(p, ctx.atualizar, { aoExcluir: () => excluirComEscolha(p, ctx) });
+      };
+    };
+    el.querySelector('#c-busca').oninput = (e) => { busca = e.target.value; filtrar(); };
+    if (busca) filtrar();
 
     el.onclick = async (e) => {
       const receber = e.target.closest('[data-recebimento]');
