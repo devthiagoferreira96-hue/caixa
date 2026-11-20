@@ -100,7 +100,7 @@ export function abasCaixa(periodo) {
       const fatura = Boolean(l.fatura_cartao_id);
       caixa.push([
         T(l.pago ? 'OK' : ''), l.pago ? D(l.data_pagamento || l.vencimento) : T(''), D(l.vencimento), T(nome('contas', l.conta_id)),
-        T(fatura ? '' : nome('categorias', l.categoria_id)), T(nome('pessoas', l.pessoa_id)),
+        T(fatura ? '' : l.transferencia ? `Transferência ${l.tipo === 'entrada' ? 'de' : 'para'} ${nome('contas', l.transferencia_conta_id)}` : nome('categorias', l.categoria_id)), T(nome('pessoas', l.pessoa_id)),
         T(fatura ? descricaoFatura(l) : l.descricao || ''),
         T(fatura && l.fatura_mes ? `Fatura ${l.fatura_mes.slice(5, 7)}/${l.fatura_mes.slice(0, 4)}` : l.observacao || ''),
         T(l.parcela || '', E.texto), N(v), v,

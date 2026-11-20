@@ -2,14 +2,36 @@
 import { brl, esc, dataPorExtenso, hojeISO, mesISO } from '../lib/format.js';
 import { store, contasAtivas, categoriasPorGrupo, buscar } from '../lib/store.js';
 import { lancamentosDoExtrato, lancamentosPagos, parcelasDoMes, pagamentosDeFatura } from '../lib/api.js';
-import { saidasReais, entradas, somar, dataNoExtrato, saldoAoFimDoDia, faturasAPagar } from '../lib/calculos.js';
+import { saidasReais, entradas, somar, dataNoExtrato, saldoAoFimDoDia, faturasAPagar, transferenciasDeFora } from '../lib/calculos.js';
 import { vencimentoFatura } from '../lib/faturas.js';
 import { pagarFatura } from './cartoes.js';
 import { itemLancamento, cliqueEmLancamento } from '../components/lancamento.js';
 import { icone, estadoVazio } from '../lib/ui.js';
 
 // Os filtros e a seleção ficam guardados enquanto o sistema estiver aberto
-const filtros = { busca: '', conta: '', categoria: '', situacao: '' };
+const filtros = { busca: '', contas: [], categoria: '', situacao: '' };
+const filtroVazio = () => ({ busca: '', contas: [], categoria: '', situacao: '' });
+const filtrando = () => !!(filtros.busca || filtros.contas.length || filtros.categoria || filtros.situacao);
+
+/** Contas do filtro: as em uso e, no fim, as fora de uso (com histórico, dá para somar quando quiser) */
+const contasDoFiltro = () => [...contasAtivas(), ...store.contas.filter((c) => !contasAtivas().includes(c))];
+
+/** Texto do botão do filtro de contas: "Todas as contas", o nome da conta ou os nomes separados por vírgula */
+function rotuloContas() {
+  const nomes = contasDoFiltro().filter((c) => filtros.contas.includes(String(c.id))).map((c) => c.nome);
+  return !nomes.length ? 'Todas as contas' : nomes.join(', ');
+}
+
+// o menu de contas fecha ao tocar fora dele
+let fecharMenuLigado = false;
+function ligarFecharMenu() {
+  if (fecharMenuLigado) return;
+  fecharMenuLigado = true;
+  document.addEventListener('click', (e) => {
+    const menu = document.querySelector('[data-filtro-contas][open]');
+    if (menu && !menu.contains(e.target)) menu.open = false;
+  });
+}
 const selecao = { ligada: false, ids: new Set() };
 
 export default {
@@ -18,13 +40,17 @@ export default {
   ajuda: `
     <p>Aqui aparecem todas as entradas e saídas do <strong>caixa</strong> (dinheiro, Pix, conta bancária) do mês escolhido no topo.</p>
     <p>O que já foi <strong>pago ou recebido</strong> aparece no dia e no mês do pagamento (uma parcela de dezembro paga em novembro fica em novembro). O que está <strong>em aberto</strong> aparece no dia do vencimento.</p>
-    <p>Ao lado de cada dia aparece o <strong>saldo</strong>: quanto havia nas contas no fim daquele dia (saldo inicial + tudo que foi pago ou recebido até ele), como no extrato do banco. Se escolher uma conta no filtro, é o saldo só dela. O que está em aberto não entra no saldo.</p>
+    <p>Ao lado de cada dia aparece o <strong>saldo</strong>: quanto havia nas contas no fim daquele dia (saldo inicial + tudo que foi pago ou recebido até ele), como no extrato do banco. Se escolher uma ou mais contas no filtro, é o saldo só delas (somado). O que está em aberto não entra no saldo.</p>
     <p>Para somar alguns lançamentos, toque em <strong>Selecionar para somar</strong> e marque as caixinhas. A soma aparece na barra de baixo. A caixinha ao lado do dia marca o dia inteiro.</p>
     <p>As compras no cartão de crédito ficam na tela <strong>Cartões</strong>. A <strong>fatura</strong> de cada cartão aparece aqui como uma saída a pagar no dia do vencimento, com o que falta pagar (já sem os adiantamentos). Os <strong>adiantamentos</strong> aparecem no dia em que foram pagos. Toque no círculo da fatura para pagá-la; depois de paga, aparece o pagamento no dia em que foi feito.</p>
-    <p>Use a <strong>busca</strong> e os filtros para achar algo rápido. Toque num lançamento para editar ou excluir. Toque no círculo para marcar como pago.</p>`,
+    <p><strong>Transferências</strong> entre contas (saque, Pix de uma conta para outra) aparecem duas vezes: a saída na conta de origem e a entrada na de destino, com o ícone de setas. Não entram em Entradas e Saídas, porque o dinheiro só mudou de conta. Se você filtrar só uma conta, a transferência para outra conta entra como saída (ou entrada) dela. Toque numa delas para mudar ou excluir a transferência inteira.</p>
+    <p>Use a <strong>busca</strong> e os filtros para achar algo rápido. No filtro de contas dá para marcar <strong>mais de uma conta</strong>. Toque num lançamento para editar ou excluir. Toque no círculo para marcar como pago.</p>`,
 
   async render(el, ctx) {
     const mes = mesISO(store.mes);
+    // conta excluída sai do filtro (a fora de uso continua: ela aparece no menu)
+    filtros.contas = filtros.contas.filter((id) => store.contas.some((c) => String(c.id) === id));
+    ligarFecharMenu();
     const [doMes, pagos, parcelas, pagamentosFatura] = await Promise.all([lancamentosDoExtrato(), lancamentosPagos(), parcelasDoMes(), pagamentosDeFatura()]);
     if (!ctx.aindaAtual()) return;
     // a fatura do cartão que falta pagar entra como saída "a pagar" no dia do vencimento (o pagamento e os adiantamentos já são lançamentos)
@@ -39,9 +65,17 @@ export default {
             <span class="pointer-events-none absolute inset-y-0 left-3 flex items-center text-stone-400">${icone('busca')}</span>
             <input id="f-busca" type="search" class="campo pl-10" placeholder="Buscar…" value="${esc(filtros.busca)}" autocomplete="off">
           </div>
-          <div><label for="f-f-conta" class="sr-only">Filtrar por conta</label>
-            <select id="f-f-conta" data-filtro="conta" class="campo"><option value="">Todas as contas</option>
-            ${contasAtivas().map((c) => `<option value="${c.id}" ${String(c.id) === filtros.conta ? 'selected' : ''}>${esc(c.nome)}</option>`).join('')}</select></div>
+          <details class="group relative" data-filtro-contas>
+            <summary class="campo flex cursor-pointer list-none items-center gap-2 [&::-webkit-details-marker]:hidden" aria-label="Filtrar por conta: ${esc(rotuloContas())}">
+              <span class="min-w-0 flex-1 truncate" data-contas-rotulo>${esc(rotuloContas())}</span>
+              <svg class="size-4 shrink-0 text-stone-500 transition-transform group-open:rotate-180" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 0 1 1.06.02L10 11.17l3.71-3.94a.75.75 0 1 1 1.08 1.04l-4.25 4.5a.75.75 0 0 1-1.08 0l-4.25-4.5a.75.75 0 0 1 .02-1.06Z" clip-rule="evenodd"/></svg>
+            </summary>
+            <fieldset class="absolute left-0 z-30 mt-1 grid max-h-80 w-full min-w-60 max-w-[calc(100vw-2rem)] gap-0.5 overflow-auto rounded-xl border border-stone-200 bg-cartao p-1.5 shadow-lg dark:border-stone-700 dark:bg-stone-900">
+              <legend class="sr-only">Contas para mostrar (pode marcar mais de uma)</legend>
+              <label class="flex min-h-11 cursor-pointer items-center gap-3 rounded-lg px-2 font-semibold hover:bg-stone-100 dark:hover:bg-stone-800"><input type="checkbox" data-conta-todas class="size-5 accent-brand-600" ${filtros.contas.length ? '' : 'checked'}> Todas as contas</label>
+              ${contasDoFiltro().map((c) => `<label class="flex min-h-11 cursor-pointer items-center gap-3 rounded-lg px-2 hover:bg-stone-100 dark:hover:bg-stone-800"><input type="checkbox" data-conta-f="${c.id}" class="size-5 accent-brand-600" ${filtros.contas.includes(String(c.id)) ? 'checked' : ''}> <span class="min-w-0 break-words">${esc(c.nome)}${contasAtivas().includes(c) ? '' : ' <span class="text-sm text-stone-600 dark:text-stone-400">(fora de uso)</span>'}</span></label>`).join('')}
+            </fieldset>
+          </details>
           <div><label for="f-f-cat" class="sr-only">Filtrar por categoria</label>
             <select id="f-f-cat" data-filtro="categoria" class="campo"><option value="">Todas as categorias</option>
             ${Object.entries(categoriasPorGrupo()).map(([g, cs]) => `<optgroup label="${esc(g)}">${cs.map((c) => `<option value="${c.id}" ${String(c.id) === filtros.categoria ? 'selected' : ''}>${esc(c.nome)}</option>`).join('')}</optgroup>`).join('')}</select></div>
@@ -64,7 +98,7 @@ export default {
       if (!selecao.ligada) { barra.innerHTML = ''; return; }
       const escolhidos = lancamentos.filter((l) => selecao.ids.has(l.id));
       const escondidos = escolhidos.filter((l) => !visiveis.includes(l)).length;
-      const ent = somar(entradas(escolhidos));
+      const ent = somar(escolhidos.filter((l) => l.tipo === 'entrada'));
       const sai = somar(escolhidos.filter((l) => l.tipo === 'saida'));
       const qtd = escolhidos.length;
       const valores = !qtd ? '<span class="text-stone-600 dark:text-stone-400">Marque os lançamentos que quer somar</span>'
@@ -88,18 +122,19 @@ export default {
       const termo = filtros.busca.trim().toLowerCase();
       visiveis = lancamentos.filter((l) =>
         (!termo || `${l.descricao} ${l.observacao || ''}`.toLowerCase().includes(termo)) &&
-        (!filtros.conta || String(l.conta_id) === filtros.conta) &&
+        (!filtros.contas.length || filtros.contas.includes(String(l.conta_id))) &&
         (!filtros.categoria || String(l.categoria_id) === filtros.categoria) &&
         (!filtros.situacao ||
           (filtros.situacao === 'pago' && l.pago) || (filtros.situacao === 'aberto' && !l.pago) ||
           (filtros.situacao === l.tipo)));
-      const filtrando = Object.values(filtros).some(Boolean);
       const porDia = Map.groupBy ? Map.groupBy(visiveis, dataNoExtrato) : agrupar(visiveis);
-      // Saldo no fim de cada dia (da conta do filtro, ou de todas). Dias futuros não têm saldo ainda.
-      const contas = filtros.conta ? store.contas.filter((c) => String(c.id) === filtros.conta) : store.contas;
+      // Saldo no fim de cada dia (das contas do filtro, somadas, ou de todas). Dias futuros não têm saldo ainda.
+      const contas = filtros.contas.length ? store.contas.filter((c) => filtros.contas.includes(String(c.id))) : store.contas;
       const saldos = saldoAoFimDoDia([...porDia.keys()].filter((d) => d <= hoje), pagos, contas);
-      const ent = somar(entradas(visiveis));
-      const sai = somar(saidasReais(visiveis)) + somar(visiveis.filter((l) => l.fatura_cartao_id));
+      // transferência entre contas da tela não é entrada nem saída; de (ou para) uma conta fora do filtro, é
+      const fora = transferenciasDeFora(visiveis, filtros.contas);
+      const ent = somar(entradas(visiveis)) + somar(fora.filter((l) => l.tipo === 'entrada'));
+      const sai = somar(saidasReais(visiveis)) + somar(visiveis.filter((l) => l.fatura_cartao_id)) + somar(fora.filter((l) => l.tipo === 'saida'));
       resultado.innerHTML = `
         <dl class="card mb-3 grid gap-x-4 gap-y-1 p-3 text-sm sm:grid-cols-3 sm:p-3" aria-live="polite">
           ${[['Entradas', brl(ent), 'valor-entrada'], ['Saídas', brl(sai), 'valor-saida'],
@@ -115,12 +150,12 @@ export default {
             <section class="mb-3" aria-label="${esc(dataPorExtenso(dia))}">
               <h2 class="mb-1.5 flex flex-wrap items-center justify-between gap-x-3 px-1 text-sm font-semibold text-stone-600 dark:text-stone-400">
                 <span class="flex items-center gap-2">${selecao.ligada ? `<input type="checkbox" data-sel-dia="${dia}" class="size-4 cursor-pointer accent-brand-600" ${todosDoDia ? 'checked' : ''} aria-label="Selecionar todos os lançamentos de ${esc(dataPorExtenso(dia))}" title="Selecionar o dia inteiro">` : ''}${esc(dataPorExtenso(dia))}</span>
-                ${saldo === undefined ? '' : `<span class="tabular-nums" title="Saldo ${filtros.conta ? 'da conta' : 'das contas'} no fim do dia (só o que já foi pago ou recebido)">Saldo do dia: <span class="${saldo < 0 ? 'valor-saida' : 'text-stone-800 dark:text-stone-200'}">${brl(saldo)}</span></span>`}
+                ${saldo === undefined ? '' : `<span class="tabular-nums" title="Saldo ${filtros.contas.length === 1 ? 'da conta escolhida' : filtros.contas.length ? 'das contas escolhidas, somadas,' : 'das contas'} no fim do dia (só o que já foi pago ou recebido)">Saldo do dia: <span class="${saldo < 0 ? 'valor-saida' : 'text-stone-800 dark:text-stone-200'}">${brl(saldo)}</span></span>`}
               </h2>
               <ul class="card py-1 sm:py-1" data-lista>${itens.map((l) => itemLancamento(l, { selecao: selecao.ligada ? selecao.ids.has(l.id) : undefined })).join('')}</ul>
             </section>`;
           }).join('')
-          : `<div class="card">${filtrando
+          : `<div class="card">${filtrando()
               ? estadoVazio('Nada encontrado', 'Nenhum lançamento combina com a busca ou os filtros.', '<button type="button" class="btn-sec" data-limpar>Limpar filtros</button>')
               : estadoVazio('Nenhum lançamento neste mês', 'Use o botão Novo lançamento para registrar entradas e saídas.', '<a href="#novo" class="btn-primario">Novo lançamento</a>')}</div>`}
         ${selecao.ligada ? '<div class="h-24" aria-hidden="true"></div>' : ''}`;
@@ -129,7 +164,23 @@ export default {
     desenharLista();
 
     el.querySelector('#f-busca').oninput = (e) => { filtros.busca = e.target.value; desenharLista(); };
+    const menuContas = el.querySelector('[data-filtro-contas]');
+    menuContas.onkeydown = (e) => {
+      if (e.key === 'Escape' && menuContas.open) { e.preventDefault(); e.stopPropagation(); menuContas.open = false; menuContas.querySelector('summary').focus(); }
+    };
+    // fecha quando o foco sai do menu (Tab, ou tocar na busca)
+    menuContas.addEventListener('focusout', (e) => { if (e.relatedTarget && !menuContas.contains(e.relatedTarget)) menuContas.open = false; });
     el.onchange = (e) => {
+      const { contaF } = e.target.dataset;
+      if (contaF !== undefined || e.target.dataset.contaTodas !== undefined) {
+        if (contaF === undefined) filtros.contas = [];
+        else filtros.contas = e.target.checked ? [...filtros.contas, contaF] : filtros.contas.filter((id) => id !== contaF);
+        menuContas.querySelector('[data-conta-todas]').checked = !filtros.contas.length;
+        menuContas.querySelectorAll('[data-conta-f]').forEach((x) => (x.checked = filtros.contas.includes(x.dataset.contaF)));
+        menuContas.querySelector('[data-contas-rotulo]').textContent = rotuloContas();
+        menuContas.querySelector('summary').setAttribute('aria-label', `Filtrar por conta: ${rotuloContas()}`);
+        return desenharLista();
+      }
       const f = e.target.dataset.filtro;
       if (f) { filtros[f] = e.target.value; desenharLista(); return; }
       const { sel, selDia } = e.target.dataset;
@@ -144,7 +195,7 @@ export default {
     };
     el.onclick = async (e) => {
       if (e.target.closest('[data-limpar]')) {
-        Object.keys(filtros).forEach((k) => (filtros[k] = ''));
+        Object.assign(filtros, filtroVazio());
         return ctx.atualizar();
       }
       if (e.target.closest('[data-sel-entrar]')) {

@@ -52,7 +52,7 @@ async def main():
         await pg.fill('dialog[open] [data-c=pct]', '150'); await pg.click('dialog[open] button[type=submit]'); await pg.wait_for_timeout(300)
         ok('% acima de 100 bloqueado', 'de 0 a 100' in await pg.inner_text('dialog[open]'))
         await pg.fill('dialog[open] [data-c=pct]', '100')
-        ok('divisão ao vivo', 'Cobrado de João: R$ 1.000,00' in (await pg.inner_text('dialog[open] [data-divisao]')).replace('\xa0', ' '))
+        ok('divisão ao vivo', 'Cobrado de João (Empresa · 12.345.678/0001-90): R$ 1.000,00' in (await pg.inner_text('dialog[open] [data-divisao]')).replace('\xa0', ' '))
         await pg.click('dialog[open] button[type=submit]'); await pg.wait_for_timeout(800)
         await ir(pg, 'inicio'); await pg.wait_for_timeout(500)
         ok('Início: com 100% falta receber R$ 1.000', 'R$ 1.000,00' in await conteudo(pg))
@@ -98,7 +98,7 @@ async def main():
         # mudar a % do Carlos: a entrada dele acompanha, a do João continua
         await ir(pg, 'insumos'); await pg.click('[data-entrega] >> text=Carlos'); await pg.wait_for_selector('dialog[open] [data-c=pct]')
         await pg.locator('dialog[open] [data-c=pct]').nth(1).fill('40')
-        ok('divisão ao vivo por produtor', 'Cobrado de Carlos: R$ 80,00' in (await pg.inner_text('dialog[open] [data-divisao]')).replace('\xa0', ' '))
+        ok('divisão ao vivo por produtor', 'Cobrado de Carlos (Empresa · 12.345.678/0001-90): R$ 80,00' in (await pg.inner_text('dialog[open] [data-divisao]')).replace('\xa0', ' '))
         await pg.screenshot(path=os.path.join(SAIDA, 'insumos-dois-produtores.png'), full_page=True)
         await pg.click('dialog[open] button[type=submit]'); await pg.wait_for_timeout(800)
         await ir(pg, 'extrato'); await pg.wait_for_timeout(500)
@@ -106,6 +106,27 @@ async def main():
         ok('mudar a %: a receber do Carlos vira R$ 80 e o do João continua', await b2.count() == 1 and 'R$ 80,00' in (await b2.inner_text()).replace('\xa0', ' ')
            and await pg.locator('#conteudo li', has_text='A receber · insumos (Arame 50%) · João').count() == 1
            and await pg.locator('#conteudo li', has_text='Pasta estimulante 30%').count() == 0)
+
+        # ---------- "Quando vai receber?": acompanha o vencimento da nota até a pessoa mudar
+        await ir(pg, 'insumos'); await pg.click('[data-entrega] >> text=Carlos'); await pg.wait_for_selector('dialog[open] [name=cx_data_receber]')
+        rec = 'dialog[open] [name=cx_data_receber]'
+        ok('quando vai receber: lançado antes vem com a data da compra', await pg.input_value(rec) == '2026-11-10', await pg.input_value(rec))
+        await pg.check('dialog[open] [name=cx_modo][value=saida]'); await pg.wait_for_timeout(100)
+        await pg.fill('dialog[open] [name=cx_vencimento]', '2026-11-25'); await pg.wait_for_timeout(100)
+        ok('quando vai receber acompanha o vencimento da nota', await pg.input_value(rec) == '2026-11-25', await pg.input_value(rec))
+        await pg.fill(rec, '2026-11-28')
+        await pg.fill('dialog[open] [name=cx_vencimento]', '2026-11-26'); await pg.wait_for_timeout(100)
+        ok('depois de mudar a mão, não acompanha mais', await pg.input_value(rec) == '2026-11-28', await pg.input_value(rec))
+        await pg.fill(rec, ''); await pg.click('dialog[open] button[type=submit]'); await pg.wait_for_timeout(300)
+        ok('sem data de receber: pede a data', 'Escolha quando vai receber' in await pg.inner_text('dialog[open]'))
+        await pg.fill(rec, '2026-11-28'); await pg.click('dialog[open] button[type=submit]'); await pg.wait_for_timeout(800)
+        await ir(pg, 'insumos'); await pg.click('[data-entrega] >> text=Carlos'); await pg.wait_for_selector(f'{rec}')
+        ok('a receber gravado no dia escolhido', await pg.input_value(rec) == '2026-11-28', await pg.input_value(rec))
+        await pg.keyboard.press('Escape'); await pg.wait_for_timeout(300)
+        await pg.click('[data-lancar]'); await pg.wait_for_selector(f'{rec}')
+        await pg.fill('#in-data', '2026-11-12'); await pg.wait_for_timeout(100)
+        ok('entrega nova: quando vai receber vem com a data da compra', await pg.input_value(rec) == '2026-11-12', await pg.input_value(rec))
+        await pg.keyboard.press('Escape'); await pg.wait_for_timeout(300)
 
         # ---------- cartão: parcela com valor diferente
         t = await novo_cartao(pg, 'compra', '30000', 'Furadeira', parcelas='3')

@@ -5,6 +5,7 @@ import { icone, toast, dialogo, confirmar, mascaraDinheiro, limparErros, semRepe
 import { atualizarLancamento, atualizarSequencia, criarLancamentos, excluirLancamentos, lancamentosDoGrupo, lancamentosDaDivisao, pessoaPorNome, pararRecorrencia } from '../lib/api.js';
 import { passoDe, nomesDoPasso, mudancasNaSequencia } from '../lib/recorrencia.js';
 import { campoValor, campoDescricao, campoCategoria, camposCaixa, lerCamposCaixa, ligarCamposCaixa, atualizarCategorias } from './form-lancamento.js';
+import { abrirTransferencia, alternarTransferenciaFeita } from './transferencia.js';
 
 /** Botão "Desfazer" padrão dos avisos: desfaz, avisa e redesenha a tela */
 export const desfazendo = (desfazer, atualizar) => ({
@@ -22,6 +23,7 @@ export const desfazendo = (desfazer, atualizar) => ({
 
 function situacao(l) {
   const entrada = l.tipo === 'entrada';
+  if (l.transferencia) return l.pago ? ['selo-ok', 'Feita'] : diasAte(l.vencimento) < 0 ? ['selo-atraso', 'Atrasada'] : ['selo-aberto', 'Agendada'];
   if (l.pago) return ['selo-ok', entrada ? 'Recebido' : 'Pago'];
   if (diasAte(l.vencimento) < 0) return ['selo-atraso', 'Atrasado'];
   return ['selo-aberto', entrada ? 'A receber' : 'A pagar'];
@@ -34,6 +36,9 @@ export function itemLancamento(l, { mostrarPrazo = false, selecao } = {}) {
   const detalhes = l.virtual === 'fatura' ? [
     'Fatura do cartão',
     l.adiantado > 0 && `total ${brl(l.total)}, já adiantado ${brl(l.adiantado)}`,
+  ].filter(Boolean) : l.transferencia ? [
+    `Transferência ${entrada ? 'de' : 'para'} ${buscar('contas', l.transferencia_conta_id)?.nome || 'outra conta'}`,
+    buscar('contas', l.conta_id)?.nome,
   ].filter(Boolean) : [
     l.fatura_cartao_id ? (l.adiantamento ? 'Adiantamento de fatura' : 'Pagamento de fatura') : buscar('categorias', l.categoria_id)?.nome,
     buscar('contas', l.conta_id)?.nome,
@@ -47,7 +52,8 @@ export function itemLancamento(l, { mostrarPrazo = false, selecao } = {}) {
     Number(l.desconto) > 0 && `desconto ${brl(l.desconto)}`,
     Number(l.juros) > 0 && `juros ${brl(l.juros)}`,
   ].filter(Boolean);
-  const verbo = entrada ? 'recebido' : 'pago';
+  const verbo = l.transferencia ? 'feita' : entrada ? 'recebido' : 'pago';
+  const corValor = l.transferencia ? 'text-stone-700 dark:text-stone-300' : entrada ? 'valor-entrada' : 'valor-saida';
   return `
   <li class="@container border-t border-stone-100 py-3 first:border-t-0 dark:border-stone-800 ${selecao ? 'bg-brand-50/70 dark:bg-brand-950/40' : ''}">
    <div class="flex flex-wrap items-center gap-x-1 gap-y-1">
@@ -64,7 +70,7 @@ export function itemLancamento(l, { mostrarPrazo = false, selecao } = {}) {
       ${l.observacao ? `<span class="line-clamp-1 text-sm italic text-stone-600 dark:text-stone-400" title="${esc(l.observacao)}">Obs.: ${esc(l.observacao)}</span>` : ''}
     </button>
     <div class="text-right @max-[15.5rem]:flex @max-[15.5rem]:basis-full @max-[15.5rem]:flex-wrap @max-[15.5rem]:items-center @max-[15.5rem]:gap-2 @max-[15.5rem]:pl-12 @max-[15.5rem]:text-left">
-      <span class="block text-sm font-semibold tabular-nums sm:text-base ${entrada ? 'valor-entrada' : 'valor-saida'}">${entrada ? '+' : '−'} ${brl(l.valor)}</span>
+      <span class="block text-sm font-semibold tabular-nums sm:text-base ${corValor}">${l.transferencia ? `<span class="sr-only">Transferência: </span>${icone('transferir', 'mr-1 inline size-4 align-[-2px] text-stone-500')}` : ''}${entrada ? '+' : '−'} ${brl(l.valor)}</span>
       <span class="selo ${classeSelo}">${textoSelo}</span>
     </div>
    </div>
@@ -99,10 +105,12 @@ export async function cliqueEmLancamento(e, lista, atualizar) {
     botaoPagar.disabled = true;
     const pago = !l.pago;
     try {
-      const r = await atualizarLancamento(l.id, { pago, data_pagamento: pago ? hojeISO() : null });
-      const verbo = l.tipo === 'entrada' ? 'recebido' : 'pago';
-      toast(pago ? `“${l.descricao}” marcado como ${verbo}` : `“${l.descricao}” voltou para em aberto`, {
-        acao: desfazendo(r.desfazer, atualizar),
+      // transferência: as duas pontas (saída e entrada) mudam juntas
+      const desfazer = l.transferencia ? await alternarTransferenciaFeita(l)
+        : (await atualizarLancamento(l.id, { pago, data_pagamento: pago ? hojeISO() : null })).desfazer;
+      const verbo = l.transferencia ? 'feita' : l.tipo === 'entrada' ? 'recebido' : 'pago';
+      toast(pago ? `“${l.descricao}” marcad${l.transferencia ? 'a' : 'o'} como ${verbo}` : `“${l.descricao}” voltou para em aberto`, {
+        acao: desfazendo(desfazer, atualizar),
       });
       atualizar();
     } catch (err) {
@@ -207,6 +215,10 @@ async function excluir(l, atualizar, d) {
  */
 export function abrirEdicao(l, atualizar, { duplicar = false } = {}) {
   const original = l;
+  if (l.transferencia) {
+    abrirTransferencia(l, atualizar, desfazendo).catch((err) => toast(err.message, { tipo: 'erro' }));
+    return;
+  }
   if (duplicar) {
     l = {
       tipo: l.tipo, valor: l.valor, valor_original: l.valor_original, desconto: l.desconto, juros: l.juros,

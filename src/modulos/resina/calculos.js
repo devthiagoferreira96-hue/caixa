@@ -212,6 +212,22 @@ export function divisaoDaEntrega(itens) {
   return [...porProdutor.values()];
 }
 
+/**
+ * Como divisaoDaEntrega, mas separando também pela conta (CNPJ ou CPF) de cada produto:
+ * [{ produtor_id, titular_id, total, parte, itens }]. Numa nota, cada produtor pode ser cobrado numa conta diferente.
+ */
+export function divisaoPorConta(itens) {
+  const grupos = new Map();
+  for (const i of itens) {
+    const k = `${i.produtor_id}|${i.titular_id || ''}`;
+    const d = grupos.get(k) || grupos.set(k, { produtor_id: i.produtor_id, titular_id: i.titular_id || null, total: 0, parte: 0, itens: [] }).get(k);
+    d.total = centavos(d.total + totalDoInsumo(i));
+    d.parte = centavos(d.parte + parteDoProdutor(i));
+    d.itens.push(i);
+  }
+  return [...grupos.values()];
+}
+
 /** Quanto acima da média de custo por kg um produtor precisa estar para ganhar o alerta */
 export const LIMITE_ALERTA = 0.25;
 

@@ -1,8 +1,26 @@
 // Contas feitas em cima dos dados (substituem as fórmulas SUMIF/SUMIFS da planilha)
 
-/** Gastos que contam no mês: saídas do caixa (menos pagamento de fatura, para não contar duas vezes) */
-export const saidasReais = (lancamentos) => lancamentos.filter((l) => l.tipo === 'saida' && !l.fatura_cartao_id);
-export const entradas = (lancamentos) => lancamentos.filter((l) => l.tipo === 'entrada');
+/**
+ * Transferência entre contas (saque, Pix de uma conta para outra): são dois lançamentos pagos, ligados pelo mesmo
+ * `transferencia`: uma saída na conta de origem e uma entrada na de destino (`transferencia_conta_id` = a outra conta).
+ * Mudam o saldo de cada conta, mas não são gasto nem entrada: o dinheiro só trocou de lugar.
+ */
+export const ehTransferencia = (l) => Boolean(l.transferencia);
+
+/** Gastos que contam no mês: saídas do caixa (menos pagamento de fatura, para não contar duas vezes, e transferências) */
+export const saidasReais = (lancamentos) => lancamentos.filter((l) => l.tipo === 'saida' && !l.fatura_cartao_id && !l.transferencia);
+export const entradas = (lancamentos) => lancamentos.filter((l) => l.tipo === 'entrada' && !l.transferencia);
+
+/**
+ * Transferências que entram nos totais quando só algumas contas estão na tela: a que vai (ou vem) de uma conta
+ * que não está entre elas mexe no dinheiro dessas contas. Entre duas contas da tela, uma anula a outra.
+ * `contas` = ids (texto) das contas na tela, ou null/vazio = todas (aí nenhuma transferência conta).
+ */
+export function transferenciasDeFora(lancamentos, contas) {
+  if (!contas?.length) return [];
+  const dentro = new Set(contas.map(String));
+  return lancamentos.filter((l) => l.transferencia && !dentro.has(String(l.transferencia_conta_id)));
+}
 export const somar = (lista, campo = 'valor') => lista.reduce((s, x) => s + Number(x[campo] || 0), 0);
 
 /** Total gasto por categoria (caixa + parcelas de cartão). Retorna Map(categoria_id → valor) */

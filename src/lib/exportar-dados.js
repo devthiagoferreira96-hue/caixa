@@ -41,8 +41,9 @@ export function dadosDoPeriodo(periodo) {
   const lancamentos = lancs.map((l) => ({
     data: l.vencimento,
     descricao: l.descricao || '',
-    tipo: l.tipo === 'entrada' ? 'Entrada' : l.fatura_cartao_id ? 'Pagamento de fatura' : 'Saída',
-    categoria: l.fatura_cartao_id ? `Fatura ${nomeDe('cartoes', l.fatura_cartao_id)}` : nomeDe('categorias', l.categoria_id, 'Sem categoria'),
+    tipo: l.transferencia ? 'Transferência' : l.tipo === 'entrada' ? 'Entrada' : l.fatura_cartao_id ? 'Pagamento de fatura' : 'Saída',
+    categoria: l.transferencia ? `Transferência ${l.tipo === 'entrada' ? 'de' : 'para'} ${nomeDe('contas', l.transferencia_conta_id)}`
+      : l.fatura_cartao_id ? `Fatura ${nomeDe('cartoes', l.fatura_cartao_id)}` : nomeDe('categorias', l.categoria_id, 'Sem categoria'),
     conta: nomeDe('contas', l.conta_id),
     pessoa: nomeDe('pessoas', l.pessoa_id),
     valor: (l.tipo === 'entrada' ? 1 : -1) * Number(l.valor),
@@ -118,7 +119,7 @@ export function dadosDoPeriodo(periodo) {
       gastos: totalCaixa + totalCartao,
       saldo: totalEntradas - totalCaixa - totalCartao,
       // "a pagar" é sempre pelo vencimento (na base pagamento, o que está em aberto não entra na lista)
-      aPagar: somar(t.lancamentos.filter((l) => !l.pago && l.tipo === 'saida' && dentro(l.vencimento))),
+      aPagar: somar(t.lancamentos.filter((l) => !l.pago && l.tipo === 'saida' && !l.transferencia && dentro(l.vencimento))),
     },
   };
 }

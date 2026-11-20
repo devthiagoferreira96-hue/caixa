@@ -137,7 +137,7 @@ async def main():
         await pg.locator('#conteudo [data-entrega]').first.click(); await pg.wait_for_timeout(400)
         ok('abre a entrega de insumos', await pg.locator('dialog[open] [data-linha] [data-c=produtor_id]').count() >= 1)
         ok('entrega mostra a nota', await pg.locator('dialog[open] #in-nota').input_value() == 'NF 150 - VENC. 26/02')
-        ok('entrega mostra a conta', 'Empresa' in await pg.locator('dialog[open] #in-conta').evaluate('s=>s.options[s.selectedIndex].text'))
+        ok('entrega mostra a conta', 'Empresa' in await pg.locator('dialog[open] [data-linha] [data-c=titular_id]').first.evaluate('s=>s.options[s.selectedIndex].text'))
         await pg.keyboard.press('Escape'); await pg.wait_for_timeout(300)
 
         # 6. importar de novo não duplica

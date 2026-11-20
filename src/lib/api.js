@@ -229,6 +229,10 @@ export async function manterRecorrencias(hoje = new Date()) {
 export const lancamentosDaDivisao = async (divisao) =>
   ok(await local.from('lancamentos').select('*').eq('divisao', divisao));
 
+/** As duas pontas de uma transferência entre contas (mesmo `transferencia`) */
+export const lancamentosDaTransferencia = async (transferencia) =>
+  ok(await local.from('lancamentos').select('*').eq('transferencia', transferencia));
+
 /** Lançamentos repetidos (mesmo grupo) a partir de uma data */
 export const lancamentosDoGrupo = async (grupo, aPartirDe) =>
   ok(await local.from('lancamentos').select('*').eq('grupo', grupo).gte('vencimento', aPartirDe));
@@ -346,7 +350,7 @@ export async function procurarParecido({ tipo, valor, data, categoria_id, descri
   const candidatos = [];
   const lancs = ok(await local.from('lancamentos').select('*').eq('vencimento', data));
   lancs
-    .filter((l) => !l.fatura_cartao_id && (tipo === 'entrada' ? l.tipo === 'entrada' : l.tipo === 'saida'))
+    .filter((l) => !l.fatura_cartao_id && !l.transferencia && (tipo === 'entrada' ? l.tipo === 'entrada' : l.tipo === 'saida'))
     .forEach((l) => candidatos.push({ ...l, origem: 'caixa', valorTotal: l.valor }));
   if (tipo !== 'entrada') {
     ok(await local.from('compras_cartao').select('*').eq('data_compra', data))
@@ -464,6 +468,8 @@ export function conferirTabelas(entrada) {
       observacao: l.observacao == null || l.observacao === '' ? null : texto(l.observacao, 500),
       desconto: positivo(l.desconto), juros: positivo(l.juros), valor_original: positivo(l.valor_original),
       divisao: typeof l.divisao === 'string' && l.divisao ? l.divisao : null,
+      transferencia: typeof l.transferencia === 'string' && l.transferencia ? l.transferencia : null,
+      transferencia_conta_id: l.transferencia ? ref('contas', l.transferencia_conta_id) : null,
     });
   });
   (entrada.compras_cartao || []).forEach((l0) => {

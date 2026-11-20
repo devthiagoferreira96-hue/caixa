@@ -1,4 +1,4 @@
-// Novo lançamento: saída, entrada ou cartão (compra, assinatura, reembolso/estorno ou adiantamento da fatura)
+// Novo lançamento: saída, entrada, transferência entre contas ou cartão (compra, assinatura, reembolso/estorno ou adiantamento da fatura)
 import { brl, esc, hojeISO, lerValor, somarMeses, nomeMes, parseISO, dataCompleta, VALOR_MAXIMO, valorMaximoTexto } from '../lib/format.js';
 import { store, cartoesAtivos, contasAtivas, buscar } from '../lib/store.js';
 import { criarLancamentos, excluirLancamentos, criarCompra, excluirCompra, pessoaPorNome, procurarParecido } from '../lib/api.js';
@@ -12,6 +12,7 @@ import {
   campoDividir, ligarDividir, lerDivisao,
 } from '../components/form-lancamento.js';
 import { dividirAjustes } from '../lib/calculos.js';
+import { camposTransferencia, ligarTransferencia, lerTransferencia, criarTransferencia } from '../components/transferencia.js';
 
 let ultimoModo = 'saida';
 let ultimoNoCartao = 'compra';
@@ -37,7 +38,7 @@ export default {
   titulo: 'Novo lançamento',
   usaMes: false,
   ajuda: `
-    <p><strong>1.</strong> Escolha o tipo: <strong>Saída</strong> (pagou ou vai pagar algo), <strong>Entrada</strong> (recebeu dinheiro) ou <strong>Cartão</strong>.</p>
+    <p><strong>1.</strong> Escolha o tipo: <strong>Saída</strong> (pagou ou vai pagar algo), <strong>Entrada</strong> (recebeu dinheiro), <strong>Transferência</strong> (dinheiro que passou de uma conta para outra) ou <strong>Cartão</strong>.</p>
     <p><strong>2.</strong> Digite o valor só com números: 4590 vira R$ 45,90.</p>
     <p><strong>3.</strong> Preencha descrição e categoria. A categoria é o que alimenta o gráfico do Início.</p>
     <p><strong>Contas</strong>: no valor dá para digitar uma conta, como <strong>3*4,50</strong> (3 tarifas de R$ 4,50). Quando sair do campo, ele mostra o resultado.</p>
@@ -46,7 +47,8 @@ export default {
     <p><strong>Contas fixas</strong> (aluguel, salário de funcionário, internet): em "Repetir?", escolha <strong>toda semana</strong>, <strong>todo mês</strong> ou <strong>todo ano</strong>, <strong>por algumas vezes</strong> e digite quantas, ou <strong>sempre</strong>. No "sempre", o sistema mantém os próximos ${HORIZONTE_MESES} meses lançados e vai completando sozinho. Para parar, exclua um mês e escolha <strong>Este e os próximos</strong>.</p>
     <p><strong>Cartão</strong>: em <strong>Compra</strong>, digite o valor <em>total</em> e escolha as parcelas (o sistema mostra em qual fatura cada uma cai) ou <strong>Assinatura</strong>, que cobra o mesmo valor todo mês até você cancelar.</p>
     <p><strong>Reembolso</strong>: estorno ou devolução que o cartão creditou. Abate o valor da fatura.</p>
-    <p><strong>Adiantamento</strong>: quando você paga parte da fatura antes. Sai da conta escolhida e abate o que falta pagar da fatura.</p>`,
+    <p><strong>Adiantamento</strong>: quando você paga parte da fatura antes. Sai da conta escolhida e abate o que falta pagar da fatura.</p>
+    <p><strong>Transferência</strong>: para um <strong>saque</strong> (sai da conta corrente e vai para a espécie), um depósito ou um <strong>Pix de uma conta para outra</strong>. Escolha de qual conta saiu e para qual foi. O saldo das duas muda, mas não conta como gasto nem como entrada no Início e no Relatório. Para mudar ou excluir, toque nela no Extrato: a saída e a entrada mudam juntas.</p>`,
 
   async render(el, ctx) {
     const cartoes = cartoesAtivos();
@@ -55,8 +57,8 @@ export default {
     <form class="mx-auto grid max-w-2xl gap-5 animate-entrar" novalidate>
       <fieldset>
         <legend class="rotulo mb-2">O que você quer lançar?</legend>
-        <div class="grid grid-cols-3 gap-2">
-          ${[['saida', 'saida', 'Saída', 'Paguei ou vou pagar'], ['entrada', 'entrada', 'Entrada', 'Recebi dinheiro'], ['cartao', 'cartao', 'Cartão', 'Compra, reembolso…']]
+        <div class="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          ${[['saida', 'saida', 'Saída', 'Paguei ou vou pagar'], ['entrada', 'entrada', 'Entrada', 'Recebi dinheiro'], ['transferencia', 'transferir', 'Transferência', 'De uma conta para outra'], ['cartao', 'cartao', 'Cartão', 'Compra, reembolso…']]
             .map(([v, ic, t, sub]) => `<label class="opcao-modo">
               <input type="radio" name="modo" value="${v}" class="sr-only" ${v === ultimoModo ? 'checked' : ''}>
               ${icone(ic, 'size-6')}<span>${t}</span><span class="text-xs font-normal text-stone-600 dark:text-stone-400">${sub}</span>
@@ -74,7 +76,7 @@ export default {
       <div class="card grid gap-4">
         ${campoValor(null)}
         <div data-so-descricao>${campoDescricao('', 'Ex.: Conta de luz')}</div>
-        <div data-so-categoria>${campoCategoria(null, ultimoModo === 'cartao' ? 'cartao' : ultimoModo)}</div>
+        <div data-so-categoria>${campoCategoria(null, ultimoModo === 'transferencia' ? 'saida' : ultimoModo)}</div>
 
         <div data-secao="caixa" class="grid gap-4">
           ${camposCaixa({})}
@@ -97,6 +99,11 @@ export default {
             </div>
             <p id="dica-repetir" class="dica" data-dica-repetir></p>
           </div>
+        </div>
+
+        <div data-secao="transferencia" class="grid gap-4" hidden>
+          ${contasAtivas().length >= 2 ? camposTransferencia()
+            : '<p class="rounded-xl bg-amber-50 p-4 text-sm text-amber-900 dark:bg-amber-900/40 dark:text-amber-100">Para transferir, cadastre pelo menos duas contas (por exemplo, Conta corrente e Espécie) em <a class="font-semibold underline" href="#ajustes">Ajustes</a>.</p>'}
         </div>
 
         <div data-secao="cartao" class="grid gap-4" hidden>
@@ -152,6 +159,8 @@ export default {
     });
 
     const modo = () => form.modo.value;
+    const atualizarTransf = form.transf_de ? ligarTransferencia(form) : () => {};
+    const rotuloDescricao = el.querySelector('label[for="f-descricao"]');
     const noCartao = () => (modo() === 'cartao' && form.no_cartao ? form.no_cartao.value : null);
     const mostrar = (sel, sim) => el.querySelectorAll(sel).forEach((x) => (x.hidden = !sim));
 
@@ -159,15 +168,18 @@ export default {
       ultimoModo = modo();
       if (form.no_cartao) ultimoNoCartao = form.no_cartao.value;
       const oque = noCartao();
-      mostrar('[data-secao="caixa"]', modo() !== 'cartao');
+      const transf = modo() === 'transferencia';
+      mostrar('[data-secao="caixa"]', modo() === 'saida' || modo() === 'entrada');
+      mostrar('[data-secao="transferencia"]', transf);
+      rotuloDescricao.innerHTML = transf ? 'Descrição <span class="font-normal text-stone-600 dark:text-stone-400">(opcional)</span>' : 'Descrição';
       mostrar('[data-secao="cartao"]', modo() === 'cartao');
       mostrar('[data-secao="no-cartao"]', modo() === 'cartao');
       mostrar('[data-so-compra]', !oque || oque === 'compra');
       mostrar('[data-so-adiantamento]', oque === 'adiantamento');
-      mostrar('[data-so-categoria]', oque !== 'adiantamento');
+      mostrar('[data-so-categoria]', oque !== 'adiantamento' && !transf);
       form.descricao.placeholder = oque === 'estorno' ? 'Ex.: Estorno da compra da loja X'
         : oque === 'adiantamento' ? 'Adiantamento da fatura'
-        : { saida: 'Ex.: Conta de luz', entrada: 'Ex.: Venda de bezerros', cartao: 'Ex.: Supermercado' }[modo()];
+        : { saida: 'Ex.: Conta de luz', entrada: 'Ex.: Venda de bezerros', transferencia: 'Ex.: Saque, Pix para a poupança', cartao: 'Ex.: Supermercado' }[modo()];
       const rotuloData = el.querySelector('[data-rotulo-data]');
       if (rotuloData) rotuloData.textContent = oque === 'estorno' ? 'Data do reembolso' : oque === 'adiantamento' ? 'Data do pagamento' : 'Data da compra';
       const dicaCat = el.querySelector('[data-dica-categoria]');
@@ -177,7 +189,7 @@ export default {
       if (rotuloPagamento) rotuloPagamento.textContent = modo() === 'entrada' ? 'Data do recebimento' : 'Data do pagamento';
       divisao.atualizarTexto(modo());
       limparErros(form);
-      atualizarCategorias(form, modo() === 'cartao' ? 'cartao' : modo());
+      if (!transf) atualizarCategorias(form, modo() === 'cartao' ? 'cartao' : modo());
       if (dicaCat && oque === 'estorno') dicaCat.textContent = 'A categoria da compra que foi devolvida: o valor é descontado dela.';
       atualizarRepetir();
       atualizarPrevia();
@@ -277,7 +289,14 @@ export default {
       const botao = form.querySelector('[type=submit]');
       try {
         let salvo;
-        if (noCartao() === 'adiantamento') {
+        if (modo() === 'transferencia') {
+          if (!form.transf_de) return toast('Cadastre pelo menos duas contas em Ajustes para transferir.', { tipo: 'erro' });
+          const dados = lerTransferencia(form);
+          if (!dados) return;
+          botao.disabled = true;
+          salvo = await criarTransferencia(dados);
+          toast(salvo.mensagem, { acao: desfazendo(() => excluirLancamentos(salvo.ids)) });
+        } else if (noCartao() === 'adiantamento') {
           salvo = await salvarAdiantamento(form, botao);
           if (salvo) toast(salvo.mensagem, { acao: desfazendo(() => excluirLancamentos(salvo.ids)) });
         } else if (modo() === 'cartao') {
@@ -296,7 +315,8 @@ export default {
         form.repetir.value = '1';
         if (form.parcelas) { form.parcelas.value = '1'; form.parcelas_outra.value = ''; form.parcelas_outra.hidden = true; }
         if (form.subcategoria) form.subcategoria.value = '';
-        for (const campo of ['desconto', 'juros', 'observacao', 'competencia']) if (form[campo]) form[campo].value = '';
+        for (const campo of ['desconto', 'juros', 'observacao', 'competencia', 'transf_obs']) if (form[campo]) form[campo].value = '';
+        atualizarTransf();
         divisao.limpar();
         atualizarCaixa();
         atualizarRepetir();

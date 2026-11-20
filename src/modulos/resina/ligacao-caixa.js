@@ -128,37 +128,51 @@ export function camposAReceber(ligado) {
   const marcado = ligado ? true : lembrado.aReceber;
   const conta = ligado?.conta_id || lembrado.contaAReceber || lembrado.contaRecebimento || contasAtivas()[0]?.id;
   const cat = ligado?.categoria_id || lembrado.catAReceber || categoriaSugerida('entrada', ['INSUMO', 'RESINA', 'ARRENDAMENTO', 'REEMBOLSO']);
-  return `<fieldset class="grid gap-3 rounded-xl border border-stone-200 p-3 dark:border-stone-700" data-caixa-receber>
+  return `<fieldset class="grid gap-3 rounded-xl border border-stone-200 p-3 dark:border-stone-700" data-caixa-receber ${ligado?.pago ? 'data-recebido' : ''}>
     <legend class="px-1 text-sm font-semibold">Caixa da Família: parte do produtor</legend>
     <label class="flex cursor-pointer items-start gap-3"><input type="checkbox" name="cx_receber" class="mt-0.5 size-5 accent-brand-600" ${marcado ? 'checked' : ''}>
       <span><span class="block font-semibold">Lançar a parte de cada produtor como "a receber" no Caixa</span>
       <span class="block text-sm text-stone-600 dark:text-stone-400">Uma entrada para cada produtor da nota. Quando ele pagar, marque como recebido no Extrato: o dinheiro entra no saldo e a conta corrente baixa sozinha.${ligado?.pago ? ' <strong>Já foi recebido (pelo menos um).</strong>' : ''}</span></span></label>
-    <div class="grid gap-3 sm:grid-cols-2" data-receber-campos>
+    <div class="grid gap-3 sm:grid-cols-3" data-receber-campos>
+      <div data-campo><label class="rotulo" for="cx-data-r">Quando vai receber?</label><input id="cx-data-r" name="cx_data_receber" type="date" class="campo" value="${ligado?.vencimento || ''}" ${ligado ? 'data-mexido' : ''} aria-describedby="dica-cx-data-r">
+        <p id="dica-cx-data-r" class="dica mt-1">${ligado?.pago ? 'Quem já pagou fica com a data em que pagou; a data nova vale para quem ainda não pagou.' : 'Vem com o vencimento da nota. Mude se ele for pagar em outro dia.'}</p></div>
       <div data-campo><label class="rotulo" for="cx-conta-r">Vai entrar em qual conta?</label><select id="cx-conta-r" name="cx_conta_receber" class="campo">${opcoesConta(conta)}</select></div>
       <div data-campo><label class="rotulo" for="cx-cat-r">Categoria de entrada <span class="font-normal text-stone-600 dark:text-stone-400">(opcional)</span></label><select id="cx-cat-r" name="cx_cat_receber" class="campo">${opcoesCategoria(cat, 'entrada')}</select></div>
     </div>
   </fieldset>`;
 }
 
+/**
+ * Mostra/esconde os campos. A data de receber acompanha o vencimento da nota (campo do pagamento)
+ * e a data da compra, até a pessoa mudar ela mesma.
+ */
 export function ligarAReceber(form) {
   const area = form.querySelector('[data-caixa-receber]');
   if (!area) return;
-  const atualizar = () => { area.querySelector('[data-receber-campos]').hidden = !form.cx_receber.checked; };
-  area.addEventListener('change', atualizar);
+  const campo = form.cx_data_receber;
+  const sugerida = () => (form.querySelector('[name=cx_modo]:checked')?.value === 'saida' && form.cx_vencimento?.value) || form.data?.value || '';
+  // lançados antes deste campo ficaram com a data da compra: esses passam a acompanhar o vencimento da nota
+  if (campo.value && campo.value === form.data?.value && !area.hasAttribute('data-recebido')) campo.removeAttribute('data-mexido');
+  const acompanhar = () => { if (!campo.hasAttribute('data-mexido')) campo.value = sugerida(); };
+  const atualizar = () => { area.querySelector('[data-receber-campos]').hidden = !form.cx_receber.checked; acompanhar(); };
+  campo.addEventListener('input', () => campo.toggleAttribute('data-mexido', !!campo.value));
+  form.addEventListener('input', (e) => { if (e.target !== campo) acompanhar(); });
+  form.addEventListener('change', (e) => { if (e.target !== campo) atualizar(); });
   atualizar();
 }
 
 /** null se faltar algo (e marca o erro); { sem: true } = não lançar */
 export function lerAReceber(form, erroNoCampo) {
   if (!form.cx_receber || !form.cx_receber.checked) return { sem: true };
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(form.cx_data_receber.value)) { erroNoCampo(form, 'cx_data_receber', 'Escolha quando vai receber.'); return null; }
   if (!form.cx_conta_receber.value) { erroNoCampo(form, 'cx_conta_receber', 'Escolha a conta.'); return null; }
-  return { conta_id: form.cx_conta_receber.value, categoria_id: form.cx_cat_receber.value || null };
+  return { conta_id: form.cx_conta_receber.value, categoria_id: form.cx_cat_receber.value || null, vencimento: form.cx_data_receber.value };
 }
 
 /**
  * Cria, muda ou apaga as entradas "a receber" da entrega: uma por produtor, com a parte dele.
  * O que já foi recebido continua recebido (só o valor e a descrição acompanham).
- * `partes` = [{ produtor_id, valor, texto }]; `comum` = { data, titular_id, nota }. Retorna `desfazer()`.
+ * `partes` = [{ produtor_id, titular_id, valor, texto }]; `comum` = { data (quando vai receber), titular_id (se a parte não tiver), nota }. Retorna `desfazer()`.
  */
 export async function gravarAReceber(entregaId, escolha, partes = [], comum = {}) {
   if (!escolha) escolha = { sem: true };
@@ -166,12 +180,20 @@ export async function gravarAReceber(entregaId, escolha, partes = [], comum = {}
   else if (partes.length) lembrado.aReceber = false; // excluir a entrega não muda a escolha lembrada
   const antes = ok(await local.from('lancamentos').select('*').eq('resina_receber_id', entregaId));
   const validas = escolha.sem ? [] : partes.filter((p) => p.valor > 0);
-  // cada parte reaproveita a entrada do mesmo produtor; se não houver, uma que sobrou (ex.: trocou o produtor)
+  // cada parte reaproveita a entrada do mesmo produtor (e da mesma conta, se houver); se não houver, uma que sobrou (ex.: trocou o produtor)
   const sobra = [...antes];
-  const pares = validas.map((p) => {
-    const n = sobra.findIndex((l) => (l.resina_produtor_id || null) === (p.produtor_id || null));
-    return { p, l: n >= 0 ? sobra.splice(n, 1)[0] : null };
-  });
+  const conta = (p) => (p.titular_id !== undefined ? p.titular_id : comum.titular_id) || null;
+  const mesmo = (l, p) => (l.resina_produtor_id || null) === (p.produtor_id || null);
+  const pares = validas.map((p) => ({ p, l: null }));
+  for (const par of pares) {
+    const n = sobra.findIndex((l) => mesmo(l, par.p) && (l.resina_titular_id || null) === conta(par.p));
+    if (n >= 0) par.l = sobra.splice(n, 1)[0];
+  }
+  for (const par of pares) {
+    if (par.l) continue;
+    const n = sobra.findIndex((l) => mesmo(l, par.p));
+    if (n >= 0) par.l = sobra.splice(n, 1)[0];
+  }
   for (const par of pares) if (!par.l && sobra.length) par.l = sobra.shift();
 
   const voltar = [];
@@ -179,7 +201,7 @@ export async function gravarAReceber(entregaId, escolha, partes = [], comum = {}
   for (const { p, l } of pares) {
     const valores = {
       tipo: 'entrada', valor: p.valor, descricao: p.texto.slice(0, 120), conta_id: escolha.conta_id, categoria_id: escolha.categoria_id,
-      resina_titular_id: comum.titular_id || null, resina_produtor_id: p.produtor_id || null, resina_nota: comum.nota || '',
+      resina_titular_id: conta(p), resina_produtor_id: p.produtor_id || null, resina_nota: comum.nota || '',
     };
     if (l) voltar.push((await atualizarLancamento(l.id, l.pago ? valores : { ...valores, vencimento: comum.data })).desfazer);
     else criar.push({ ...valores, vencimento: comum.data, pago: false, data_pagamento: null, pessoa_id: null, resina_receber_id: entregaId });

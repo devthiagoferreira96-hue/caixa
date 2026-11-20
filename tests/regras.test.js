@@ -3,10 +3,10 @@
 import { faturaDe, vencimentoFatura, dividirParcelas, parcelasDaCompra } from '../src/lib/faturas.js';
 import { somarMeses, lerValor, valorParaCampo, brl, esc, diasAte, quandoVence, somarDias, nomeMes } from '../src/lib/format.js';
 import { PALETAS, calcularTema, contraste, oklch, hexDe, coresDasPreferencias } from '../src/lib/temas.js';
-import { calcularCarga, diferencaDePeso, precoNaData, proximoNumero, codigoCarga, resumoDasCargas, linhasContaCorrente, extratoContaCorrente, comparativoInsumos, totalDoInsumo, pctDoProdutor, parteDoProdutor, divisaoDaEntrega, creditosDoCaixa, aReceberPorConta } from '../src/modulos/resina/calculos.js';
+import { calcularCarga, diferencaDePeso, precoNaData, proximoNumero, codigoCarga, resumoDasCargas, linhasContaCorrente, extratoContaCorrente, comparativoInsumos, totalDoInsumo, pctDoProdutor, parteDoProdutor, divisaoDaEntrega, divisaoPorConta, creditosDoCaixa, aReceberPorConta } from '../src/modulos/resina/calculos.js';
 import { numeroBR, dataDaCelula, lerPlanilhaConta, entenderLinha, produtorDaLinha, produtoParecido, montarImportacao } from '../src/modulos/resina/importar-conta.js';
 import { proximasDatas, completarLancamentos, completarAssinaturas, limiteRecorrencia, mesesEntre, SEMANAL, mudancasNaSequencia } from '../src/lib/recorrencia.js';
-import { gastosPorCategoria, itensDaCategoria, saidasReais, totalDoCartao, resumoPorArea, entradasPorCategoria, situacaoFatura, dividirAjustes, saldoAoFimDoDia, faturasAPagar } from '../src/lib/calculos.js';
+import { gastosPorCategoria, itensDaCategoria, saidasReais, totalDoCartao, resumoPorArea, entradasPorCategoria, situacaoFatura, dividirAjustes, saldoAoFimDoDia, faturasAPagar, entradas, transferenciasDeFora } from '../src/lib/calculos.js';
 let ok=0, falhas=[];
 const t=(nome, obtido, esperado)=>{ const a=JSON.stringify(obtido), b=JSON.stringify(esperado); a===b?ok++:falhas.push(`${nome}: obtido ${a}, esperado ${b}`); };
 const MP={dia_fechamento:3,dia_vencimento:10}, VIRA={dia_fechamento:25,dia_vencimento:5}, F31={dia_fechamento:31,dia_vencimento:10}, IGUAL={dia_fechamento:10,dia_vencimento:10};
@@ -422,5 +422,43 @@ t('preferência inválida volta ao padrão',coresDasPreferencias({paleta:'person
   t('extrato: fatura agendada não aparece (o agendado já é lançamento)', faturasAPagar([C], ps, [{ ...adi, pago: false, adiantamento: false }], '2026-11-01', vencimentoFatura), []);
   t('extrato: cartão sem compras não aparece', faturasAPagar([{ ...C, id: 'z' }], ps, [], '2026-11-01', vencimentoFatura), []);
 }
+// ---------- Nota com vários produtores, cada um na sua conta (CNPJ ou CPF)
+{
+  const nota = [
+    { produtor_id: 'a', titular_id: 'ca', valor_total: 825, pct_produtor: 50 },
+    { produtor_id: 'b', titular_id: 'cb', valor_total: 200, pct_produtor: 30 },
+    { produtor_id: 'a', titular_id: 'ca', valor_total: 100, pct_produtor: 100 },
+  ];
+  t('nota com 2 contas: cada produtor na sua conta', divisaoPorConta(nota).map((d) => [d.produtor_id, d.titular_id, d.parte]), [['a', 'ca', 512.5], ['b', 'cb', 60]]);
+  const lin = (conta) => linhasContaCorrente([], new Map(), [], conta, nota.map((i, n) => ({ ...i, id: `i${n}`, data: '2026-11-13', produto_id: 'p' }))).map((l) => [l.produtor_id, l.debito]);
+  t('conta corrente da conta A: só o produtor A', lin('ca'), [['a', 412.5], ['a', 100]]);
+  t('conta corrente da conta B: só o produtor B', lin('cb'), [['b', 60]]);
+}
+
+// ---------- Transferência entre contas: muda o saldo das contas, mas não é gasto nem entrada
+{
+  const tr = [
+    { id: 's', tipo: 'saida', valor: 200, conta_id: 'cc', transferencia: 'T1', transferencia_conta_id: 'esp', pago: true, vencimento: '2026-11-10', data_pagamento: '2026-11-10', categoria_id: null },
+    { id: 'e', tipo: 'entrada', valor: 200, conta_id: 'esp', transferencia: 'T1', transferencia_conta_id: 'cc', pago: true, vencimento: '2026-11-10', data_pagamento: '2026-11-10', categoria_id: null },
+  ];
+  const outros = [
+    { id: 'g', tipo: 'saida', valor: 50, conta_id: 'esp', pago: true, vencimento: '2026-11-11', data_pagamento: '2026-11-11', categoria_id: 'c1' },
+    { id: 'v', tipo: 'entrada', valor: 300, conta_id: 'cc', pago: true, vencimento: '2026-11-11', data_pagamento: '2026-11-11', categoria_id: 'c2' },
+  ];
+  const todos = [...tr, ...outros];
+  t('transferência: não é gasto', saidasReais(todos).map((l) => l.id), ['g']);
+  t('transferência: não é entrada', entradas(todos).map((l) => l.id), ['v']);
+  t('transferência: fora dos gastos por categoria', [...gastosPorCategoria(todos, []).entries()], [['c1', 50]]);
+  const area = resumoPorArea(todos, [], () => 'Casa', ['Casa']).Casa;
+  t('transferência: fora do resultado do mês', [area.entradas, area.gastos, area.resultado], [300, 50, 250]);
+  const contas = [{ id: 'cc', saldo_inicial: 1000 }, { id: 'esp', saldo_inicial: 0 }];
+  t('transferência: sai do saldo da conta de origem', saldoAoFimDoDia(['2026-11-10'], todos, [contas[0]]).get('2026-11-10'), 800);
+  t('transferência: entra no saldo da conta de destino', saldoAoFimDoDia(['2026-11-10'], todos, [contas[1]]).get('2026-11-10'), 200);
+  t('transferência: saldo total não muda', saldoAoFimDoDia(['2026-11-10'], todos, contas).get('2026-11-10'), 1000);
+  t('transferência: sem filtro de conta, nenhuma conta nos totais', transferenciasDeFora(todos, []).length, 0);
+  t('transferência: filtrando a origem, conta a saída', transferenciasDeFora(todos, ['cc']).map((l) => l.id), ['s']);
+  t('transferência: filtrando as duas contas, uma anula a outra', transferenciasDeFora(todos, ['cc', 'esp']).length, 0);
+}
+
 console.log(`${ok} passaram, ${falhas.length} falharam`); falhas.forEach(f=>console.log(' FALHA',f));
 if (falhas.length) process.exit(1);

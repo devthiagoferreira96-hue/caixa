@@ -4,7 +4,7 @@ import { store } from '../../lib/store.js';
 import { icone, estadoVazio, toast, confirmar, dialogo, mascaraDinheiro, erroNoCampo, limparErros, semRepetir } from '../../lib/ui.js';
 import { desfazendo } from '../../components/lancamento.js';
 import { insumosEntre, salvarInsumos, excluirInsumos } from './dados.js';
-import { totalDoInsumo, pctDoProdutor, parteDoProdutor, divisaoDaEntrega } from './calculos.js';
+import { totalDoInsumo, pctDoProdutor, parteDoProdutor, divisaoDaEntrega, divisaoPorConta } from './calculos.js';
 import { camposPagamentoInsumos, ligarPagamentoInsumos, lerPagamentoInsumos, gravarPagamentoInsumos, desligar, lerLigacao, camposAReceber, ligarAReceber, lerAReceber, gravarAReceber } from './ligacao-caixa.js';
 import { numero, quadro, bolinha, nomeProdutor, corProdutor, nomeTitular, seDesligado } from './comum.js';
 
@@ -38,7 +38,8 @@ export function abrirEntrega(insumos, entregaId, ctx) {
   if (e) editarEntrega(e, ctx);
 }
 
-let ultimaConta = null; // repete a conta da última entrega lançada
+let ultimaConta = null; // conta da última entrega lançada (para produtor sem conta conhecida)
+const contaDoProdutor = new Map(); // produtor → última conta usada para ele nos insumos
 let ultimoPct = 50; // e a parte do produtor que veio na primeira linha (você muda em cada produto)
 
 export default {
@@ -46,11 +47,11 @@ export default {
   usaMes: true,
   ajuda: `
     <p>Os <strong>produtos</strong> que cada produtor usou para coletar a resina no mês escolhido no topo.</p>
-    <p>Em <strong>Lançar insumos</strong>, escolha a data e a conta e adicione um produto por linha: a <strong>quantidade</strong> e o <strong>valor unitário</strong> (vem do cadastro) dão o <strong>valor total</strong>. Se você souber só o total, digite o total e o valor unitário é calculado.</p>
-    <p><strong>Nota com vários produtores</strong>: cada produto tem o seu <strong>produtor</strong> e a sua <strong>parte do produtor (%)</strong>, que você decide. Ex.: o arame é do João e ele paga 50% do arame; a pasta é do Carlos e ele paga 50% da pasta. A % vale só para aquele produto, não para o total da nota. O mesmo produto pode aparecer para dois produtores (um em cada linha).</p>
+    <p>Em <strong>Lançar insumos</strong>, escolha a data e adicione um produto por linha: a <strong>quantidade</strong> e o <strong>valor unitário</strong> (vem do cadastro) dão o <strong>valor total</strong>. Se você souber só o total, digite o total e o valor unitário é calculado.</p>
+    <p><strong>Nota com vários produtores</strong>: cada produto tem o seu <strong>produtor</strong>, a sua <strong>conta</strong> (CNPJ ou CPF em que a parte dele é cobrada) e a sua <strong>parte do produtor (%)</strong>, que você decide. A conta vem sozinha com a última usada para aquele produtor; mude se precisar. Ex.: o arame é do João e ele paga 50% do arame; a pasta é do Carlos e ele paga 50% da pasta. A % vale só para aquele produto, não para o total da nota. O mesmo produto pode aparecer para dois produtores (um em cada linha).</p>
     <p><strong>Parte do produtor</strong>: só essa parte entra como débito na <strong>Conta corrente</strong> de cada produtor, na conta escolhida (CNPJ ou CPF), e aparece no Início como "falta receber". O resto fica com a proprietária.</p>
     <p>Toque numa entrega para mudar ou excluir.</p>
-    <p><strong>Parte do produtor no Caixa</strong>: deixe marcado "Lançar a parte de cada produtor como a receber" e o Caixa ganha uma entrada em aberto para cada produtor da nota, com a parte dele. Quando ele pagar, marque como recebido no <strong>Extrato</strong>: o dinheiro entra no saldo e a conta corrente baixa sozinha (não precisa lançar o recebimento de novo).</p>
+    <p><strong>Parte do produtor no Caixa</strong>: deixe marcado "Lançar a parte de cada produtor como a receber" e o Caixa ganha uma entrada em aberto para cada produtor da nota, com a parte dele, no dia de <strong>Quando vai receber?</strong> (vem com o vencimento da nota; mude se ele for pagar em outro dia). Quando ele pagar, marque como recebido no <strong>Extrato</strong>: o dinheiro entra no saldo e a conta corrente baixa sozinha (não precisa lançar o recebimento de novo).</p>
     <p><strong>Caixa da Família</strong>: no fim do lançamento, escolha como a compra foi paga: <strong>saída de uma conta</strong> (pode ficar para pagar no vencimento da nota) ou <strong>compra no cartão</strong>. O valor <strong>cheio</strong> da nota entra no Caixa como gasto, porque é o que foi pago ao fornecedor. Dar baixa no Extrato só marca a nota como paga: não baixa o que o produtor deve. Mudar ou excluir a entrega aqui muda ou exclui lá.</p>
     <p>A comparação entre produtores (quem gasta mais insumo para cada kg de resina) fica em <strong>Produção</strong>.</p>`,
 
@@ -135,12 +136,29 @@ async function editarEntrega(entrega, ctx) {
   const temNoCaixa = ligacao.lancamentos.length + ligacao.compras.length + ligacao.receber.length > 0;
   const nova = !entrega;
   const produtores = store.resina_produtores.filter((p) => p.ativo !== false || entrega?.produtores.includes(p.id));
-  const titulares = store.resina_titulares.filter((t) => t.ativo !== false || t.id === entrega?.titular_id);
-  const contaPadrao = nova ? (titulares.some((t) => t.id === ultimaConta) ? ultimaConta : titulares[0]?.id) : entrega.titular_id;
-  const novaLinha = (antes) => ({ chave: ++seq, produto_id: '', produtor_id: antes?.produtor_id || '', pct: antes ? antes.pct : String(ultimoPct), quantidade: '', valor_unitario: 0, valor_total: 0 });
+  const usadas = new Set(entrega?.itens.map((i) => i.titular_id).filter(Boolean));
+  const titulares = store.resina_titulares.filter((t) => t.ativo !== false || usadas.has(t.id));
+  const ativa = (id) => titulares.some((t) => t.id === id);
+  // a conta de cada produtor: a última usada para ele nos insumos
+  if (titulares.length) {
+    const todos = (await insumosEntre('0000-01-01', '9999-12-31')).filter((i) => i.titular_id).sort((a, b) => (a.data < b.data ? -1 : a.data > b.data ? 1 : 0));
+    for (const i of todos) contaDoProdutor.set(i.produtor_id, i.titular_id);
+  }
+  // conta de um produtor: a última usada para ele; sem nenhuma conhecida, só vem sozinha se houver uma conta só
+  // (com várias, fica em "Escolha…": nunca herda a conta de outro produtor)
+  const contaSugerida = (produtorId) => {
+    const c = contaDoProdutor.get(produtorId);
+    if (ativa(c)) return c;
+    return titulares.length === 1 ? titulares[0].id : '';
+  };
+  // o novo produto vem com o produtor e a conta da linha anterior (é o mesmo produtor); trocar o produtor troca a conta
+  const novaLinha = (antes) => ({
+    chave: ++seq, produto_id: '', produtor_id: antes?.produtor_id || '', titular_id: antes ? antes.titular_id : (titulares.length === 1 ? titulares[0].id : ''),
+    contaMexida: false, pct: antes ? antes.pct : String(ultimoPct), quantidade: '', valor_unitario: 0, valor_total: 0,
+  });
   const linhas = nova
     ? [novaLinha()]
-    : entrega.itens.map((i) => ({ chave: ++seq, produto_id: i.produto_id, produtor_id: i.produtor_id, pct: String(pctDoProdutor(i)), quantidade: i.quantidade, valor_unitario: i.valor_unitario, valor_total: totalDoInsumo(i) }));
+    : entrega.itens.map((i) => ({ chave: ++seq, produto_id: i.produto_id, produtor_id: i.produtor_id, titular_id: i.titular_id || '', contaMexida: false, pct: String(pctDoProdutor(i)), quantidade: i.quantidade, valor_unitario: i.valor_unitario, valor_total: totalDoInsumo(i) }));
   const hoje = hojeISO();
   const dataPadrao = hoje.slice(0, 7) === mesISO(store.mes).slice(0, 7) ? hoje : mesISO(store.mes);
 
@@ -148,14 +166,12 @@ async function editarEntrega(entrega, ctx) {
     titulo: nova ? 'Lançar insumos' : 'Mudar entrega de insumos',
     largura: 'max-w-3xl',
     corpo: `<form class="grid gap-4" novalidate>
-      <div class="grid gap-3 sm:grid-cols-3">
+      <div class="grid gap-3 sm:grid-cols-2">
         <div data-campo><label class="rotulo" for="in-data">Data</label><input id="in-data" name="data" type="date" class="campo" value="${entrega?.data || dataPadrao}"></div>
-        ${titulares.length ? `<div data-campo><label class="rotulo" for="in-conta">Conta (desconto do produtor)</label><select id="in-conta" name="titular_id" class="campo">${nova ? '' : `<option value="" ${entrega.titular_id ? '' : 'selected'}>Sem conta</option>`}${titulares.map((t) =>
-          `<option value="${t.id}" ${t.id === contaPadrao ? 'selected' : ''}>${esc(nomeTitular(t.id))}</option>`).join('')}</select></div>` : ''}
         <div data-campo><label class="rotulo" for="in-nota">Nota <span class="font-normal text-stone-600 dark:text-stone-400">(opcional)</span></label><input id="in-nota" name="nota" class="campo" maxlength="80" value="${esc(entrega?.nota || '')}" placeholder="Ex.: NF 150 - venc. 26/02"></div>
       </div>
       <fieldset><legend class="rotulo">Produtos</legend>
-        <p class="dica mb-2">Cada produto tem o seu produtor e a parte que ele paga daquele produto (a % vale só para o produto, não para a nota toda).</p>
+        <p class="dica mb-2">Cada produto tem o seu produtor${titulares.length ? ', a conta (CNPJ ou CPF) em que a parte dele é cobrada' : ''} e a parte que ele paga daquele produto (a % vale só para o produto, não para a nota toda).</p>
         <ul class="grid gap-2" data-linhas></ul>
         <button type="button" class="btn-sec mt-2" data-mais-linha>${icone('mais')} Adicionar produto</button></fieldset>
       <div data-campo><label class="rotulo" for="in-obs">Observação <span class="font-normal text-stone-600 dark:text-stone-400">(opcional)</span></label><input id="in-obs" name="obs" class="campo" maxlength="120" value="${esc(entrega?.obs || '')}"></div>
@@ -176,13 +192,16 @@ async function editarEntrega(entrega, ctx) {
 
   const opcoesProduto = (l) => `<option value="">Escolha…</option>${store.resina_produtos.filter((p) => p.ativo !== false || p.id === l.produto_id).map((p) =>
     `<option value="${p.id}" ${p.id === l.produto_id ? 'selected' : ''}>${esc(p.nome)} (${esc(p.unidade)})</option>`).join('')}`;
+  const opcoesConta = (l) => `${l.titular_id && ativa(l.titular_id) ? '' : `<option value="" selected>${nova || !l.titular_id ? 'Escolha…' : 'Sem conta'}</option>`}${titulares.map((t) =>
+    `<option value="${t.id}" ${t.id === l.titular_id ? 'selected' : ''}>${esc(nomeTitular(t.id))}</option>`).join('')}`;
   const opcoesProdutor = (l) => `<option value="">Escolha…</option>${produtores.map((p) =>
     `<option value="${p.id}" ${p.id === l.produtor_id ? 'selected' : ''}>${esc(p.nome)}</option>`).join('')}`;
   const desenhar = () => {
     ul.innerHTML = linhas.map((l, n) => `<li data-linha="${l.chave}" class="grid gap-2 rounded-xl border border-stone-200 p-3 dark:border-stone-800">
-      <div class="grid gap-2 sm:grid-cols-2">
+      <div class="grid gap-2 ${titulares.length ? 'sm:grid-cols-3' : 'sm:grid-cols-2'}">
         <div><label class="rotulo text-xs" for="li-p-${l.chave}">Produto ${n + 1}</label><select id="li-p-${l.chave}" class="campo" data-c="produto_id">${opcoesProduto(l)}</select></div>
         <div><label class="rotulo text-xs" for="li-r-${l.chave}">Produtor</label><select id="li-r-${l.chave}" class="campo" data-c="produtor_id">${opcoesProdutor(l)}</select></div>
+        ${titulares.length ? `<div><label class="rotulo text-xs" for="li-c-${l.chave}">Conta (CNPJ ou CPF)</label><select id="li-c-${l.chave}" class="campo" data-c="titular_id">${opcoesConta(l)}</select></div>` : ''}
       </div>
       <div class="grid grid-cols-2 items-end gap-2 sm:grid-cols-[repeat(4,minmax(0,1fr))_auto]">
         <div><label class="rotulo text-xs" for="li-q-${l.chave}">Quantidade${l.produto_id ? ` (${esc(unidade(l.produto_id))})` : ''}</label><input id="li-q-${l.chave}" type="number" min="0" step="any" inputmode="decimal" class="campo tabular-nums" data-c="quantidade" value="${l.quantidade}"></div>
@@ -205,13 +224,13 @@ async function editarEntrega(entrega, ctx) {
       const parte = parteDe(l);
       const el = ul.querySelector(`[data-linha="${l.chave}"] [data-parte]`);
       if (el) el.textContent = parte === null ? 'Digite a parte do produtor, de 0 a 100 (por exemplo, 50 para metade deste produto).'
-        : `${l.produtor_id ? nomeProdutor(l.produtor_id) : 'Produtor'} paga ${brl(parte)} deste produto · proprietária ${brl((l.valor_total || 0) - parte)}`;
+        : `${l.produtor_id ? nomeProdutor(l.produtor_id) : 'Produtor'} paga ${brl(parte)} deste produto${titulares.length && l.titular_id ? ` (${nomeTitular(l.titular_id)})` : ''} · proprietária ${brl((l.valor_total || 0) - parte)}`;
     }
     const validas = linhas.filter((l) => l.produtor_id && parteDe(l) !== null);
-    const divisao = divisaoDaEntrega(validas.map((l) => ({ produtor_id: l.produtor_id, valor_total: l.valor_total || 0, pct_produtor: lerPct(l.pct) })));
+    const divisao = divisaoPorConta(validas.map((l) => ({ produtor_id: l.produtor_id, titular_id: l.titular_id || null, valor_total: l.valor_total || 0, pct_produtor: lerPct(l.pct) })));
     const doProdutores = divisao.reduce((s, x) => s + x.parte, 0);
     f.querySelector('[data-divisao]').innerHTML = divisao.length && validas.length === linhas.length
-      ? `${divisao.map((x) => `<li>Cobrado de ${esc(nomeProdutor(x.produtor_id))}: ${brl(x.parte)}</li>`).join('')}<li>Fica com a proprietária: ${brl(total - doProdutores)}</li>` : '';
+      ? `${divisao.map((x) => `<li>Cobrado de ${esc(nomeProdutor(x.produtor_id))}${titulares.length && x.titular_id ? ` (${esc(nomeTitular(x.titular_id))})` : ''}: ${brl(x.parte)}</li>`).join('')}<li>Fica com a proprietária: ${brl(total - doProdutores)}</li>` : '';
   };
   const campoDe = (l, c) => ul.querySelector(`[data-linha="${l.chave}"] [data-c="${c}"]`);
   desenhar();
@@ -245,10 +264,19 @@ async function editarEntrega(entrega, ctx) {
   });
   f.addEventListener('change', (e) => {
     const c = e.target.dataset.c;
-    if (c !== 'produto_id' && c !== 'produtor_id') return;
+    if (c !== 'produto_id' && c !== 'produtor_id' && c !== 'titular_id') return;
     const l = linhas.find((x) => x.chave === +e.target.closest('[data-linha]').dataset.linha);
     e.target.removeAttribute('aria-invalid');
-    if (c === 'produtor_id') { l.produtor_id = e.target.value; return somar(); }
+    if (c === 'titular_id') { l.titular_id = e.target.value; l.contaMexida = !!e.target.value; return somar(); }
+    if (c === 'produtor_id') {
+      l.produtor_id = e.target.value;
+      // a conta acompanha o produtor (a última usada para ele), até a pessoa escolher outra nesta linha
+      if (titulares.length && l.produtor_id && !l.contaMexida) {
+        l.titular_id = contaSugerida(l.produtor_id);
+        campoDe(l, 'titular_id').innerHTML = opcoesConta(l);
+      }
+      return somar();
+    }
     l.produto_id = e.target.value;
     const p = produto(l.produto_id);
     if (p?.valor_unitario) { l.valor_unitario = p.valor_unitario; l.valor_total = arred((+l.quantidade || 0) * l.valor_unitario); }
@@ -259,7 +287,7 @@ async function editarEntrega(entrega, ctx) {
     const b = e.target.closest('button');
     if (!b) return;
     if (b.dataset.maisLinha !== undefined) {
-      const l = novaLinha(linhas.at(-1)); // o novo produto vem com o produtor e a % do anterior
+      const l = novaLinha(linhas.at(-1)); // o novo produto vem com o produtor, a conta e a % do anterior
       linhas.push(l); desenhar(); campoDe(l, 'produto_id').focus();
     } else if (b.dataset.tirar !== undefined) {
       const k = +b.closest('[data-linha]').dataset.linha;
@@ -288,6 +316,7 @@ async function editarEntrega(entrega, ctx) {
     for (const [n, l] of linhas.entries()) {
       if (!l.produto_id) return problema(l, 'produto_id', `Escolha o produto da linha ${n + 1} (ou tire a linha).`);
       if (!l.produtor_id) return problema(l, 'produtor_id', `Escolha o produtor de ${nomeProduto(l.produto_id)} (linha ${n + 1}).`);
+      if (titulares.length && !l.titular_id && lerPct(l.pct) !== 0) return problema(l, 'titular_id', `Escolha a conta (CNPJ ou CPF) de ${nomeProdutor(l.produtor_id)} em ${nomeProduto(l.produto_id)} (linha ${n + 1}).`);
       const k = `${l.produto_id}|${l.produtor_id}`;
       if (usados.has(k)) return problema(l, 'produto_id', `${nomeProduto(l.produto_id)} de ${nomeProdutor(l.produtor_id)} aparece duas vezes. Some as quantidades numa linha só.`);
       usados.add(k);
@@ -297,13 +326,12 @@ async function editarEntrega(entrega, ctx) {
       if (lerPct(l.pct) === null) return problema(l, 'pct', `Digite a parte do produtor em ${nomeProduto(l.produto_id)}: de 0 a 100 (por exemplo, 50 para metade).`);
     }
     const entrega_id = entrega?.id || crypto.randomUUID();
-    if (f.titular_id && !f.titular_id.value && nova) { erroNoCampo(f, 'titular_id', 'Escolha a conta.'); return f.titular_id.focus(); }
     const caixa = lerPagamentoInsumos(f, erroNoCampo, f.data.value);
     if (!caixa) return;
     const receber = lerAReceber(f, erroNoCampo);
     if (!receber) return;
-    const base = { data: f.data.value, obs: f.obs.value.trim(), nota: f.nota.value.trim(), titular_id: f.titular_id?.value || null, entrega_id };
-    const novas = linhas.map((l) => ({ ...base, produtor_id: l.produtor_id, produto_id: l.produto_id, pct_produtor: lerPct(l.pct), quantidade: +l.quantidade, valor_unitario: l.valor_unitario, valor_total: arred(l.valor_total) }));
+    const base = { data: f.data.value, obs: f.obs.value.trim(), nota: f.nota.value.trim(), entrega_id };
+    const novas = linhas.map((l) => ({ ...base, titular_id: l.titular_id || null, produtor_id: l.produtor_id, produto_id: l.produto_id, pct_produtor: lerPct(l.pct), quantidade: +l.quantidade, valor_unitario: l.valor_unitario, valor_total: arred(l.valor_total) }));
     const divisao = divisaoDaEntrega(novas);
     const ids = divisao.map((x) => x.produtor_id);
     const notaTxt = base.nota ? ` · ${base.nota}` : '';
@@ -314,13 +342,14 @@ async function editarEntrega(entrega, ctx) {
       const voltarCaixa = await gravarPagamentoInsumos(entrega_id, caixa, {
         total, data: base.data, texto: `Insumos resina · ${produtos} · ${nomesProdutores(ids)}${notaTxt}`,
       });
-      const voltarReceber = await gravarAReceber(entrega_id, receber, divisao.map((x) => ({
-        produtor_id: x.produtor_id, valor: x.parte,
+      // um "a receber" para cada produtor em cada conta: quando ele pagar, o crédito cai na conta certa
+      const voltarReceber = await gravarAReceber(entrega_id, receber, divisaoPorConta(novas).map((x) => ({
+        produtor_id: x.produtor_id, titular_id: x.titular_id, valor: x.parte,
         texto: `A receber · insumos (${x.itens.map((i) => `${nomeProduto(i.produto_id)} ${i.pct_produtor.toLocaleString('pt-BR')}%`).join(', ')}) · ${nomeProdutor(x.produtor_id)}${notaTxt}`,
-      })), { data: base.data, titular_id: base.titular_id, nota: base.nota });
+      })), { data: receber.vencimento || base.data, nota: base.nota });
       const desfazer = async () => { await voltarReceber(); await voltarCaixa(); await voltarInsumos(); };
       d.close();
-      if (base.titular_id) ultimaConta = base.titular_id;
+      for (const l of novas) if (l.titular_id) { ultimaConta = l.titular_id; contaDoProdutor.set(l.produtor_id, l.titular_id); }
       ultimoPct = novas[0].pct_produtor;
       const doProdutores = arred(divisao.reduce((s, x) => s + x.parte, 0));
       const onde = [caixa.modo === 'saida' ? 'no Caixa' : caixa.modo === 'cartao' ? 'no cartão' : '', !receber.sem && doProdutores > 0 ? `${brl(doProdutores)} a receber` : ''].filter(Boolean).join(', ');

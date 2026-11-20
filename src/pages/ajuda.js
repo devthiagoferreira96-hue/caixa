@@ -9,6 +9,10 @@ const TOPICOS = [
     <li>Digite o valor só com números: <strong>4590</strong> vira <strong>R$ 45,90</strong>.</li>
     <li>Escreva uma descrição curta e escolha a categoria.</li><li>Toque em <strong>Salvar</strong>.</li></ol>
     <p>Se errar, toque em <strong>Desfazer</strong> no aviso que aparece embaixo da tela.</p>`],
+  ['transferir', 'Transferir de uma conta para outra (saque, Pix)', `
+    <p>Quando o dinheiro só muda de conta, como num <strong>saque</strong> (sai da conta corrente e vai para a espécie), num depósito ou num <strong>Pix de uma conta para outra</strong>, use <strong>Novo lançamento → Transferência</strong>.</p>
+    <p>Escolha de qual conta saiu e para qual foi. O saldo das duas contas muda, mas a transferência <strong>não conta como gasto nem como entrada</strong> no Início e no Relatório.</p>
+    <p>No Extrato ela aparece duas vezes, com o ícone de setas: a saída numa conta e a entrada na outra. Toque numa delas para mudar ou excluir: as duas mudam juntas.</p>`],
   ['check', 'Contas a pagar e o círculo de "pago"', `
     <p>Ao lançar uma conta que ainda vai vencer, desmarque <strong>Já foi pago</strong>. Ela aparece no Início em <strong>Contas a pagar</strong>.</p>
     <p>Quando pagar, toque no <strong>círculo</strong> ao lado dela. Ele fica verde e o saldo da conta é atualizado. É o mesmo que o "OK" da coluna STATUS da planilha.</p>`],
