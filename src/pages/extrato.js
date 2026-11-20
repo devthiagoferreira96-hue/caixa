@@ -1,8 +1,8 @@
 // Extrato do mês: todos os lançamentos do caixa, com busca, filtros, saldo de cada dia e seleção para somar
 import { brl, esc, dataPorExtenso, hojeISO, mesISO } from '../lib/format.js';
-import { store, contasAtivas, categoriasPorGrupo, buscar } from '../lib/store.js';
+import { store, contasAtivas, categoriasPorGrupo, buscar, contaNoSaldo } from '../lib/store.js';
 import { lancamentosDoExtrato, lancamentosPagos, parcelasDoMes, pagamentosDeFatura } from '../lib/api.js';
-import { saidasReais, entradas, somar, dataNoExtrato, saldoAoFimDoDia, faturasAPagar, transferenciasDeFora } from '../lib/calculos.js';
+import { saidasReais, entradas, somar, dataNoExtrato, saldoAoFimDoDia, faturasAPagar, transferenciasDeFora, agruparPorConta } from '../lib/calculos.js';
 import { vencimentoFatura } from '../lib/faturas.js';
 import { pagarFatura } from './cartoes.js';
 import { itemLancamento, cliqueEmLancamento } from '../components/lancamento.js';
@@ -13,13 +13,21 @@ const filtros = { busca: '', contas: [], categoria: '', situacao: '' };
 const filtroVazio = () => ({ busca: '', contas: [], categoria: '', situacao: '' });
 const filtrando = () => !!(filtros.busca || filtros.contas.length || filtros.categoria || filtros.situacao);
 
-/** Contas do filtro: as em uso e, no fim, as fora de uso (com histórico, dá para somar quando quiser) */
-const contasDoFiltro = () => [...contasAtivas(), ...store.contas.filter((c) => !contasAtivas().includes(c))];
+/** Contas do filtro: as que entram no saldo, depois as outras em uso e, no fim, as fora de uso (dá para ver quando quiser) */
+const contasDoFiltro = () => {
+  const ativas = contasAtivas();
+  return [...ativas.filter(contaNoSaldo), ...ativas.filter((c) => !contaNoSaldo(c)), ...store.contas.filter((c) => !ativas.includes(c))];
+};
+/** Sem nenhuma conta marcada, o Extrato mostra só as contas que estão "No saldo" (Ajustes > Contas), como o Início */
+const algumaForaDoSaldo = () => store.contas.some((c) => !contaNoSaldo(c));
+const rotuloTodas = () => (algumaForaDoSaldo() ? 'Contas do saldo' : 'Todas as contas');
+/** Ids (texto) das contas na tela: as marcadas no filtro ou, sem nenhuma marcada, as do saldo */
+const contasNaTela = () => (filtros.contas.length ? filtros.contas : store.contas.filter(contaNoSaldo).map((c) => String(c.id)));
 
-/** Texto do botão do filtro de contas: "Todas as contas", o nome da conta ou os nomes separados por vírgula */
+/** Texto do botão do filtro de contas: "Contas do saldo" (ou "Todas as contas"), o nome da conta ou os nomes separados por vírgula */
 function rotuloContas() {
   const nomes = contasDoFiltro().filter((c) => filtros.contas.includes(String(c.id))).map((c) => c.nome);
-  return !nomes.length ? 'Todas as contas' : nomes.join(', ');
+  return !nomes.length ? rotuloTodas() : nomes.join(', ');
 }
 
 // o menu de contas fecha ao tocar fora dele
@@ -40,11 +48,12 @@ export default {
   ajuda: `
     <p>Aqui aparecem todas as entradas e saídas do <strong>caixa</strong> (dinheiro, Pix, conta bancária) do mês escolhido no topo.</p>
     <p>O que já foi <strong>pago ou recebido</strong> aparece no dia e no mês do pagamento (uma parcela de dezembro paga em novembro fica em novembro). O que está <strong>em aberto</strong> aparece no dia do vencimento.</p>
+    <p>Dentro de cada dia, os lançamentos ficam <strong>separados por conta</strong> (tudo do Dinheiro, depois tudo do Nubank etc.), com o saldo de cada conta no fim do dia. Numa transferência, a saída fica na conta de onde o dinheiro saiu e a entrada na conta para onde ele foi.</p>
     <p>Ao lado de cada dia aparece o <strong>saldo</strong>: quanto havia nas contas no fim daquele dia (saldo inicial + tudo que foi pago ou recebido até ele), como no extrato do banco. Se escolher uma ou mais contas no filtro, é o saldo só delas (somado). O que está em aberto não entra no saldo.</p>
     <p>Para somar alguns lançamentos, toque em <strong>Selecionar para somar</strong> e marque as caixinhas. A soma aparece na barra de baixo. A caixinha ao lado do dia marca o dia inteiro.</p>
     <p>As compras no cartão de crédito ficam na tela <strong>Cartões</strong>. A <strong>fatura</strong> de cada cartão aparece aqui como uma saída a pagar no dia do vencimento, com o que falta pagar (já sem os adiantamentos). Os <strong>adiantamentos</strong> aparecem no dia em que foram pagos. Toque no círculo da fatura para pagá-la; depois de paga, aparece o pagamento no dia em que foi feito.</p>
     <p><strong>Transferências</strong> entre contas (saque, Pix de uma conta para outra) aparecem duas vezes: a saída na conta de origem e a entrada na de destino, com o ícone de setas. Não entram em Entradas e Saídas, porque o dinheiro só mudou de conta. Se você filtrar só uma conta, a transferência para outra conta entra como saída (ou entrada) dela. Toque numa delas para mudar ou excluir a transferência inteira.</p>
-    <p>Use a <strong>busca</strong> e os filtros para achar algo rápido. No filtro de contas dá para marcar <strong>mais de uma conta</strong>. Toque num lançamento para editar ou excluir. Toque no círculo para marcar como pago.</p>`,
+    <p>Use a <strong>busca</strong> e os filtros para achar algo rápido. No filtro de contas dá para marcar <strong>mais de uma conta</strong>. Sem nenhuma marcada, aparecem só as contas que estão <strong>No saldo</strong> (Ajustes &gt; Contas), como no Início; as outras aparecem quando você marcar no filtro. A fatura do cartão que falta pagar aparece sempre, porque ainda não tem conta. Toque num lançamento para editar ou excluir. Toque no círculo para marcar como pago.</p>`,
 
   async render(el, ctx) {
     const mes = mesISO(store.mes);
@@ -72,8 +81,8 @@ export default {
             </summary>
             <fieldset class="absolute left-0 z-30 mt-1 grid max-h-80 w-full min-w-60 max-w-[calc(100vw-2rem)] gap-0.5 overflow-auto rounded-xl border border-stone-200 bg-cartao p-1.5 shadow-lg dark:border-stone-700 dark:bg-stone-900">
               <legend class="sr-only">Contas para mostrar (pode marcar mais de uma)</legend>
-              <label class="flex min-h-11 cursor-pointer items-center gap-3 rounded-lg px-2 font-semibold hover:bg-stone-100 dark:hover:bg-stone-800"><input type="checkbox" data-conta-todas class="size-5 accent-brand-600" ${filtros.contas.length ? '' : 'checked'}> Todas as contas</label>
-              ${contasDoFiltro().map((c) => `<label class="flex min-h-11 cursor-pointer items-center gap-3 rounded-lg px-2 hover:bg-stone-100 dark:hover:bg-stone-800"><input type="checkbox" data-conta-f="${c.id}" class="size-5 accent-brand-600" ${filtros.contas.includes(String(c.id)) ? 'checked' : ''}> <span class="min-w-0 break-words">${esc(c.nome)}${contasAtivas().includes(c) ? '' : ' <span class="text-sm text-stone-600 dark:text-stone-400">(fora de uso)</span>'}</span></label>`).join('')}
+              <label class="flex min-h-11 cursor-pointer items-center gap-3 rounded-lg px-2 font-semibold hover:bg-stone-100 dark:hover:bg-stone-800"><input type="checkbox" data-conta-todas class="size-5 accent-brand-600" ${filtros.contas.length ? '' : 'checked'}> ${rotuloTodas()}</label>
+              ${contasDoFiltro().map((c) => `<label class="flex min-h-11 cursor-pointer items-center gap-3 rounded-lg px-2 hover:bg-stone-100 dark:hover:bg-stone-800"><input type="checkbox" data-conta-f="${c.id}" class="size-5 accent-brand-600" ${filtros.contas.includes(String(c.id)) ? 'checked' : ''}> <span class="min-w-0 break-words">${esc(c.nome)}${!contasAtivas().includes(c) ? ' <span class="text-sm text-stone-600 dark:text-stone-400">(fora de uso)</span>' : contaNoSaldo(c) ? '' : ' <span class="text-sm text-stone-600 dark:text-stone-400">(fora do saldo)</span>'}</span></label>`).join('')}
             </fieldset>
           </details>
           <div><label for="f-f-cat" class="sr-only">Filtrar por categoria</label>
@@ -120,19 +129,30 @@ export default {
 
     const desenharLista = () => {
       const termo = filtros.busca.trim().toLowerCase();
+      const naTela = contasNaTela();
+      const idsNaTela = new Set(naTela);
       visiveis = lancamentos.filter((l) =>
         (!termo || `${l.descricao} ${l.observacao || ''}`.toLowerCase().includes(termo)) &&
-        (!filtros.contas.length || filtros.contas.includes(String(l.conta_id))) &&
+        // o que ainda não tem conta (a fatura do cartão a pagar) aparece sempre
+        (!l.conta_id || idsNaTela.has(String(l.conta_id))) &&
         (!filtros.categoria || String(l.categoria_id) === filtros.categoria) &&
         (!filtros.situacao ||
           (filtros.situacao === 'pago' && l.pago) || (filtros.situacao === 'aberto' && !l.pago) ||
           (filtros.situacao === l.tipo)));
       const porDia = Map.groupBy ? Map.groupBy(visiveis, dataNoExtrato) : agrupar(visiveis);
       // Saldo no fim de cada dia (das contas do filtro, somadas, ou de todas). Dias futuros não têm saldo ainda.
-      const contas = filtros.contas.length ? store.contas.filter((c) => filtros.contas.includes(String(c.id))) : store.contas;
-      const saldos = saldoAoFimDoDia([...porDia.keys()].filter((d) => d <= hoje), pagos, contas);
+      const contas = store.contas.filter((c) => idsNaTela.has(String(c.id)));
+      const diasPassados = [...porDia.keys()].filter((d) => d <= hoje);
+      const saldos = saldoAoFimDoDia(diasPassados, pagos, contas);
+      // dentro de cada dia, os lançamentos ficam separados por conta (com o saldo de cada uma no fim do dia).
+      // Com uma conta só no filtro não precisa: o dia inteiro já é dela.
+      const separar = filtros.contas.length !== 1;
+      const saldoDaConta = new Map(separar ? [...new Set(visiveis.map((l) => l.conta_id).filter(Boolean))]
+        .map((id) => [id, saldoAoFimDoDia(diasPassados, pagos, store.contas.filter((c) => c.id === id))]) : []);
+      const itensDaLista = (lista) => lista.map((l) => itemLancamento(l, { selecao: selecao.ligada ? selecao.ids.has(l.id) : undefined })).join('');
       // transferência entre contas da tela não é entrada nem saída; de (ou para) uma conta fora do filtro, é
-      const fora = transferenciasDeFora(visiveis, filtros.contas);
+      // (sem filtro, todas as contas na tela = nenhuma transferência conta; com contas fora do saldo, a que vai para uma delas conta)
+      const fora = transferenciasDeFora(visiveis, filtros.contas.length || algumaForaDoSaldo() ? naTela : []);
       const ent = somar(entradas(visiveis)) + somar(fora.filter((l) => l.tipo === 'entrada'));
       const sai = somar(saidasReais(visiveis)) + somar(visiveis.filter((l) => l.fatura_cartao_id)) + somar(fora.filter((l) => l.tipo === 'saida'));
       resultado.innerHTML = `
@@ -150,9 +170,20 @@ export default {
             <section class="mb-3" aria-label="${esc(dataPorExtenso(dia))}">
               <h2 class="mb-1.5 flex flex-wrap items-center justify-between gap-x-3 px-1 text-sm font-semibold text-stone-600 dark:text-stone-400">
                 <span class="flex items-center gap-2">${selecao.ligada ? `<input type="checkbox" data-sel-dia="${dia}" class="size-4 cursor-pointer accent-brand-600" ${todosDoDia ? 'checked' : ''} aria-label="Selecionar todos os lançamentos de ${esc(dataPorExtenso(dia))}" title="Selecionar o dia inteiro">` : ''}${esc(dataPorExtenso(dia))}</span>
-                ${saldo === undefined ? '' : `<span class="tabular-nums" title="Saldo ${filtros.contas.length === 1 ? 'da conta escolhida' : filtros.contas.length ? 'das contas escolhidas, somadas,' : 'das contas'} no fim do dia (só o que já foi pago ou recebido)">Saldo do dia: <span class="${saldo < 0 ? 'valor-saida' : 'text-stone-800 dark:text-stone-200'}">${brl(saldo)}</span></span>`}
+                ${saldo === undefined ? '' : `<span class="tabular-nums" title="Saldo ${filtros.contas.length === 1 ? 'da conta escolhida' : filtros.contas.length ? 'das contas escolhidas, somadas,' : algumaForaDoSaldo() ? 'das contas do saldo' : 'das contas'} no fim do dia (só o que já foi pago ou recebido)">Saldo do dia: <span class="${saldo < 0 ? 'valor-saida' : 'text-stone-800 dark:text-stone-200'}">${brl(saldo)}</span></span>`}
               </h2>
-              <ul class="card py-1 sm:py-1" data-lista>${itens.map((l) => itemLancamento(l, { selecao: selecao.ligada ? selecao.ids.has(l.id) : undefined })).join('')}</ul>
+              ${separar
+                ? `<div class="card py-1 sm:py-1">${agruparPorConta(itens, store.contas).map((g) => {
+                  const nome = g.conta_id ? buscar('contas', g.conta_id)?.nome || 'Conta excluída' : 'Faturas de cartão';
+                  const sc = g.conta_id ? saldoDaConta.get(g.conta_id)?.get(dia) : undefined;
+                  return `<div class="border-t border-stone-200 pt-2 first:border-t-0 dark:border-stone-700" data-grupo-conta="${esc(g.conta_id || '')}">
+                    <h3 class="flex flex-wrap items-baseline justify-between gap-x-3 pt-1 text-sm font-semibold">
+                      <span class="flex min-w-0 items-center gap-1.5 text-brand-800 dark:text-brand-300">${icone(g.conta_id ? 'carteira' : 'cartao', 'size-4 shrink-0')}<span class="min-w-0 break-words">${esc(nome)}</span></span>
+                      ${sc === undefined ? '' : `<span class="text-xs font-normal tabular-nums text-stone-600 dark:text-stone-400" title="Saldo de ${esc(nome)} no fim do dia (só o que já foi pago ou recebido)">saldo <span class="font-semibold ${sc < 0 ? 'valor-saida' : 'text-stone-800 dark:text-stone-200'}">${brl(sc)}</span></span>`}
+                    </h3>
+                    <ul data-lista>${itensDaLista(g.itens)}</ul></div>`;
+                }).join('')}</div>`
+                : `<ul class="card py-1 sm:py-1" data-lista>${itensDaLista(itens)}</ul>`}
             </section>`;
           }).join('')
           : `<div class="card">${filtrando()

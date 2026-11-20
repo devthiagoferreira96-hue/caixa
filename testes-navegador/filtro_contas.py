@@ -20,8 +20,15 @@ async def quantos(pg):
 
 async def marcar(pg, nome, sim=True):
     if not await pg.locator(MENU).evaluate('d => d.open'): await pg.click(f'{MENU} summary')
-    cx = pg.locator(MENU).get_by_role('checkbox', name=re.compile('^' + re.escape(nome) + r'( \(fora de uso\))?$'))
+    cx = pg.locator(MENU).get_by_role('checkbox', name=re.compile('^' + re.escape(nome) + r'( \(fora d[eo] (uso|saldo)\))?$'))
     await (cx.check() if sim else cx.uncheck()); await pg.wait_for_timeout(200)
+
+async def todas(pg):
+    if not await pg.locator(MENU).evaluate('d => d.open'): await pg.click(f'{MENU} summary')
+    await pg.check(f'{MENU} [data-conta-todas]'); await pg.wait_for_timeout(200)
+
+async def faturas(pg):
+    return await pg.locator('#resultado [data-pagar^="fatura:"]').count()
 
 async def main():
     async with async_playwright() as p:
@@ -38,10 +45,12 @@ async def main():
         ok('menu lista as contas', len(nomes) >= 2, nomes)
         ok('começa em "Todas as contas"', (await pg.inner_text(f'{MENU} [data-contas-rotulo]')) == 'Todas as contas')
         todos = await quantos(pg)
+        fat = await faturas(pg)
         a, b2 = nomes[0], nomes[1]
 
         await marcar(pg, a)
         n_a = await quantos(pg)
+        ok('filtrando: a fatura do cartão a pagar continua', fat > 0 and await faturas(pg) == fat, (fat, await faturas(pg)))
         ok('uma conta: rótulo com o nome', (await pg.inner_text(f'{MENU} [data-contas-rotulo]')) == a)
         ok('"Todas as contas" desmarca sozinho', not await pg.locator(f'{MENU} [data-conta-todas]').is_checked())
         ok('menu continua aberto ao marcar', await pg.locator(MENU).evaluate('d => d.open'))
@@ -50,7 +59,7 @@ async def main():
         ok('duas contas: rótulo com os dois nomes', (await pg.inner_text(f'{MENU} [data-contas-rotulo]')) == f'{a}, {b2}')
         await marcar(pg, a, False)
         n_b = await quantos(pg)
-        ok('duas contas mostram a soma das duas', n_ab == n_a + n_b and n_ab <= todos, (todos, n_a, n_b, n_ab))
+        ok('duas contas mostram a soma das duas (a fatura sem conta, uma vez)', n_ab == n_a + n_b - fat and n_ab <= todos, (todos, n_a, n_b, n_ab))
         await marcar(pg, a)
         titulos = await pg.locator('#resultado h2 [title^="Saldo"]').evaluate_all('xs => xs.map(x => x.title)')
         ok('saldo do dia fala das contas escolhidas', not titulos or 'contas escolhidas' in titulos[0], titulos[:1])
@@ -68,7 +77,7 @@ async def main():
         ok('filtro guardado ao voltar para o Extrato', await quantos(pg) == n_ab and (await pg.inner_text(f'{MENU} [data-contas-rotulo]')) == f'{a}, {b2}')
 
         # "Todas as contas" limpa
-        await marcar(pg, 'Todas as contas')
+        await todas(pg)
         ok('"Todas as contas" volta tudo', await quantos(pg) == todos and (await pg.inner_text(f'{MENU} [data-contas-rotulo]')) == 'Todas as contas'
            and await pg.locator(f'{MENU} [data-conta-f]:checked').count() == 0)
 
@@ -79,9 +88,26 @@ async def main():
         await pg.click('[data-limpar]'); await pg.wait_for_timeout(800)
         ok('"Limpar filtros" limpa as contas', await quantos(pg) == todos and (await pg.inner_text(f'{MENU} [data-contas-rotulo]')) == 'Todas as contas')
 
-        # conta fora de uso: continua no menu, no fim, e dá para somar o histórico dela
+        # conta fora do saldo (Ajustes > "No saldo" desmarcado): some do Extrato até ser marcada no filtro
         await ir(pg, 'ajustes')
         sec = pg.locator('[data-secao=contas]')
+        if not await sec.evaluate('e=>e.open'): await sec.locator('summary').click()
+        f = sec.locator('form[data-tabela=contas]').filter(has=pg.locator(f'[name=nome][value="{a}"]'))
+        await f.locator('[name=no_saldo]').uncheck(); await f.locator('button[type=submit]').click(); await pg.wait_for_timeout(600)
+        await ir(pg, 'extrato'); await pg.wait_for_selector(MENU)
+        ok('sem filtro: conta fora do saldo não aparece', await quantos(pg) == todos - (n_a - fat) and (await pg.inner_text(f'{MENU} [data-contas-rotulo]')) == 'Contas do saldo', (await quantos(pg), todos, n_a))
+        ok('sem filtro: fatura do cartão continua', await faturas(pg) == fat)
+        rot = next((t for t in await pg.locator(f'{MENU} [data-conta-f]').evaluate_all('xs => xs.map(x => x.closest("label").textContent.trim())') if t.startswith(a)), '')
+        ok('menu marca "(fora do saldo)"', rot == f'{a} (fora do saldo)', rot)
+        await marcar(pg, a)
+        ok('marcando no filtro, ela aparece', await quantos(pg) == n_a, (await quantos(pg), n_a))
+        await todas(pg); await pg.keyboard.press('Escape')
+        await ir(pg, 'ajustes')
+        if not await sec.evaluate('e=>e.open'): await sec.locator('summary').click()
+        await f.locator('[name=no_saldo]').check(); await f.locator('button[type=submit]').click(); await pg.wait_for_timeout(600)
+
+        # conta fora de uso: continua no menu, no fim, e dá para somar o histórico dela
+        await ir(pg, 'ajustes')
         if not await sec.evaluate('e=>e.open'): await sec.locator('summary').click()
         f = sec.locator('form[data-tabela=contas]').filter(has=pg.locator(f'[name=nome][value="{b2}"]'))
         await f.locator('[name=ativa]').uncheck(); await f.locator('button[type=submit]').click(); await pg.wait_for_timeout(600)
@@ -90,7 +116,7 @@ async def main():
         ok('conta fora de uso aparece no fim do menu', ultima.startswith(b2) and '(fora de uso)' in ultima, ultima)
         await marcar(pg, a, False); await marcar(pg, b2)
         ok('conta fora de uso: dá para filtrar só ela', await quantos(pg) == n_b, (await quantos(pg), n_b))
-        await marcar(pg, 'Todas as contas'); await pg.keyboard.press('Escape')
+        await todas(pg); await pg.keyboard.press('Escape')
 
         # celular
         await pg.set_viewport_size({'width': 360, 'height': 780}); await pg.wait_for_timeout(300)

@@ -110,7 +110,8 @@ async def main():
         linhas = await pg.locator('table tbody tr').count()
         ok('tabela: saldo anterior + 1 linha', linhas == 2, linhas)
         row = await pg.locator('table tbody tr').nth(1).inner_text()
-        ok('linha tem nota, destino, tbs, %, kg, uni, média', all(s in row for s in ['1002', 'Usina Boa Vista', '40%', '1.000', '1.000,00', '200', '5,00', '2.000,00', '-6.400,00']), row)
+        # a coluna UNI. saiu da conta corrente em 18/11/2026 (tela e planilha)
+        ok('linha tem nota, destino, tbs, %, kg, média', all(s in row for s in ['1002', 'Usina Boa Vista', '40%', '1.000', '200', '5,00', '2.000,00', '-6.400,00']), row)
         ok('CPF não aparece no CNPJ', 'NF 77' not in txt)
 
         # 7. lançar recebimento
@@ -142,8 +143,9 @@ async def main():
         arq = os.path.join(SAIDA, 'conta.xlsx'); await (await d.value).save_as(arq)
         z = zipfile.ZipFile(arq); sh = z.read('xl/worksheets/sheet1.xml').decode()
         cab = re.findall(r'<row r="2">(.*?)</row>', sh)[0]  # como na planilha da empresa: título na linha 1, colunas na linha 2
-        ok('Excel: cabeçalho igual ao da planilha da empresa', all(c in cab for c in ['DATA', 'DESCRIÇÃO', 'NOTA', 'DESTINO CARGA', 'TAMBORES', '% ARRENDO', 'QUANTIDADE', 'UNI.', 'MÉDIA', 'R$ UNITARIO', 'CRÉDITO', 'DÉBITO', 'SALDO']), cab[:300])
-        ok('Excel: saldo em fórmula como na planilha', '<f>M3+K4+L4</f>' in sh and '<f>M4+K5+L5</f>' in sh, re.findall(r'<f>[^<]*</f>', sh))
+        titulos = re.findall(r'<t[^>]*>([^<]*)</t>', cab)
+        ok('Excel: cabeçalho igual ao da planilha da empresa (sem UNI.)', titulos == ['DATA', 'DESCRIÇÃO', 'NOTA', 'DESTINO CARGA', 'TAMBORES', '% ARRENDO', 'QUANTIDADE', 'MÉDIA', 'R$ UNITARIO', 'CRÉDITO', 'DÉBITO', 'SALDO'], titulos)
+        ok('Excel: saldo em fórmula como na planilha', '<f>L3+J4+K4</f>' in sh and '<f>L4+J5+K5</f>' in sh, re.findall(r'<f>[^<]*</f>', sh))
         ok('Excel: débito negativo', '<v>-2000</v>' in sh)
         ok('Excel: saldo anterior −4400', '<v>-4400</v>' in sh)
 

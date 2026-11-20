@@ -177,5 +177,23 @@ export function saldoAoFimDoDia(dias, pagos, contas) {
   return r;
 }
 
+/**
+ * Separa os lançamentos de um dia por conta, na ordem da lista de contas (como no extrato do banco:
+ * tudo de uma conta, depois tudo da outra). Cada ponta de uma transferência fica na conta dela.
+ * O que não tem conta (fatura do cartão a pagar) vai por último. Dentro de cada conta, a ordem não muda.
+ * Retorna [{ conta_id, itens }].
+ */
+export function agruparPorConta(itens, contas) {
+  const ordem = new Map(contas.map((c, i) => [c.id, i]));
+  const grupos = new Map();
+  for (const l of itens) {
+    const id = l.conta_id ?? null;
+    (grupos.get(id) || grupos.set(id, []).get(id)).push(l);
+  }
+  const posicao = (id) => (id === null ? Infinity : ordem.get(id) ?? contas.length);
+  return [...grupos].map(([conta_id, lista]) => ({ conta_id, itens: lista }))
+    .sort((a, b) => posicao(a.conta_id) - posicao(b.conta_id));
+}
+
 /** "AAAA-MM" do lançamento na base escolhida, ou null */
 export const mesDeReferencia = (l, base = 'vencimento') => dataDeReferencia(l, base)?.slice(0, 7) ?? null;
