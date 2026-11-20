@@ -1,6 +1,6 @@
 // Ajustes: backup, contas, cartões, categorias, pessoas, aparência, usuário e senha
 import { esc, dataCompleta } from '../lib/format.js';
-import { store, categoriasPorGrupo, TIPOS_CATEGORIA } from '../lib/store.js';
+import { store, categoriasPorGrupo, TIPOS_CATEGORIA, contaNoSaldo } from '../lib/store.js';
 import { salvarItem, excluirItem } from '../lib/api.js';
 import { local } from '../lib/local-db.js';
 import { desfazendo } from '../components/lancamento.js';
@@ -19,12 +19,13 @@ import { secao as secaoBase, linha, lerLinha as lerLinhaGenerica } from '../comp
 const LISTAS = {
   contas: {
     titulo: 'Contas', icone: 'carteira',
-    explicacao: 'Onde o dinheiro fica: dinheiro em espécie, bancos, carteiras digitais. O <strong>saldo inicial</strong> é quanto a conta tinha quando vocês começaram a usar o sistema.',
-    novo: { nome: '', saldo_inicial: 0, ativa: true },
+    explicacao: 'Onde o dinheiro fica: dinheiro em espécie, bancos, carteiras digitais. O <strong>saldo inicial</strong> é quanto a conta tinha quando vocês começaram a usar o sistema. <strong>Em uso</strong>: a conta aparece para escolher nos lançamentos. <strong>No saldo</strong>: a conta soma no Saldo total do Início (desmarcada, ela aparece à parte, em Fora do saldo).',
+    novo: { nome: '', saldo_inicial: 0, ativa: true, no_saldo: true },
     campos: [
-      { nome: 'nome', rotulo: 'Nome', tipo: 'texto', largura: 'sm:col-span-5' },
+      { nome: 'nome', rotulo: 'Nome', tipo: 'texto', largura: 'sm:col-span-4' },
       { nome: 'saldo_inicial', rotulo: 'Saldo inicial (R$)', tipo: 'dinheiro', largura: 'sm:col-span-4' },
-      { nome: 'ativa', rotulo: 'Em uso', tipo: 'marcar', largura: 'sm:col-span-3' },
+      { nome: 'ativa', rotulo: 'Em uso', tipo: 'marcar', largura: 'sm:col-span-2' },
+      { nome: 'no_saldo', rotulo: 'No saldo', tipo: 'marcar', largura: 'sm:col-span-2' },
     ],
     dicaExcluir: 'Se a conta já tem lançamentos, desmarque "Em uso" em vez de excluir.',
   },
@@ -102,7 +103,7 @@ export default {
 
       ${Object.entries(LISTAS).map(([tabela, def]) => secao(tabela, def.titulo, def.icone, `
         <p class="mb-4 text-sm text-stone-600 dark:text-stone-400">${def.explicacao}</p>
-        ${tabela === 'categorias' ? listaCategorias(def) : `<ul class="grid gap-3">${store[tabela].map((item) => linha(tabela, def, item)).join('')}</ul>`}
+        ${tabela === 'categorias' ? listaCategorias(def) : `<ul class="grid gap-3">${store[tabela].map((item) => linha(tabela, def, tabela === 'contas' ? { ...item, no_saldo: contaNoSaldo(item) } : item)).join('')}</ul>`}
         <h3 class="mt-5 mb-2 text-sm font-semibold">Adicionar</h3>
         <ul>${linha(tabela, def, def.novo)}</ul>
         ${def.dicaExcluir ? `<p class="dica mt-3">${def.dicaExcluir}</p>` : ''}`)).join('')}
@@ -137,6 +138,12 @@ export default {
 
     el.querySelectorAll('[data-dinheiro]').forEach(mascaraDinheiro);
     el.querySelectorAll('details').forEach((d) => d.addEventListener('toggle', () => (d.open ? abertas.add(d.dataset.secao) : abertas.delete(d.dataset.secao))));
+
+    // tirar a conta de uso já a tira do saldo do Início (dá para marcar de novo antes de salvar)
+    el.onchange = (e) => {
+      const f = e.target.form;
+      if (e.target.name === 'ativa' && f?.dataset.tabela === 'contas' && !e.target.checked && f.elements.no_saldo) f.elements.no_saldo.checked = false;
+    };
 
     el.onsubmit = semRepetir(async (e) => {
       e.preventDefault();

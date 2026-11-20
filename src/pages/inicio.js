@@ -1,11 +1,11 @@
 // Tela inicial: saldos, resumo do mês, contas a pagar, faturas e gráfico por categoria
 import { brl, brlCurto, esc, mesISO, somarDias, nomeMes } from '../lib/format.js';
-import { store, contasAtivas, cartoesAtivos, areaDaCategoria, GRUPOS_SEPARADOS } from '../lib/store.js';
-import { saldosContas, lancamentosDoMes, parcelasDoMes, pendentesAte, pagamentosDeFatura } from '../lib/api.js';
+import { store, cartoesAtivos, areaDaCategoria, GRUPOS_SEPARADOS, contaNoSaldo, dividirContasDoSaldo } from '../lib/store.js';
+import { saldosContas, lancamentosDoMes, parcelasDoMes, pendentesAte, pagamentosDeFatura, salvarItem } from '../lib/api.js';
 import { gastosPorCategoria, totalDoCartao, resumoPorArea, entradasPorCategoria, situacaoFatura } from '../lib/calculos.js';
-import { itemLancamento, cliqueEmLancamento } from '../components/lancamento.js';
+import { itemLancamento, cliqueEmLancamento, desfazendo } from '../components/lancamento.js';
 import { barrasCategorias, abrirDetalheCategoria } from '../components/grafico.js';
-import { icone, estadoVazio } from '../lib/ui.js';
+import { icone, estadoVazio, dialogo, toast, semRepetir } from '../lib/ui.js';
 import { local } from '../lib/local-db.js';
 import { fazerBackup } from '../components/backup.js';
 import { vencimentoFatura } from '../lib/faturas.js';
@@ -26,7 +26,8 @@ export default {
   titulo: 'Início',
   usaMes: true,
   ajuda: `
-    <p><strong>Saldo total</strong>: quanto vocês têm somando todas as contas. Só conta o que já foi pago ou recebido.</p>
+    <p><strong>Saldo total</strong>: quanto vocês têm somando as contas escolhidas. Só conta o que já foi pago ou recebido.</p>
+    <p>Toque em <strong>Escolher contas</strong> para decidir quais contas somam no saldo. As que ficarem de fora (contas pouco usadas, com histórico) aparecem embaixo, em <strong>Fora do saldo</strong>, com a soma delas. Dá para mudar quando quiser, até deixar só elas no saldo. Para somar algumas contas sem mudar o Início, use o filtro de contas do <strong>Extrato</strong>.</p>
     <p><strong>Resumo da casa</strong>: o que entrou e o que saiu no mês escolhido no topo (gastos do caixa + parcelas dos cartões), <strong>sem</strong> as categorias dos grupos Fazenda e Empresa. Embaixo aparece o resultado geral, somando tudo.</p>
     <p><strong>Fazenda</strong>: vendas menos despesas da fazenda no mês, mostrando se deu lucro ou prejuízo. A Empresa ganha um quadro igual quando tiver lançamentos no mês.</p>
     <p><strong>Contas a pagar</strong>: o que está atrasado ou vence nos próximos 7 dias. Quando pagar, toque no círculo.</p>
@@ -44,8 +45,7 @@ export default {
     ]);
     if (!ctx.aindaAtual()) return;
 
-    const contas = contasAtivas();
-    const total = contas.reduce((s, c) => s + (saldos.get(c.id) || 0), 0);
+    const { noSaldo, outras, total, totalOutras } = dividirContasDoSaldo(store.contas, saldos);
     const areas = resumoPorArea(lancamentos, parcelas, areaDaCategoria, ['Casa', ...GRUPOS_SEPARADOS]);
     const casa = areas.Casa;
     const temSeparadas = GRUPOS_SEPARADOS.some((g) => areas[g].movimentos > 0);
@@ -59,18 +59,7 @@ export default {
     el.innerHTML = `
     <div class="grid items-start gap-4 lg:grid-cols-[1.3fr_1fr] animate-entrar">
       <div class="grid gap-4">
-        <section class="card" aria-labelledby="t-saldo">
-          <h2 id="t-saldo" class="card-titulo">Saldo total hoje</h2>
-          <p class="text-2xl font-bold tabular-nums sm:text-3xl ${total < 0 ? 'valor-saida' : ''}">${brl(total)}</p>
-          <ul class="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3">
-            ${contas.map((c) => {
-              const v = saldos.get(c.id) || 0;
-              return `<li class="rounded-xl border border-stone-200 p-3 dark:border-stone-800">
-                <p class="truncate text-sm text-stone-600 dark:text-stone-400">${esc(c.nome)}</p>
-                <p class="text-sm font-semibold tabular-nums sm:text-base ${v < 0 ? 'valor-saida' : ''}" title="${brl(v)}">${brlCurto(v)}</p></li>`;
-            }).join('')}
-          </ul>
-        </section>
+        ${quadroSaldo(noSaldo, outras, total, totalOutras, saldos)}
 
         ${temSeparadas ? `<section class="card" aria-labelledby="t-total">
           <h2 id="t-total" class="card-titulo mb-1">Total do mês: casa + ${GRUPOS_SEPARADOS.filter((g) => areas[g].movimentos > 0).join(' + ').toLowerCase()}</h2>
@@ -140,14 +129,99 @@ export default {
       </div>
     </div>`;
 
+    el.querySelector('[data-outras-contas]')?.addEventListener('toggle', (e) => (outrasAbertas = e.target.open));
+
     el.onclick = async (e) => {
       if (e.target.closest('[data-backup]')) { if (await fazerBackup()) ctx.atualizar(); return; }
+      if (e.target.closest('[data-escolher-contas]')) { escolherContas(saldos, ctx.atualizar); return; }
       if (await cliqueEmLancamento(e, pendentes, ctx.atualizar)) return;
       const barra = e.target.closest('[data-categoria]');
       if (barra) abrirDetalheCategoria(barra.dataset.categoria, lancamentos, parcelas);
     };
   },
 };
+
+// "Fora do saldo" continua aberto (ou fechado) ao voltar para o Início
+let outrasAbertas = false;
+
+/** Quadrinho de uma conta com o saldo dela */
+function quadrinhoConta(c, saldos) {
+  const v = saldos.get(c.id) || 0;
+  return `<li class="rounded-xl border border-stone-200 p-3 dark:border-stone-800">
+    <p class="truncate text-sm text-stone-600 dark:text-stone-400">${esc(c.nome)}</p>
+    <p class="text-sm font-semibold tabular-nums sm:text-base ${v < 0 ? 'valor-saida' : ''}" title="${brl(v)}">${brlCurto(v)}</p></li>`;
+}
+
+/** Quadro "Saldo total hoje": as contas escolhidas somadas e, embaixo, as que ficaram fora do saldo */
+function quadroSaldo(noSaldo, outras, total, totalOutras, saldos) {
+  const qtd = (n) => `${n} ${n === 1 ? 'conta' : 'contas'}`;
+  return `<section class="card" aria-labelledby="t-saldo" data-saldo>
+    <div class="flex flex-wrap items-center justify-between gap-x-3">
+      <h2 id="t-saldo" class="card-titulo mb-0">Saldo total hoje</h2>
+      <button type="button" class="-mr-2 inline-flex min-h-11 items-center gap-1.5 rounded-lg px-2 text-sm font-semibold text-brand-700 hover:bg-stone-100 dark:text-brand-400 dark:hover:bg-stone-800" data-escolher-contas>${icone('ajustes', 'size-4')} Escolher contas</button>
+    </div>
+    <p class="text-2xl font-bold tabular-nums sm:text-3xl ${total < 0 ? 'valor-saida' : ''}" data-saldo-total>${brl(total)}</p>
+    ${outras.length ? `<p class="text-sm text-stone-600 dark:text-stone-400">Somando ${qtd(noSaldo.length)}. ${outras.length === 1 ? 'A outra fica' : 'As outras ficam'} embaixo, fora do saldo.</p>` : ''}
+    ${noSaldo.length
+      ? `<ul class="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3">${noSaldo.map((c) => quadrinhoConta(c, saldos)).join('')}</ul>`
+      : '<p class="mt-2 text-sm text-stone-600 dark:text-stone-400">Nenhuma conta escolhida para o saldo. Toque em <strong>Escolher contas</strong>.</p>'}
+    ${outras.length ? `<details class="group mt-3 border-t border-stone-100 pt-1 dark:border-stone-800" data-outras-contas ${outrasAbertas ? 'open' : ''}>
+      <summary class="flex min-h-11 cursor-pointer list-none items-center gap-2 text-sm [&::-webkit-details-marker]:hidden">
+        <span class="text-stone-400 transition group-open:rotate-90">${icone('direita', 'size-4')}</span>
+        <span class="flex-1 font-medium">Fora do saldo <span class="font-normal text-stone-600 dark:text-stone-400">(${qtd(outras.length)})</span></span>
+        <span class="font-semibold tabular-nums ${totalOutras < 0 ? 'valor-saida' : ''}" data-total-outras>${brl(totalOutras)}</span>
+      </summary>
+      <ul class="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-3">${outras.map((c) => quadrinhoConta(c, saldos)).join('')}</ul>
+    </details>` : ''}
+  </section>`;
+}
+
+/** Janela para marcar quais contas somam no saldo do Início. A escolha fica guardada em cada conta (vai junto no backup). */
+function escolherContas(saldos, atualizar) {
+  const contas = [...store.contas].sort((a, b) => (a.ativa === false) - (b.ativa === false));
+  const d = dialogo({
+    titulo: 'Contas no saldo do Início',
+    corpo: `<form class="grid gap-3" data-form-saldo novalidate>
+      <p class="text-sm text-stone-600 dark:text-stone-400">Marque as contas que somam no <strong>Saldo total</strong>. As desmarcadas continuam com o histórico e aparecem em <strong>Fora do saldo</strong>.</p>
+      ${contas.length ? `<fieldset class="grid gap-0.5"><legend class="sr-only">Contas que somam no saldo</legend>
+        ${contas.map((c) => {
+          const v = saldos.get(c.id) || 0;
+          return `<label class="flex min-h-11 cursor-pointer items-center gap-3 rounded-lg px-2 hover:bg-stone-100 dark:hover:bg-stone-800">
+            <input type="checkbox" name="conta" value="${esc(c.id)}" class="size-5 accent-brand-600" ${contaNoSaldo(c) ? 'checked' : ''}>
+            <span class="min-w-0 flex-1 break-words">${esc(c.nome)}${c.ativa === false ? ' <span class="text-xs text-stone-600 dark:text-stone-400">(fora de uso)</span>' : ''}</span>
+            <span class="shrink-0 text-sm tabular-nums ${v < 0 ? 'valor-saida' : 'text-stone-600 dark:text-stone-400'}">${brl(v)}</span></label>`;
+        }).join('')}</fieldset>
+        <div class="flex flex-wrap gap-x-4 text-sm">
+          <button type="button" class="min-h-11 font-semibold text-brand-700 underline underline-offset-2 dark:text-brand-400" data-todas="1">Marcar todas</button>
+          <button type="button" class="min-h-11 font-semibold text-brand-700 underline underline-offset-2 dark:text-brand-400" data-todas="">Desmarcar todas</button>
+        </div>`
+      : '<p>Nenhuma conta cadastrada. Cadastre em <a href="#ajustes" class="font-semibold underline">Ajustes</a>.</p>'}
+      <div class="mt-2 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+        <button type="button" class="btn-neutro" data-fechar>Cancelar</button>
+        ${contas.length ? '<button type="submit" class="btn-primario">Salvar</button>' : ''}
+      </div></form>`,
+  });
+  const form = d.querySelector('[data-form-saldo]');
+  d.addEventListener('click', (e) => {
+    const b = e.target.closest('[data-todas]');
+    if (b) form.querySelectorAll('[name=conta]').forEach((x) => (x.checked = !!b.dataset.todas));
+  });
+  form.onsubmit = semRepetir(async (e) => {
+    e.preventDefault();
+    const marcadas = new Set([...form.querySelectorAll('[name=conta]:checked')].map((x) => x.value));
+    const mudaram = contas.filter((c) => contaNoSaldo(c) !== marcadas.has(String(c.id)));
+    try {
+      const desfazer = [];
+      for (const c of mudaram) desfazer.push((await salvarItem('contas', { id: c.id, no_saldo: marcadas.has(String(c.id)) })).desfazer);
+      d.close();
+      if (!mudaram.length) return;
+      toast('Contas do saldo atualizadas', { acao: desfazendo(async () => { for (const f of desfazer.reverse()) await f(); }, atualizar) });
+      atualizar();
+    } catch (err) {
+      toast(err.message, { tipo: 'erro' });
+    }
+  });
+}
 
 /** Três quadrinhos: entrou, saiu e resultado (lucro/prejuízo) */
 function quadrosResultado(a, { entrou, saiu, lucro = false }) {

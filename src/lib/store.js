@@ -22,6 +22,24 @@ export const buscar = (lista, id) => store[lista].find((x) => x.id === id);
 export const contasAtivas = () => store.contas.filter((c) => c.ativa !== false);
 export const cartoesAtivos = () => store.cartoes.filter((c) => c.ativo !== false);
 
+/**
+ * A conta entra no "Saldo total" do Início? A escolha fica guardada na conta (no_saldo).
+ * Conta sem escolha (dados antigos) segue o "Em uso": em uso entra, fora de uso não.
+ */
+export const contaNoSaldo = (c) => (typeof c.no_saldo === 'boolean' ? c.no_saldo : c.ativa !== false);
+
+/**
+ * Separa as contas do Início: as que somam no saldo e as "outras" (fora do saldo, mostradas à parte).
+ * Conta fora de uso e sem dinheiro não aparece nas outras (só ocuparia espaço).
+ */
+export function dividirContasDoSaldo(contas, saldos) {
+  const valor = (c) => saldos.get(c.id) || 0;
+  const noSaldo = contas.filter(contaNoSaldo);
+  const outras = contas.filter((c) => !contaNoSaldo(c) && (c.ativa !== false || Math.abs(valor(c)) > 0.004));
+  const somar = (lista) => Math.round(lista.reduce((s, c) => s + valor(c), 0) * 100) / 100;
+  return { noSaldo, outras, total: somar(noSaldo), totalOutras: somar(outras) };
+}
+
 export const nomeCategoria = (id) => buscar('categorias', id)?.nome ?? 'Sem categoria';
 
 /** Tipos de categoria: em que tipo de lançamento ela pode ser usada */
