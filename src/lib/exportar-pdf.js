@@ -7,10 +7,11 @@ import { objetosDoAnexo } from './dados-periodo.js';
 import { dataCompleta, nomeMes, parseISO } from './format.js';
 
 // A4 em pontos
-const LARG = 595.28, ALT = 841.89, MARGEM = 40;
+const LARG = 595.28, ALT = 841.89;
+export const MARGEM = 40;
 const UTIL = LARG - 2 * MARGEM;
 
-const COR = {
+export const COR = {
   texto: [0.11, 0.1, 0.09],
   suave: [0.38, 0.36, 0.34],
   marca: [0.12, 0.44, 0.33],
@@ -43,7 +44,7 @@ function codigos(texto) {
   return out;
 }
 
-const larguraTexto = (texto, tam, negrito = false) => {
+export const larguraTexto = (texto, tam, negrito = false) => {
   const t = negrito ? LARGURAS.negrito : LARGURAS.normal;
   return codigos(texto).reduce((s, c) => s + (t[c - 32] || 556), 0) * tam / 1000;
 };
@@ -55,6 +56,21 @@ function caber(texto, largura, tam, negrito) {
   let fim = texto.length;
   while (fim > 0 && larguraTexto(`${texto.slice(0, fim).trimEnd()}…`, tam, negrito) > largura) fim--;
   return `${texto.slice(0, fim).trimEnd()}…`;
+}
+
+/** Quebra o texto em linhas que cabem na largura (no máximo `max`; a última leva "…" se sobrar texto) */
+function quebrarTexto(texto, largura, tam, negrito, max) {
+  const palavras = String(texto ?? '').replace(/\s+/g, ' ').trim().split(' ');
+  const linhas = [];
+  let atual = '';
+  for (const p of palavras) {
+    const tentativa = atual ? `${atual} ${p}` : p;
+    if (!atual || larguraTexto(tentativa, tam, negrito) <= largura) atual = tentativa;
+    else { linhas.push(atual); atual = p; }
+  }
+  linhas.push(atual);
+  if (linhas.length > max) return [...linhas.slice(0, max - 1), caber(linhas.slice(max - 1).join(' ') + ' …', largura, tam, negrito)];
+  return linhas;
 }
 
 const literal = (texto) =>
@@ -72,15 +88,20 @@ export function reais(v) {
 
 // ---------------------------------------------------------------------------
 // "Folha": guarda os comandos de desenho de cada página
-class Documento {
-  constructor() {
+export class Documento {
+  /** paisagem = folha deitada (para tabelas largas); titulo = nome do arquivo nas propriedades do PDF */
+  constructor({ paisagem = false, titulo = 'Caixa da Família' } = {}) {
+    this.larg = paisagem ? ALT : LARG;
+    this.alt = paisagem ? LARG : ALT;
+    this.util = this.larg - 2 * MARGEM;
+    this.tituloArquivo = titulo;
     this.paginas = [];
     this.novaPagina();
   }
   novaPagina() {
     this.cmds = [];
     this.paginas.push(this.cmds);
-    this.y = ALT - MARGEM;
+    this.y = this.alt - MARGEM;
   }
   /** Garante espaço; se não houver, começa outra página. Retorna true se mudou de página. */
   espaco(altura) {
@@ -108,19 +129,20 @@ class Documento {
     this.y -= 22;
     this.texto(MARGEM, this.y, texto, { tam: 13, negrito: true, c: COR.marca });
     this.y -= 6;
-    this.linha(MARGEM, this.y, MARGEM + UTIL, this.y, COR.marca, 1);
+    this.linha(MARGEM, this.y, MARGEM + this.util, this.y, COR.marca, 1);
     this.y -= 4;
   }
 
   /**
-   * Tabela simples. colunas: [{titulo, largura, direita?}]; linhas: arrays de textos
+   * Tabela simples. colunas: [{titulo, largura, direita?, quebrar?}]; linhas: arrays de textos
+   * (coluna com quebrar: o texto longo continua na linha de baixo, em vez de ser cortado com "…")
    * opcoes.cores: função (linha, coluna) → cor do texto
    * opcoes.extra: função (linha, coluna, x, yDeBaixo) para desenhar algo a mais na célula
    */
   tabela(colunas, linhas, { cores, total, vazio = 'Nada neste período.', extra } = {}) {
     const ALTURA = 17, TAM = 8.6;
     const cabecalho = () => {
-      this.retangulo(MARGEM, this.y - ALTURA, UTIL, ALTURA, COR.marcaClara);
+      this.retangulo(MARGEM, this.y - ALTURA, this.util, ALTURA, COR.marcaClara);
       let x = MARGEM;
       for (const c of colunas) {
         this.texto(c.direita ? x + c.largura - 5 : x + 5, this.y - 11.8, c.titulo, { tam: TAM, negrito: true, c: COR.marca, direita: c.direita });
@@ -135,23 +157,26 @@ class Documento {
       this.texto(MARGEM + 5, this.y + 5.5, vazio, { tam: TAM, c: COR.suave });
       return;
     }
+    const ENTRE_LINHAS = 10.5;
     const desenhar = (linha, i, negrito = false) => {
-      if (this.espaco(ALTURA)) cabecalho();
-      if (negrito) this.linha(MARGEM, this.y, MARGEM + UTIL, this.y, COR.texto, 0.8);
-      else if (i % 2) this.retangulo(MARGEM, this.y - ALTURA, UTIL, ALTURA, COR.zebra);
+      const partes = linha.map((valor, j) => (colunas[j].quebrar ? quebrarTexto(valor, colunas[j].largura - 10, TAM, negrito, 4) : [valor]));
+      const altura = ALTURA + (Math.max(...partes.map((p) => p.length)) - 1) * ENTRE_LINHAS;
+      if (this.espaco(altura)) cabecalho();
+      if (negrito) this.linha(MARGEM, this.y, MARGEM + this.util, this.y, COR.texto, 0.8);
+      else if (i % 2) this.retangulo(MARGEM, this.y - altura, this.util, altura, COR.zebra);
       let x = MARGEM;
       linha.forEach((valor, j) => {
         const c = colunas[j];
         // valores (colunas à direita) nunca são cortados: se não couber, a letra diminui
         let tam = TAM;
         if (c.direita) while (tam > 5.5 && larguraTexto(valor, tam, negrito) > c.largura - 8) tam -= 0.2;
-        this.texto(c.direita ? x + c.largura - 4 : x + 5, this.y - 11.8, valor, {
+        partes[j].forEach((texto, k) => this.texto(c.direita ? x + c.largura - 4 : x + 5, this.y - 11.8 - k * ENTRE_LINHAS, texto, {
           tam, negrito, direita: c.direita, largura: c.direita ? undefined : c.largura - 10, c: (!negrito && cores?.(i, j)) || COR.texto,
-        });
-        if (!negrito) extra?.(i, j, x, this.y - ALTURA);
+        }));
+        if (!negrito) extra?.(i, j, x, this.y - altura);
         x += c.largura;
       });
-      this.y -= ALTURA;
+      this.y -= altura;
     };
     linhas.forEach((l, i) => desenhar(l, i));
     if (total) desenhar(total, -1, true);
@@ -170,18 +195,18 @@ class Documento {
     this.paginas.forEach((cmds, i) => {
       const r = rodape(i + 1, total);
       const extra = [
-        `${cor(COR.linha, 'RG')} 0.6 w ${MARGEM} ${MARGEM - 4} m ${n(MARGEM + UTIL)} ${MARGEM - 4} l S`,
+        `${cor(COR.linha, 'RG')} 0.6 w ${MARGEM} ${MARGEM - 4} m ${n(MARGEM + this.util)} ${MARGEM - 4} l S`,
         `BT /F1 8 Tf ${cor(COR.suave)} ${MARGEM} ${MARGEM - 16} Td ${literal(r.esquerda)} Tj ET`,
-        `BT /F1 8 Tf ${cor(COR.suave)} ${n(MARGEM + UTIL - larguraTexto(r.direita, 8))} ${MARGEM - 16} Td ${literal(r.direita)} Tj ET`,
+        `BT /F1 8 Tf ${cor(COR.suave)} ${n(MARGEM + this.util - larguraTexto(r.direita, 8))} ${MARGEM - 16} Td ${literal(r.direita)} Tj ET`,
       ];
       const conteudo = [...cmds, ...extra].join('\n');
       add(`<< /Length ${conteudo.length} >>\nstream\n${conteudo}\nendstream`);
       const idConteudo = objetos.length;
-      add(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${LARG} ${ALT}] /Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents ${idConteudo} 0 R >>`);
+      add(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${n(this.larg)} ${n(this.alt)}] /Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents ${idConteudo} 0 R >>`);
       filhos.push(`${objetos.length} 0 R`);
     });
     objetos[1] = `<< /Type /Pages /Kids [${filhos.join(' ')}] /Count ${total} >>`;
-    add(`<< /Title ${literal('Caixa da Família')} /Producer ${literal('Caixa da Família')} >>`);
+    add(`<< /Title ${literal(this.tituloArquivo)} /Producer ${literal('Caixa da Família')} >>`);
     const info = objetos.length;
     if (anexo) {
       // os dados vão como arquivo anexado ao PDF (o sistema lê de volta na importação)

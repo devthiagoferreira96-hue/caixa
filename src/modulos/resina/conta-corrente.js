@@ -14,6 +14,7 @@ import { camposRecebimento, ligarRecebimento, lerRecebimento, gravarRecebimento,
 let ligados = { movimentos: new Set(), entregas: new Set() }; // o que já foi lançado no Caixa
 import { linhasContaCorrente, extratoContaCorrente } from './calculos.js';
 import { gerarExcelConta, descricaoDaLinha } from './exportar-conta.js';
+import { gerarPdfConta } from './exportar-conta-pdf.js';
 import { TIPOS_MOVIMENTO } from './tabelas.js';
 import { numero, pct, quadro, bolinha, nomeProdutor, corProdutor, titular, nomeTitular, seDesligado } from './comum.js';
 
@@ -34,7 +35,7 @@ export default {
     <p><strong>Ligado ao Caixa</strong>: o recebimento pode entrar também como <strong>entrada</strong> numa conta do Caixa da Família (marque "Lançar também como entrada no Caixa"). Mudar ou excluir aqui muda ou exclui lá. As linhas lançadas no Caixa mostram "no Caixa".</p>
     <p><strong>Saldo</strong>: vem desde a primeira carga. Negativo quer dizer que ainda falta receber.</p>
     <p><strong>UNI.</strong> é o valor de um tambor (média de kg por tambor × preço do kg). Assim, débito = tambores × UNI. × % do arrendamento.</p>
-    <p><strong>Exportar Excel</strong> gera a planilha do mês com as mesmas colunas da planilha da empresa, com o saldo em fórmula.</p>
+    <p><strong>Exportar Excel</strong> gera a planilha do mês com as mesmas colunas da planilha da empresa, com o saldo em fórmula. <strong>Exportar PDF</strong> gera o mesmo movimento em PDF, com o resumo do mês em cima, bom para imprimir ou mandar para o produtor. Os dois respeitam a conta e o produtor escolhidos.</p>
     <p><strong>Importar planilha</strong> lê a planilha "Conta corrente arrendo" da empresa. Antes de gravar, mostra como cada linha foi entendida (carga, insumo ou PIX/lançamento) para você conferir e corrigir.</p>`,
 
   async render(el, ctx) {
@@ -81,6 +82,7 @@ export default {
           <div class="flex flex-wrap gap-2">
             ${filtro.conta && filtro.conta !== SEM_CONTA ? `<button type="button" class="btn-primario" data-lancar>${icone('mais')} Lançar recebimento</button>` : ''}
             <button type="button" class="btn-sec" data-exportar ${filtro.conta ? '' : 'disabled'}>${icone('planilha')} Exportar Excel</button>
+            <button type="button" class="btn-sec" data-exportar-pdf ${filtro.conta ? '' : 'disabled'}>${icone('documento')} Exportar PDF</button>
             <button type="button" class="btn-neutro" data-importar>${icone('enviar')} Importar planilha</button>
           </div>
         </div>
@@ -147,6 +149,15 @@ export default {
           const arquivo = new File([bytes], nome, { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
           if (await entregar(arquivo, 'Conta corrente')) toast(`Planilha gerada: ${nome}`);
         } catch { toast('Não foi possível gerar a planilha. Tente de novo.', { tipo: 'erro' }); }
+      } else if (b.dataset.exportarPdf !== undefined) {
+        const conta = filtro.conta === SEM_CONTA ? 'Sem conta' : nomeTitular(titularId);
+        const produtor = filtro.produtor ? nomeProdutor(filtro.produtor) : '';
+        try {
+          const bytes = gerarPdfConta({ conta, periodo: nomeMes(store.mes), produtor, inicio: mesISO(store.mes), extrato: ext, nomeProdutor, textoInsumo });
+          const nome = `conta-corrente-${nomeConta(filtro.conta)}${produtor ? `-${produtor}` : ''}-${mesISO(store.mes).slice(0, 7)}.pdf`.replace(/[\\/:*?"<>|\s]+/g, '-');
+          const arquivo = new File([bytes], nome, { type: 'application/pdf' });
+          if (await entregar(arquivo, 'Conta corrente')) toast(`PDF gerado: ${nome}`);
+        } catch { toast('Não foi possível gerar o PDF. Tente de novo.', { tipo: 'erro' }); }
       }
     };
   },
