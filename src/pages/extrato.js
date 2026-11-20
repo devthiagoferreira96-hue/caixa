@@ -1,8 +1,8 @@
 // Extrato do mês: todos os lançamentos do caixa, com busca, filtros, saldo de cada dia e seleção para somar
-import { brl, esc, dataPorExtenso, hojeISO, mesISO } from '../lib/format.js';
+import { brl, esc, dataPorExtenso, hojeISO, mesISO, inicioMes, nomeMes } from '../lib/format.js';
 import { store, contasAtivas, categoriasPorGrupo, buscar, contaNoSaldo } from '../lib/store.js';
-import { lancamentosDoExtrato, lancamentosPagos, parcelasDoMes, pagamentosDeFatura } from '../lib/api.js';
-import { saidasReais, entradas, somar, dataNoExtrato, saldoAoFimDoDia, faturasAPagar, transferenciasDeFora, agruparPorConta } from '../lib/calculos.js';
+import { lancamentosDoExtrato, lancamentosPagos, lancamentosEmAberto, parcelasDoMes, pagamentosDeFatura } from '../lib/api.js';
+import { saidasReais, entradas, somar, dataNoExtrato, saldoAoFimDoDia, faturasAPagar, transferenciasDeFora, agruparPorConta, projecaoDoMes } from '../lib/calculos.js';
 import { vencimentoFatura } from '../lib/faturas.js';
 import { pagarFatura } from './cartoes.js';
 import { itemLancamento, cliqueEmLancamento } from '../components/lancamento.js';
@@ -42,6 +42,49 @@ function ligarFecharMenu() {
 }
 const selecao = { ligada: false, ids: new Set() };
 
+/** Faturas de cartão que faltam pagar, do mês atual até o mês escolhido (para a projeção de um mês que ainda vai chegar) */
+async function faturasAte(mesEscolhido) {
+  const meses = [];
+  for (let m = inicioMes(new Date()); m <= mesEscolhido; m = inicioMes(m, 1)) meses.push(m);
+  const porMes = await Promise.all(meses.map(async (m) => {
+    const [parcelas, pagamentos] = await Promise.all([parcelasDoMes(m), pagamentosDeFatura(m)]);
+    return faturasAPagar(store.cartoes, parcelas, pagamentos, mesISO(m), vencimentoFatura);
+  }));
+  return porMes.flat();
+}
+
+/**
+ * Quadro "Projeção do caixa": o saldo herdado do mês anterior (separado do que é do mês), as receitas e despesas
+ * do mês, o resultado do mês e o saldo final projetado, que vira o saldo inicial do mês seguinte.
+ * Nada aqui é gravado: tudo sai dos lançamentos, então muda sozinho quando um mês anterior muda e nunca soma duas vezes.
+ */
+function quadroProjecao(p, { inicio, fim, hoje, mesEscolhido, comFaturas }) {
+  const passou = fim <= hoje, futuro = inicio > hoje;
+  const nome = (n) => nomeMes(inicioMes(mesEscolhido, n)).replace(/ de \d{4}$/, '').toLowerCase();
+  const resultado = Math.round((p.entradas - p.saidas) * 100) / 100;
+  const cor = (v) => (v < 0 ? 'valor-saida' : '');
+  const linha = (rotulo, valor, { classe = '', dado = '', sinal = '', destaque = false, borda = false, nota = '' } = {}) => `
+    <div class="flex flex-wrap items-baseline justify-between gap-x-3 py-1.5 ${borda ? 'border-t border-stone-200 dark:border-stone-700' : ''}">
+      <dt class="${destaque ? 'font-semibold' : 'text-stone-600 dark:text-stone-400'}">${rotulo}${nota ? ` <span class="text-xs font-normal text-stone-500 dark:text-stone-400">${nota}</span>` : ''}</dt>
+      <dd class="tabular-nums ${destaque ? 'text-base font-bold' : 'font-semibold'} ${classe}" ${dado}>${sinal}${brl(valor)}</dd></div>`;
+  return `<section class="card mb-3 p-3 sm:p-4" aria-labelledby="t-projecao" data-projecao>
+    <h2 id="t-projecao" class="card-titulo mb-1 flex items-center gap-2">${icone('calendario', 'size-4')} Projeção do caixa em ${esc(nome(0))}</h2>
+    <p class="mb-1 text-sm text-stone-600 dark:text-stone-400">${passou
+      ? 'O que aconteceu neste mês nas contas da tela.'
+      : `Conta como se tudo o que está em aberto fosse pago ou recebido no vencimento (o que está atrasado conta como hoje)${comFaturas ? ', com as faturas dos cartões' : ''}.`}</p>
+    <dl class="text-sm sm:max-w-xl">
+      ${linha(`Saldo inicial <span class="font-normal">(herdado de ${esc(nome(-1))})</span>`, p.inicial, { classe: cor(p.inicial), dado: 'data-proj-inicial', nota: futuro ? 'previsto' : 'real' })}
+      <div class="my-1 rounded-xl bg-stone-50 px-3 dark:bg-stone-800/50" data-proj-mes>
+        ${linha(passou ? `Receitas de ${esc(nome(0))}` : `Receitas de ${esc(nome(0))} <span class="font-normal">(recebidas e previstas)</span>`, p.entradas, { classe: 'valor-entrada', sinal: '+ ', dado: 'data-proj-entradas' })}
+        ${linha(passou ? `Despesas de ${esc(nome(0))}` : `Despesas de ${esc(nome(0))} <span class="font-normal">(pagas e previstas)</span>`, p.saidas, { classe: 'valor-saida', sinal: '− ', dado: 'data-proj-saidas' })}
+        ${linha(`Resultado de ${esc(nome(0))}`, resultado, { classe: cor(resultado), borda: true, dado: 'data-proj-resultado' })}
+      </div>
+      ${linha(passou ? 'Saldo final' : 'Saldo final projetado', p.final, { classe: cor(p.final), destaque: true, borda: true, dado: 'data-proj-final' })}
+    </dl>
+    ${passou ? '' : `<p class="mt-1 text-sm text-stone-600 dark:text-stone-400" data-proj-proximo>Vira o saldo inicial de <strong>${esc(nome(1))}</strong>. Avance o mês no topo para continuar o planejamento.</p>`}
+  </section>`;
+}
+
 export default {
   titulo: 'Extrato',
   usaMes: true,
@@ -50,6 +93,7 @@ export default {
     <p>O que já foi <strong>pago ou recebido</strong> aparece no dia e no mês do pagamento (uma parcela de dezembro paga em novembro fica em novembro). O que está <strong>em aberto</strong> aparece no dia do vencimento.</p>
     <p>Dentro de cada dia, os lançamentos ficam <strong>separados por conta</strong> (tudo do Dinheiro, depois tudo do Nubank etc.), com o saldo de cada conta no fim do dia. Numa transferência, a saída fica na conta de onde o dinheiro saiu e a entrada na conta para onde ele foi.</p>
     <p>Ao lado de cada dia aparece o <strong>saldo</strong>: quanto havia nas contas no fim daquele dia (saldo inicial + tudo que foi pago ou recebido até ele), como no extrato do banco. Se escolher uma ou mais contas no filtro, é o saldo só delas (somado). O que está em aberto não entra no saldo.</p>
+    <p><strong>Projeção do caixa</strong>: no alto aparece com quanto o mês começa, o que vai entrar e sair e com quanto ele termina, como se tudo o que está em aberto fosse pago ou recebido no vencimento (o que está atrasado conta como pago hoje). O saldo previsto do fim de um mês é o saldo inicial do mês seguinte: avance o mês no topo para planejar. Os dias que ainda vão chegar mostram o <strong>saldo previsto</strong>. As contas repetidas (todo mês) e as faturas dos cartões entram na projeção; as faturas só quando nenhuma conta está marcada no filtro, porque ainda não se sabe de qual conta vão sair.</p>
     <p>Para somar alguns lançamentos, toque em <strong>Selecionar para somar</strong> e marque as caixinhas. A soma aparece na barra de baixo. A caixinha ao lado do dia marca o dia inteiro.</p>
     <p>As compras no cartão de crédito ficam na tela <strong>Cartões</strong>. A <strong>fatura</strong> de cada cartão aparece aqui como uma saída a pagar no dia do vencimento, com o que falta pagar (já sem os adiantamentos). Os <strong>adiantamentos</strong> aparecem no dia em que foram pagos. Toque no círculo da fatura para pagá-la; depois de paga, aparece o pagamento no dia em que foi feito.</p>
     <p><strong>Transferências</strong> entre contas (saque, Pix de uma conta para outra) aparecem duas vezes: a saída na conta de origem e a entrada na de destino, com o ícone de setas. Não entram em Entradas e Saídas, porque o dinheiro só mudou de conta. Se você filtrar só uma conta, a transferência para outra conta entra como saída (ou entrada) dela. Toque numa delas para mudar ou excluir a transferência inteira.</p>
@@ -60,7 +104,8 @@ export default {
     // conta excluída sai do filtro (a fora de uso continua: ela aparece no menu)
     filtros.contas = filtros.contas.filter((id) => store.contas.some((c) => String(c.id) === id));
     ligarFecharMenu();
-    const [doMes, pagos, parcelas, pagamentosFatura] = await Promise.all([lancamentosDoExtrato(), lancamentosPagos(), parcelasDoMes(), pagamentosDeFatura()]);
+    const [doMes, pagos, parcelas, pagamentosFatura, abertos, faturasPrevistas] = await Promise.all([
+      lancamentosDoExtrato(), lancamentosPagos(), parcelasDoMes(), pagamentosDeFatura(), lancamentosEmAberto(), faturasAte(store.mes)]);
     if (!ctx.aindaAtual()) return;
     // a fatura do cartão que falta pagar entra como saída "a pagar" no dia do vencimento (o pagamento e os adiantamentos já são lançamentos)
     const lancamentos = [...doMes, ...faturasAPagar(store.cartoes, parcelas, pagamentosFatura, mes, vencimentoFatura)]
@@ -149,6 +194,11 @@ export default {
       const separar = filtros.contas.length !== 1;
       const saldoDaConta = new Map(separar ? [...new Set(visiveis.map((l) => l.conta_id).filter(Boolean))]
         .map((id) => [id, saldoAoFimDoDia(diasPassados, pagos, store.contas.filter((c) => c.id === id))]) : []);
+      // projeção do caixa (só pelas contas da tela; a busca e os outros filtros não mudam a projeção).
+      // As faturas dos cartões ainda não têm conta: entram quando não há conta marcada no filtro.
+      const fimMes = mesISO(store.mes, 1);
+      const comFaturas = !filtros.contas.length;
+      const proj = projecaoDoMes({ pagos, abertos, faturas: faturasPrevistas, comFaturas, contas, inicio: mes, fim: fimMes, hoje });
       const itensDaLista = (lista) => lista.map((l) => itemLancamento(l, { selecao: selecao.ligada ? selecao.ids.has(l.id) : undefined })).join('');
       // transferência entre contas da tela não é entrada nem saída; de (ou para) uma conta fora do filtro, é
       // (sem filtro, todas as contas na tela = nenhuma transferência conta; com contas fora do saldo, a que vai para uma delas conta)
@@ -161,6 +211,7 @@ export default {
              [`Saldo (${visiveis.length} ${visiveis.length === 1 ? 'lançamento' : 'lançamentos'})`, brl(ent - sai), ent - sai < 0 ? 'valor-saida' : '']]
             .map(([r, v, c]) => `<div class="flex flex-wrap items-baseline justify-between gap-x-3 sm:block"><dt class="text-stone-600 dark:text-stone-400">${r}</dt><dd class="font-semibold tabular-nums ${c}">${v}</dd></div>`).join('')}
         </dl>
+        ${quadroProjecao(proj, { inicio: mes, fim: fimMes, hoje, mesEscolhido: store.mes, comFaturas })}
         ${visiveis.length && !selecao.ligada ? `<div class="mb-3 flex justify-end"><button type="button" class="btn-neutro" data-sel-entrar>${icone('check')} Selecionar para somar</button></div>` : ''}
         ${visiveis.length
           ? [...porDia].map(([dia, itens]) => {
@@ -170,6 +221,7 @@ export default {
             <section class="mb-3" aria-label="${esc(dataPorExtenso(dia))}">
               <h2 class="mb-1.5 flex flex-wrap items-center justify-between gap-x-3 px-1 text-sm font-semibold text-stone-600 dark:text-stone-400">
                 <span class="flex items-center gap-2">${selecao.ligada ? `<input type="checkbox" data-sel-dia="${dia}" class="size-4 cursor-pointer accent-brand-600" ${todosDoDia ? 'checked' : ''} aria-label="Selecionar todos os lançamentos de ${esc(dataPorExtenso(dia))}" title="Selecionar o dia inteiro">` : ''}${esc(dataPorExtenso(dia))}</span>
+                ${saldo === undefined && dia > hoje ? `<span class="tabular-nums" title="Saldo previsto no fim do dia, se tudo o que está em aberto até ele for pago ou recebido" data-previsto>Previsto: <span class="${proj.previstoAte(dia) < 0 ? 'valor-saida' : 'text-stone-800 dark:text-stone-200'}">${brl(proj.previstoAte(dia))}</span></span>` : ''}
                 ${saldo === undefined ? '' : `<span class="tabular-nums" title="Saldo ${filtros.contas.length === 1 ? 'da conta escolhida' : filtros.contas.length ? 'das contas escolhidas, somadas,' : algumaForaDoSaldo() ? 'das contas do saldo' : 'das contas'} no fim do dia (só o que já foi pago ou recebido)">Saldo do dia: <span class="${saldo < 0 ? 'valor-saida' : 'text-stone-800 dark:text-stone-200'}">${brl(saldo)}</span></span>`}
               </h2>
               ${separar

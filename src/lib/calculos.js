@@ -178,6 +178,39 @@ export function saldoAoFimDoDia(dias, pagos, contas) {
 }
 
 /**
+ * Projeção do caixa: o saldo como se tudo o que está em aberto fosse pago (ou recebido) no vencimento.
+ * O que já passou do vencimento e não foi pago conta como se fosse pago hoje (ainda vai sair).
+ * Assim o saldo previsto do fim de um mês é o saldo inicial do mês seguinte.
+ *
+ * - `pagos`: lançamentos pagos (todas as datas); `abertos`: lançamentos em aberto (todas as datas)
+ * - `faturas`: faturas de cartão a pagar (de faturasAPagar), entram só se `comFaturas` (elas ainda não têm conta)
+ * - `contas`: contas que entram na conta; transferência entre duas delas não muda o saldo nem entra em entradas/saídas
+ * - `inicio`/`fim`: o mês ("AAAA-MM-DD", fim exclusivo); `hoje`: "AAAA-MM-DD"
+ * Retorna { inicial, entradas, saidas, final, previstoAte(dia) }. `inicial` é o real se o mês já começou.
+ */
+export function projecaoDoMes({ pagos, abertos, faturas = [], comFaturas = false, contas, inicio, fim, hoje }) {
+  const ids = new Set(contas.map((c) => c.id));
+  const base = contas.reduce((s, c) => s + Number(c.saldo_inicial || 0), 0);
+  const interna = (l) => l.transferencia && ids.has(l.transferencia_conta_id);
+  const sinal = (l) => (l.tipo === 'entrada' ? 1 : -1) * Number(l.valor || 0);
+  const quando = (d) => (d < hoje ? hoje : d);
+  const movs = [
+    ...pagos.filter((l) => l.pago && ids.has(l.conta_id)).map((l) => ({ dia: dataNoExtrato(l), v: sinal(l), real: true, interna: interna(l) })),
+    ...abertos.filter((l) => !l.pago && ids.has(l.conta_id)).map((l) => ({ dia: quando(l.vencimento), v: sinal(l), interna: interna(l) })),
+    ...(comFaturas ? faturas : []).map((f) => ({ dia: quando(f.vencimento), v: -Number(f.valor || 0) })),
+  ];
+  const r2 = (n) => Math.round(n * 100) / 100;
+  const previstoAte = (dia) => r2(movs.reduce((s, m) => (m.dia <= dia ? s + m.v : s), base));
+  const antes = movs.filter((m) => m.dia < inicio);
+  const inicial = r2((inicio <= hoje ? antes.filter((m) => m.real) : antes).reduce((s, m) => s + m.v, base));
+  const doMes = movs.filter((m) => m.dia >= inicio && m.dia < fim && !m.interna);
+  const entradas = r2(doMes.filter((m) => m.v > 0).reduce((s, m) => s + m.v, 0));
+  const saidas = r2(doMes.filter((m) => m.v < 0).reduce((s, m) => s - m.v, 0));
+  // o que ficou em aberto de meses anteriores (atrasado) já está em "hoje", dentro do mês atual: final = inicial + entradas − saídas
+  return { inicial, entradas, saidas, final: r2(inicial + entradas - saidas), previstoAte };
+}
+
+/**
  * Separa os lançamentos de um dia por conta, na ordem da lista de contas (como no extrato do banco:
  * tudo de uma conta, depois tudo da outra). Cada ponta de uma transferência fica na conta dela.
  * O que não tem conta (fatura do cartão a pagar) vai por último. Dentro de cada conta, a ordem não muda.

@@ -237,6 +237,9 @@ export const lancamentosDaTransferencia = async (transferencia) =>
 export const lancamentosDoGrupo = async (grupo, aPartirDe) =>
   ok(await local.from('lancamentos').select('*').eq('grupo', grupo).gte('vencimento', aPartirDe));
 
+/** Tudo que ainda está em aberto (todas as datas), para a projeção do caixa */
+export const lancamentosEmAberto = async () => ok(await local.from('lancamentos').select('*').eq('pago', false));
+
 /** Tudo que já foi pago ou recebido (todas as datas), para o saldo dia a dia do Extrato */
 export const lancamentosPagos = async () => ok(await local.from('lancamentos').select('*').eq('pago', true));
 

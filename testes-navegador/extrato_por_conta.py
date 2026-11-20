@@ -12,7 +12,7 @@ R = []
 def ok(n, c, x=''): R.append(('PASS' if c else 'FALHA', n, x))
 
 # para cada dia: lista de grupos [(conta_id, nome, [textos dos itens])]
-LER = """() => [...document.querySelectorAll('#resultado section')].map(s => ({
+LER = """() => [...document.querySelectorAll('#resultado section[aria-label]')].map(s => ({
   dia: s.getAttribute('aria-label'),
   grupos: [...s.querySelectorAll('[data-grupo-conta]')].map(g => ({
     id: g.dataset.grupoConta, nome: g.querySelector('h3').innerText.split('\\n')[0].trim(),
