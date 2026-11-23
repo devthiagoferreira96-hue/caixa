@@ -97,7 +97,7 @@ export default {
     <p>Para somar alguns lançamentos, toque em <strong>Selecionar para somar</strong> e marque as caixinhas. A soma aparece na barra de baixo. A caixinha ao lado do dia marca o dia inteiro.</p>
     <p>As compras no cartão de crédito ficam na tela <strong>Cartões</strong>. A <strong>fatura</strong> de cada cartão aparece aqui como uma saída a pagar no dia do vencimento, com o que falta pagar (já sem os adiantamentos). Os <strong>adiantamentos</strong> aparecem no dia em que foram pagos. Toque no círculo da fatura para pagá-la; depois de paga, aparece o pagamento no dia em que foi feito.</p>
     <p><strong>Transferências</strong> entre contas (saque, Pix de uma conta para outra) aparecem duas vezes: a saída na conta de origem e a entrada na de destino, com o ícone de setas. Não entram em Entradas e Saídas, porque o dinheiro só mudou de conta. Se você filtrar só uma conta, a transferência para outra conta entra como saída (ou entrada) dela. Toque numa delas para mudar ou excluir a transferência inteira.</p>
-    <p>Use a <strong>busca</strong> e os filtros para achar algo rápido. No filtro de contas dá para marcar <strong>mais de uma conta</strong>. Sem nenhuma marcada, aparecem só as contas que estão <strong>No saldo</strong> (Ajustes &gt; Contas), como no Início; as outras aparecem quando você marcar no filtro. A fatura do cartão que falta pagar aparece sempre, porque ainda não tem conta. Toque num lançamento para editar ou excluir. Toque no círculo para marcar como pago.</p>`,
+    <p>Use a <strong>busca</strong> e os filtros para achar algo rápido. No filtro de contas dá para marcar <strong>mais de uma conta</strong>. Sem nenhuma marcada, aparecem só as contas que estão <strong>No saldo</strong> (Ajustes &gt; Contas), como no Início; as outras aparecem quando você marcar no filtro. A fatura do cartão que falta pagar ainda não tem conta: ela aparece quando nenhuma conta está marcada no filtro. Toque num lançamento para editar ou excluir. Toque no círculo para marcar como pago.</p>`,
 
   async render(el, ctx) {
     const mes = mesISO(store.mes);
@@ -178,8 +178,9 @@ export default {
       const idsNaTela = new Set(naTela);
       visiveis = lancamentos.filter((l) =>
         (!termo || `${l.descricao} ${l.observacao || ''}`.toLowerCase().includes(termo)) &&
-        // o que ainda não tem conta (a fatura do cartão a pagar) aparece sempre
-        (!l.conta_id || idsNaTela.has(String(l.conta_id))) &&
+        // o que ainda não tem conta (a fatura do cartão a pagar) só aparece sem conta marcada no filtro:
+        // escolhendo uma conta, a tela mostra só o que é dela
+        (l.conta_id ? idsNaTela.has(String(l.conta_id)) : !filtros.contas.length) &&
         (!filtros.categoria || String(l.categoria_id) === filtros.categoria) &&
         (!filtros.situacao ||
           (filtros.situacao === 'pago' && l.pago) || (filtros.situacao === 'aberto' && !l.pago) ||

@@ -19,7 +19,7 @@ import { secao as secaoBase, linha, lerLinha as lerLinhaGenerica } from '../comp
 const LISTAS = {
   contas: {
     titulo: 'Contas', icone: 'carteira',
-    explicacao: 'Onde o dinheiro fica: dinheiro em espécie, bancos, carteiras digitais. O <strong>saldo inicial</strong> é quanto a conta tinha quando vocês começaram a usar o sistema. <strong>Em uso</strong>: a conta aparece para escolher nos lançamentos. <strong>No saldo</strong>: a conta soma no Saldo total do Início (desmarcada, ela aparece à parte, em Fora do saldo).',
+    explicacao: 'Onde o dinheiro fica: dinheiro em espécie, bancos, carteiras digitais. O <strong>saldo inicial</strong> é quanto a conta tinha quando vocês começaram a usar o sistema. <strong>Em uso</strong>: a conta aparece no começo da lista nos lançamentos (desmarcada, ela continua lá, no fim, em Fora de uso). <strong>No saldo</strong>: a conta soma no Saldo total do Início (desmarcada, ela aparece à parte, em Fora do saldo).',
     novo: { nome: '', saldo_inicial: 0, ativa: true, no_saldo: true },
     campos: [
       { nome: 'nome', rotulo: 'Nome', tipo: 'texto', largura: 'sm:col-span-4' },

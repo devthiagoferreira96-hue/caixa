@@ -12,8 +12,16 @@ export const opcoesCategoria = (selecionada, tipo) =>
       .join('')}</optgroup>`)
     .join('');
 
-export const opcoesConta = (selecionada) =>
-  contasAtivas().map((c) => `<option value="${c.id}" ${c.id === selecionada ? 'selected' : ''}>${esc(c.nome)}</option>`).join('');
+/**
+ * Opções do campo Conta: as contas em uso e, no fim, as fora de uso (num grupo à parte).
+ * As fora de uso precisam estar na lista: senão o lançamento já feito nelas abre mostrando
+ * a primeira conta (Dinheiro) e, ao salvar, muda de conta sem ninguém perceber.
+ */
+export const opcoesConta = (selecionada) => {
+  const opcao = (c) => `<option value="${c.id}" ${String(c.id) === String(selecionada) ? 'selected' : ''}>${esc(c.nome)}</option>`;
+  const fora = store.contas.filter((c) => c.ativa === false);
+  return contasAtivas().map(opcao).join('') + (fora.length ? `<optgroup label="Fora de uso">${fora.map(opcao).join('')}</optgroup>` : '');
+};
 
 export const campoValor = (valor, rotulo = 'Valor') => `
   <div data-campo>
