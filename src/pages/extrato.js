@@ -1,5 +1,5 @@
 // Extrato do mês: todos os lançamentos do caixa, com busca, filtros, saldo de cada dia e seleção para somar
-import { brl, esc, dataPorExtenso, hojeISO, mesISO, inicioMes, nomeMes } from '../lib/format.js';
+import { brl, esc, dataPorExtenso, dataCompleta, hojeISO, mesISO, inicioMes, nomeMes } from '../lib/format.js';
 import { store, contasAtivas, categoriasPorGrupo, buscar, contaNoSaldo } from '../lib/store.js';
 import { lancamentosDoExtrato, lancamentosPagos, lancamentosEmAberto, parcelasDoMes, pagamentosDeFatura } from '../lib/api.js';
 import { saidasReais, entradas, somar, dataNoExtrato, saldoAoFimDoDia, faturasAPagar, transferenciasDeFora, agruparPorConta, projecaoDoMes } from '../lib/calculos.js';
@@ -9,9 +9,28 @@ import { itemLancamento, cliqueEmLancamento } from '../components/lancamento.js'
 import { icone, estadoVazio } from '../lib/ui.js';
 
 // Os filtros e a seleção ficam guardados enquanto o sistema estiver aberto
-const filtros = { busca: '', contas: [], categoria: '', situacao: '' };
-const filtroVazio = () => ({ busca: '', contas: [], categoria: '', situacao: '' });
-const filtrando = () => !!(filtros.busca || filtros.contas.length || filtros.categoria || filtros.situacao);
+const filtros = { busca: '', contas: [], categoria: '', situacao: '', de: '', ate: '', periodoMes: '' };
+const filtroVazio = () => ({ busca: '', contas: [], categoria: '', situacao: '', de: '', ate: '', periodoMes: '' });
+const filtrando = () => !!(filtros.busca || filtros.contas.length || filtros.categoria || filtros.situacao || filtros.de || filtros.ate);
+const dataValida = (d) => /^\d{4}-\d{2}-\d{2}$/.test(d || '') && d >= '2000-01-01' && d <= '2100-12-31';
+/** Último dia do mês de uma data "AAAA-MM-DD" */
+const fimDoMes = (iso) => { const [a, m] = iso.split('-').map(Number); return `${iso.slice(0, 8)}${String(new Date(a, m, 0).getDate()).padStart(2, '0')}`; };
+const mesDe = (iso) => { const [a, m] = iso.split('-').map(Number); return new Date(a, m - 1, 1); };
+
+/**
+ * Período do Extrato: o mês do topo inteiro ou as datas escolhidas em "De" e "Até" (podem pegar mais de um mês).
+ * Trocar o mês no topo volta para o mês inteiro.
+ */
+function periodoDaTela() {
+  const inicio = mesISO(store.mes);
+  if (filtros.periodoMes !== inicio) { filtros.de = ''; filtros.ate = ''; filtros.periodoMes = inicio; }
+  let de = dataValida(filtros.de) ? filtros.de : inicio;
+  let ate = dataValida(filtros.ate) ? filtros.ate : fimDoMes(inicio);
+  if (de > ate) [de, ate] = [ate, de];
+  const meses = [];
+  for (let m = mesDe(de); mesISO(m) <= ate; m = inicioMes(m, 1)) meses.push(m);
+  return { de, ate, meses, escolhido: de !== inicio || ate !== fimDoMes(inicio) };
+}
 
 /** Contas do filtro: as que entram no saldo, depois as outras em uso e, no fim, as fora de uso (dá para ver quando quiser) */
 const contasDoFiltro = () => {
@@ -41,6 +60,13 @@ function ligarFecharMenu() {
   });
 }
 const selecao = { ligada: false, ids: new Set() };
+
+/** O que a busca olha: descrição, observação, a pessoa do lançamento e o produtor da Resina */
+const textoDaBusca = (l) => [
+  l.descricao, l.observacao,
+  l.pessoa_id && buscar('pessoas', l.pessoa_id)?.nome,
+  l.resina_produtor_id && (store.resina_produtores || []).find((p) => p.id === l.resina_produtor_id)?.nome,
+].filter(Boolean).join(' ').toLowerCase();
 
 /** Faturas de cartão que faltam pagar, do mês atual até o mês escolhido (para a projeção de um mês que ainda vai chegar) */
 async function faturasAte(mesEscolhido) {
@@ -90,6 +116,7 @@ export default {
   usaMes: true,
   ajuda: `
     <p>Aqui aparecem todas as entradas e saídas do <strong>caixa</strong> (dinheiro, Pix, conta bancária) do mês escolhido no topo.</p>
+    <p><strong>Período</strong>: o Extrato abre com o mês inteiro. Para ver só alguns dias, mude as datas em <strong>De</strong> e <strong>Até</strong> e toque em <strong>Filtrar</strong> (pode pegar mais de um mês, por exemplo de 15/07 a 15/08). <strong>Mês inteiro</strong> volta ao normal; trocar o mês no topo também.</p>
     <p>O que já foi <strong>pago ou recebido</strong> aparece no dia e no mês do pagamento (uma parcela de dezembro paga em novembro fica em novembro). O que está <strong>em aberto</strong> aparece no dia do vencimento.</p>
     <p>Dentro de cada dia, os lançamentos ficam <strong>separados por conta</strong> (tudo do Dinheiro, depois tudo do Nubank etc.), com o saldo de cada conta no fim do dia. Numa transferência, a saída fica na conta de onde o dinheiro saiu e a entrada na conta para onde ele foi.</p>
     <p>Ao lado de cada dia aparece o <strong>saldo</strong>: quanto havia nas contas no fim daquele dia (saldo inicial + tudo que foi pago ou recebido até ele), como no extrato do banco. Se escolher uma ou mais contas no filtro, é o saldo só delas (somado). O que está em aberto não entra no saldo.</p>
@@ -97,27 +124,35 @@ export default {
     <p>Para somar alguns lançamentos, toque em <strong>Selecionar para somar</strong> e marque as caixinhas. A soma aparece na barra de baixo. A caixinha ao lado do dia marca o dia inteiro.</p>
     <p>As compras no cartão de crédito ficam na tela <strong>Cartões</strong>. A <strong>fatura</strong> de cada cartão aparece aqui como uma saída a pagar no dia do vencimento, com o que falta pagar (já sem os adiantamentos). Os <strong>adiantamentos</strong> aparecem no dia em que foram pagos. Toque no círculo da fatura para pagá-la; depois de paga, aparece o pagamento no dia em que foi feito.</p>
     <p><strong>Transferências</strong> entre contas (saque, Pix de uma conta para outra) aparecem duas vezes: a saída na conta de origem e a entrada na de destino, com o ícone de setas. Não entram em Entradas e Saídas, porque o dinheiro só mudou de conta. Se você filtrar só uma conta, a transferência para outra conta entra como saída (ou entrada) dela. Toque numa delas para mudar ou excluir a transferência inteira.</p>
-    <p>Use a <strong>busca</strong> e os filtros para achar algo rápido. No filtro de contas dá para marcar <strong>mais de uma conta</strong>. Sem nenhuma marcada, aparecem só as contas que estão <strong>No saldo</strong> (Ajustes &gt; Contas), como no Início; as outras aparecem quando você marcar no filtro. A fatura do cartão que falta pagar ainda não tem conta: ela aparece quando nenhuma conta está marcada no filtro. Toque num lançamento para editar ou excluir. Toque no círculo para marcar como pago.</p>`,
+    <p>Use a <strong>busca</strong> e os filtros para achar algo rápido. A busca procura na descrição, na observação, na <strong>pessoa</strong> e no <strong>produtor</strong> (digite o nome para ver tudo dele). No filtro de contas dá para marcar <strong>mais de uma conta</strong>. Sem nenhuma marcada, aparecem só as contas que estão <strong>No saldo</strong> (Ajustes &gt; Contas), como no Início; as outras aparecem quando você marcar no filtro. A fatura do cartão que falta pagar ainda não tem conta: ela aparece quando nenhuma conta está marcada no filtro. Toque num lançamento para editar ou excluir. Toque no círculo para marcar como pago.</p>`,
 
   async render(el, ctx) {
-    const mes = mesISO(store.mes);
+    const periodo = periodoDaTela();
+    const mes = periodo.de;
     // conta excluída sai do filtro (a fora de uso continua: ela aparece no menu)
     filtros.contas = filtros.contas.filter((id) => store.contas.some((c) => String(c.id) === id));
     ligarFecharMenu();
-    const [doMes, pagos, parcelas, pagamentosFatura, abertos, faturasPrevistas] = await Promise.all([
-      lancamentosDoExtrato(), lancamentosPagos(), parcelasDoMes(), pagamentosDeFatura(), lancamentosEmAberto(), faturasAte(store.mes)]);
+    const [porMes, pagos, abertos, faturasPrevistas] = await Promise.all([
+      Promise.all(periodo.meses.map(async (m) => {
+        const [doMes, parcelas, pagamentosFatura] = await Promise.all([lancamentosDoExtrato(m), parcelasDoMes(m), pagamentosDeFatura(m)]);
+        // a fatura do cartão que falta pagar entra como saída "a pagar" no dia do vencimento (o pagamento e os adiantamentos já são lançamentos)
+        const faturas = faturasAPagar(store.cartoes, parcelas, pagamentosFatura, mesISO(m), vencimentoFatura)
+          .map((f) => (periodo.meses.length > 1 ? { ...f, id: `${f.id}:${mesISO(m)}` } : f));
+        return [...doMes, ...faturas];
+      })),
+      lancamentosPagos(), lancamentosEmAberto(), faturasAte(periodo.meses.at(-1))]);
     if (!ctx.aindaAtual()) return;
-    // a fatura do cartão que falta pagar entra como saída "a pagar" no dia do vencimento (o pagamento e os adiantamentos já são lançamentos)
-    const lancamentos = [...doMes, ...faturasAPagar(store.cartoes, parcelas, pagamentosFatura, mes, vencimentoFatura)]
+    const lancamentos = [...new Map(porMes.flat().map((l) => [l.id, l])).values()]
+      .filter((l) => { const d = dataNoExtrato(l); return d >= periodo.de && d <= periodo.ate; })
       .sort((a, b) => dataNoExtrato(a).localeCompare(dataNoExtrato(b)));
 
     el.innerHTML = `
       <div class="animate-entrar">
         <div class="mb-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-4" role="search">
           <div class="relative sm:col-span-2 lg:col-span-1">
-            <label for="f-busca" class="sr-only">Buscar pela descrição ou observação</label>
+            <label for="f-busca" class="sr-only">Buscar pela descrição, observação, pessoa ou produtor</label>
             <span class="pointer-events-none absolute inset-y-0 left-3 flex items-center text-stone-400">${icone('busca')}</span>
-            <input id="f-busca" type="search" class="campo pl-10" placeholder="Buscar…" value="${esc(filtros.busca)}" autocomplete="off">
+            <input id="f-busca" type="search" class="campo pl-10" placeholder="Buscar (descrição, pessoa, produtor)…" value="${esc(filtros.busca)}" autocomplete="off">
           </div>
           <details class="group relative" data-filtro-contas>
             <summary class="campo flex cursor-pointer list-none items-center gap-2 [&::-webkit-details-marker]:hidden" aria-label="Filtrar por conta: ${esc(rotuloContas())}">
@@ -137,6 +172,14 @@ export default {
             <select id="f-f-sit" data-filtro="situacao" class="campo">
               ${[['', 'Pagos e em aberto'], ['aberto', 'Só em aberto'], ['pago', 'Só pagos'], ['entrada', 'Só entradas'], ['saida', 'Só saídas']]
                 .map(([v, t]) => `<option value="${v}" ${v === filtros.situacao ? 'selected' : ''}>${t}</option>`).join('')}</select></div>
+          <fieldset class="flex flex-wrap items-end gap-2 sm:col-span-2 lg:col-span-4" data-periodo>
+            <legend class="sr-only">Período do extrato</legend>
+            <div class="min-w-36 flex-1 sm:flex-none"><label for="f-de" class="rotulo text-xs">De</label><input id="f-de" type="date" class="campo" data-periodo-campo="de" value="${periodo.de}"></div>
+            <div class="min-w-36 flex-1 sm:flex-none"><label for="f-ate" class="rotulo text-xs">Até</label><input id="f-ate" type="date" class="campo" data-periodo-campo="ate" value="${periodo.ate}"></div>
+            <button type="button" class="btn-sec" data-filtrar-periodo>${icone('busca')} Filtrar</button>
+            ${periodo.escolhido ? `<button type="button" class="btn-neutro" data-mes-inteiro>${icone('x')} Mês inteiro</button>` : ''}
+            <p class="dica w-full" data-periodo-erro hidden role="alert"></p>
+          </fieldset>
         </div>
         <div id="resultado"></div>
       </div>
@@ -177,7 +220,7 @@ export default {
       const naTela = contasNaTela();
       const idsNaTela = new Set(naTela);
       visiveis = lancamentos.filter((l) =>
-        (!termo || `${l.descricao} ${l.observacao || ''}`.toLowerCase().includes(termo)) &&
+        (!termo || textoDaBusca(l).includes(termo)) &&
         // o que ainda não tem conta (a fatura do cartão a pagar) só aparece sem conta marcada no filtro:
         // escolhendo uma conta, a tela mostra só o que é dela
         (l.conta_id ? idsNaTela.has(String(l.conta_id)) : !filtros.contas.length) &&
@@ -197,7 +240,7 @@ export default {
         .map((id) => [id, saldoAoFimDoDia(diasPassados, pagos, store.contas.filter((c) => c.id === id))]) : []);
       // projeção do caixa (só pelas contas da tela; a busca e os outros filtros não mudam a projeção).
       // As faturas dos cartões ainda não têm conta: entram quando não há conta marcada no filtro.
-      const fimMes = mesISO(store.mes, 1);
+      const fimMes = mesISO(mesDe(periodo.ate), 1);
       const comFaturas = !filtros.contas.length;
       const proj = projecaoDoMes({ pagos, abertos, faturas: faturasPrevistas, comFaturas, contas, inicio: mes, fim: fimMes, hoje });
       const itensDaLista = (lista) => lista.map((l) => itemLancamento(l, { selecao: selecao.ligada ? selecao.ids.has(l.id) : undefined })).join('');
@@ -212,7 +255,9 @@ export default {
              [`Saldo (${visiveis.length} ${visiveis.length === 1 ? 'lançamento' : 'lançamentos'})`, brl(ent - sai), ent - sai < 0 ? 'valor-saida' : '']]
             .map(([r, v, c]) => `<div class="flex flex-wrap items-baseline justify-between gap-x-3 sm:block"><dt class="text-stone-600 dark:text-stone-400">${r}</dt><dd class="font-semibold tabular-nums ${c}">${v}</dd></div>`).join('')}
         </dl>
-        ${quadroProjecao(proj, { inicio: mes, fim: fimMes, hoje, mesEscolhido: store.mes, comFaturas })}
+        ${periodo.escolhido
+          ? `<p class="mb-3 text-sm text-stone-600 dark:text-stone-400" data-periodo-aviso>Mostrando de <strong>${dataCompleta(periodo.de)}</strong> até <strong>${dataCompleta(periodo.ate)}</strong>. A projeção do caixa aparece com o mês inteiro.</p>`
+          : quadroProjecao(proj, { inicio: mes, fim: fimMes, hoje, mesEscolhido: store.mes, comFaturas })}
         ${visiveis.length && !selecao.ligada ? `<div class="mb-3 flex justify-end"><button type="button" class="btn-neutro" data-sel-entrar>${icone('check')} Selecionar para somar</button></div>` : ''}
         ${visiveis.length
           ? [...porDia].map(([dia, itens]) => {
@@ -241,13 +286,23 @@ export default {
           }).join('')
           : `<div class="card">${filtrando()
               ? estadoVazio('Nada encontrado', 'Nenhum lançamento combina com a busca ou os filtros.', '<button type="button" class="btn-sec" data-limpar>Limpar filtros</button>')
-              : estadoVazio('Nenhum lançamento neste mês', 'Use o botão Novo lançamento para registrar entradas e saídas.', '<a href="#novo" class="btn-primario">Novo lançamento</a>')}</div>`}
+              : estadoVazio(periodo.escolhido ? 'Nenhum lançamento neste período' : 'Nenhum lançamento neste mês', 'Use o botão Novo lançamento para registrar entradas e saídas.', '<a href="#novo" class="btn-primario">Novo lançamento</a>')}</div>`}
         ${selecao.ligada ? '<div class="h-24" aria-hidden="true"></div>' : ''}`;
       desenharBarra();
     };
     desenharLista();
 
     el.querySelector('#f-busca').oninput = (e) => { filtros.busca = e.target.value; desenharLista(); };
+    // o período só vale ao tocar em Filtrar (ou Enter): enquanto digita a data, a tela não muda
+    const filtrarPeriodo = () => {
+      const de = el.querySelector('#f-de'), ate = el.querySelector('#f-ate'), erro = el.querySelector('[data-periodo-erro]');
+      const ruim = [de, ate].find((x) => !dataValida(x.value));
+      [de, ate].forEach((x) => x.toggleAttribute('aria-invalid', x === ruim));
+      if (ruim) { erro.textContent = 'Escolha uma data válida em "De" e em "Até".'; erro.hidden = false; return ruim.focus(); }
+      filtros.de = de.value; filtros.ate = ate.value;
+      return ctx.atualizar();
+    };
+    el.querySelectorAll('[data-periodo-campo]').forEach((x) => x.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); filtrarPeriodo(); } }));
     const menuContas = el.querySelector('[data-filtro-contas]');
     menuContas.onkeydown = (e) => {
       if (e.key === 'Escape' && menuContas.open) { e.preventDefault(); e.stopPropagation(); menuContas.open = false; menuContas.querySelector('summary').focus(); }
@@ -267,6 +322,7 @@ export default {
       }
       const f = e.target.dataset.filtro;
       if (f) { filtros[f] = e.target.value; desenharLista(); return; }
+
       const { sel, selDia } = e.target.dataset;
       if (sel || selDia) {
         const ids = sel ? [sel] : visiveis.filter((l) => dataNoExtrato(l) === selDia).map((l) => l.id);
@@ -278,8 +334,13 @@ export default {
       }
     };
     el.onclick = async (e) => {
+      if (e.target.closest('[data-filtrar-periodo]')) return filtrarPeriodo();
+      if (e.target.closest('[data-mes-inteiro]')) {
+        filtros.de = ''; filtros.ate = '';
+        return ctx.atualizar();
+      }
       if (e.target.closest('[data-limpar]')) {
-        Object.assign(filtros, filtroVazio());
+        Object.assign(filtros, filtroVazio(), { periodoMes: filtros.periodoMes });
         return ctx.atualizar();
       }
       if (e.target.closest('[data-sel-entrar]')) {

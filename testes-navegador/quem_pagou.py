@@ -106,9 +106,22 @@ async def main():
         c = await conta_corrente(pg, 'Conta Zeca')
         ok('desmarcar: some o crédito da Conta Zeca', 'Recebido no Caixa' not in c, c[:900])
 
+        # ---------- busca do Extrato acha pelo produtor, mesmo sem o nome na descrição
+        await ir(pg, 'extrato'); await pg.wait_for_timeout(400)
+        await pg.locator('#conteudo li', has_text='Zeca').locator('[data-editar]').click(); await pg.wait_for_selector(f'{D} #f-descricao')
+        await pg.fill(f'{D} #f-descricao', 'Parte dos insumos da nota')
+        cat = await pg.locator(f'{D} #f-categoria option[value]:not([value=""])').first.get_attribute('value')
+        await pg.select_option(f'{D} #f-categoria', cat)
+        await pg.click(f'{D} button[type=submit]'); await pg.wait_for_timeout(800)
+        await ir(pg, 'extrato'); await pg.wait_for_timeout(400)
+        await pg.fill('#f-busca', 'zeca'); await pg.wait_for_timeout(300)
+        achados = await pg.locator('#resultado [data-editar]').all_inner_texts()
+        ok('busca pelo produtor acha a parte dele', len(achados) == 1 and 'Parte dos insumos' in achados[0], achados)
+        await pg.fill('#f-busca', ''); await pg.wait_for_timeout(200)
+
         # ---------- receber pelo Extrato também aparece marcado na nota
         await ir(pg, 'extrato'); await pg.wait_for_timeout(400)
-        await pg.locator('#conteudo li', has_text='Zeca').locator('[data-pagar]').click(); await pg.wait_for_timeout(800)
+        await pg.locator('#conteudo li', has_text='Parte dos insumos').locator('[data-pagar]').click(); await pg.wait_for_timeout(800)
         await abrir_nota(pg)
         ok('recebido no Extrato aparece marcado', await pago(pg, 'Zeca').locator('[data-pg=pago]').is_checked())
 
