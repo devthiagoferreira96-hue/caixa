@@ -73,7 +73,7 @@ async def main():
         ok('conta corrente: crédito do Caixa aparece', 'Recebido no Caixa' in c and '500,00' in c, c[:1500])
         # mudar a entrega depois de recebida mantém recebido
         await ir(pg, 'insumos'); await pg.click('[data-entrega] >> text=João'); await pg.wait_for_selector('dialog[open] [data-c=pct]')
-        ok('entrega mostra que já foi recebido', 'Já foi recebido' in await pg.inner_text('dialog[open]'))
+        ok('entrega mostra que já foi recebido', await pg.locator('dialog[open] [data-pago]', has_text='João').locator('[data-pg=pago]').is_checked())
         await pg.click('dialog[open] button[type=submit]'); await pg.wait_for_timeout(800)
         await ir(pg, 'inicio'); await pg.wait_for_timeout(500)
         ok('salvar de novo não reabre o falta receber', 'Falta receber' not in await conteudo(pg))

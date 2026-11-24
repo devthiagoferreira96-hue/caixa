@@ -5,7 +5,7 @@ import { icone, estadoVazio, toast, confirmar, dialogo, mascaraDinheiro, erroNoC
 import { desfazendo } from '../../components/lancamento.js';
 import { insumosEntre, salvarInsumos, excluirInsumos } from './dados.js';
 import { totalDoInsumo, pctDoProdutor, parteDoProdutor, divisaoDaEntrega, divisaoPorConta } from './calculos.js';
-import { camposPagamentoInsumos, ligarPagamentoInsumos, lerPagamentoInsumos, gravarPagamentoInsumos, desligar, lerLigacao, camposAReceber, ligarAReceber, lerAReceber, gravarAReceber } from './ligacao-caixa.js';
+import { camposPagamentoInsumos, ligarPagamentoInsumos, lerPagamentoInsumos, gravarPagamentoInsumos, desligar, lerLigacao, camposAReceber, ligarAReceber, lerAReceber, gravarAReceber, desenharPagos } from './ligacao-caixa.js';
 import { numero, quadro, bolinha, nomeProdutor, corProdutor, nomeTitular, seDesligado } from './comum.js';
 
 export const produto = (id) => store.resina_produtos.find((p) => p.id === id);
@@ -188,7 +188,7 @@ async function editarEntrega(entrega, ctx) {
   const f = d.querySelector('form');
   const ul = f.querySelector('[data-linhas]');
   ligarPagamentoInsumos(f);
-  ligarAReceber(f);
+  ligarAReceber(f, ligacao.receber);
 
   const opcoesProduto = (l) => `<option value="">Escolha…</option>${store.resina_produtos.filter((p) => p.ativo !== false || p.id === l.produto_id).map((p) =>
     `<option value="${p.id}" ${p.id === l.produto_id ? 'selected' : ''}>${esc(p.nome)} (${esc(p.unidade)})</option>`).join('')}`;
@@ -231,6 +231,10 @@ async function editarEntrega(entrega, ctx) {
     const doProdutores = divisao.reduce((s, x) => s + x.parte, 0);
     f.querySelector('[data-divisao]').innerHTML = divisao.length && validas.length === linhas.length
       ? `${divisao.map((x) => `<li>Cobrado de ${esc(nomeProdutor(x.produtor_id))}${titulares.length && x.titular_id ? ` (${esc(nomeTitular(x.titular_id))})` : ''}: ${brl(x.parte)}</li>`).join('')}<li>Fica com a proprietária: ${brl(total - doProdutores)}</li>` : '';
+    desenharPagos(f, validas.length === linhas.length ? divisao.filter((x) => x.parte > 0).map((x) => ({
+      produtor_id: x.produtor_id, titular_id: x.titular_id, valor: x.parte,
+      rotulo: `${nomeProdutor(x.produtor_id)}${titulares.length && x.titular_id ? ` (${nomeTitular(x.titular_id)})` : ''}`,
+    })) : []);
   };
   const campoDe = (l, c) => ul.querySelector(`[data-linha="${l.chave}"] [data-c="${c}"]`);
   desenhar();

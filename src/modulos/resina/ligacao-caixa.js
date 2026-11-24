@@ -5,7 +5,7 @@
 // O que foi lançado no Caixa guarda de onde veio (resina_movimento_id / resina_entrega_id):
 // mudar ou excluir na Resina muda ou exclui no Caixa também.
 // =====================================================================
-import { esc } from '../../lib/format.js';
+import { esc, brl, hojeISO } from '../../lib/format.js';
 import { store, contasAtivas, cartoesAtivos } from '../../lib/store.js';
 import { local } from '../../lib/local-db.js';
 import { criarLancamentos, excluirLancamentos, criarCompra, excluirCompra, atualizarLancamento } from '../../lib/api.js';
@@ -122,6 +122,9 @@ export async function gravarRecebimento(mov, escolha, texto) {
 }
 
 // ---------- Parte do produtor nos insumos → entrada "a receber" no Caixa
+const chavePago = (produtorId, titularId) => `${produtorId || ''}|${titularId || ''}`;
+const pagosDoForm = new WeakMap();
+
 /** Campos do "a receber". `ligado` = a entrada que já existe (ou undefined) */
 export function camposAReceber(ligado) {
   if (!contasAtivas().length) return '';
@@ -132,23 +135,70 @@ export function camposAReceber(ligado) {
     <legend class="px-1 text-sm font-semibold">Caixa da Família: parte do produtor</legend>
     <label class="flex cursor-pointer items-start gap-3"><input type="checkbox" name="cx_receber" class="mt-0.5 size-5 accent-brand-600" ${marcado ? 'checked' : ''}>
       <span><span class="block font-semibold">Lançar a parte de cada produtor como "a receber" no Caixa</span>
-      <span class="block text-sm text-stone-600 dark:text-stone-400">Uma entrada para cada produtor da nota. Quando ele pagar, marque como recebido no Extrato: o dinheiro entra no saldo e a conta corrente baixa sozinha.${ligado?.pago ? ' <strong>Já foi recebido (pelo menos um).</strong>' : ''}</span></span></label>
+      <span class="block text-sm text-stone-600 dark:text-stone-400">Uma entrada para cada produtor da nota. Quando ele pagar, marque em <strong>Quem já pagou</strong> (aqui embaixo) ou como recebido no Extrato: o dinheiro entra no saldo e a conta corrente baixa sozinha.</span></span></label>
     <div class="grid gap-3 sm:grid-cols-3" data-receber-campos>
       <div data-campo><label class="rotulo" for="cx-data-r">Quando vai receber?</label><input id="cx-data-r" name="cx_data_receber" type="date" class="campo" value="${ligado?.vencimento || ''}" ${ligado ? 'data-mexido' : ''} aria-describedby="dica-cx-data-r">
-        <p id="dica-cx-data-r" class="dica mt-1">${ligado?.pago ? 'Quem já pagou fica com a data em que pagou; a data nova vale para quem ainda não pagou.' : 'Vem com o vencimento da nota. Mude se ele for pagar em outro dia.'}</p></div>
+        <p id="dica-cx-data-r" class="dica mt-1">Para quem ainda não pagou. Vem com o vencimento da nota; mude se ele for pagar em outro dia.</p></div>
       <div data-campo><label class="rotulo" for="cx-conta-r">Vai entrar em qual conta?</label><select id="cx-conta-r" name="cx_conta_receber" class="campo">${opcoesConta(conta)}</select></div>
       <div data-campo><label class="rotulo" for="cx-cat-r">Categoria de entrada <span class="font-normal text-stone-600 dark:text-stone-400">(opcional)</span></label><select id="cx-cat-r" name="cx_cat_receber" class="campo">${opcoesCategoria(cat, 'entrada')}</select></div>
+      <div class="sm:col-span-3" data-receber-pagos hidden>
+        <p class="rotulo">Quem já pagou</p>
+        <p class="dica mb-2">Marque o produtor que já pagou a parte dele e escolha a data e a conta (das cadastradas em Contas) em que ele pagou. Quem não estiver marcado fica a receber.</p>
+        <ul class="grid gap-2" data-pagos-lista></ul>
+      </div>
     </div>
   </fieldset>`;
+}
+
+/**
+ * Desenha uma linha por produtor (e conta) da nota em "Quem já pagou".
+ * `partes` = [{ produtor_id, titular_id, valor, rotulo }]. O que foi marcado fica guardado enquanto o diálogo está aberto.
+ */
+export function desenharPagos(form, partes) {
+  const area = form.querySelector('[data-receber-pagos]');
+  const estado = pagosDoForm.get(form);
+  if (!area || !estado) return;
+  const assinatura = partes.map((p) => `${chavePago(p.produtor_id, p.titular_id)}=${p.valor}=${p.rotulo}`).join(';');
+  if (area.dataset.assinatura === assinatura) return;
+  area.dataset.assinatura = assinatura;
+  area.hidden = !partes.length;
+  area.querySelector('[data-pagos-lista]').innerHTML = partes.map((p, n) => {
+    const k = chavePago(p.produtor_id, p.titular_id);
+    const e = estado.get(k) || {};
+    return `<li class="rounded-xl border border-stone-200 p-3 dark:border-stone-700" data-pago="${esc(k)}">
+      <label class="flex cursor-pointer items-center gap-3"><input type="checkbox" name="pg_ok_${n}" class="size-5 accent-brand-600" data-pg="pago" ${e.pago ? 'checked' : ''}>
+        <span class="min-w-0 flex-1 font-semibold">${esc(p.rotulo)} já pagou</span><span class="font-semibold tabular-nums">${brl(p.valor)}</span></label>
+      <div class="mt-2 grid gap-2 sm:grid-cols-2" data-pg-campos ${e.pago ? '' : 'hidden'}>
+        <div data-campo><label class="rotulo text-xs" for="pg-d-${n}">Pagou em</label><input id="pg-d-${n}" name="pg_data_${n}" type="date" class="campo" data-pg="data" value="${esc(e.data || '')}"></div>
+        <div data-campo><label class="rotulo text-xs" for="pg-c-${n}">Em qual conta ele pagou?</label><select id="pg-c-${n}" name="pg_conta_${n}" class="campo" data-pg="conta_id">${opcoesConta(e.conta_id || form.cx_conta_receber?.value)}</select></div>
+      </div>
+    </li>`;
+  }).join('');
 }
 
 /**
  * Mostra/esconde os campos. A data de receber acompanha o vencimento da nota (campo do pagamento)
  * e a data da compra, até a pessoa mudar ela mesma.
  */
-export function ligarAReceber(form) {
+export function ligarAReceber(form, entradas = []) {
   const area = form.querySelector('[data-caixa-receber]');
   if (!area) return;
+  const estado = new Map(entradas.filter((l) => l.pago).map((l) => [chavePago(l.resina_produtor_id, l.resina_titular_id), { pago: true, data: l.data_pagamento || l.vencimento, conta_id: l.conta_id }]));
+  pagosDoForm.set(form, estado);
+  area.querySelector('[data-receber-pagos]').addEventListener('change', (e) => {
+    const li = e.target.closest('[data-pago]');
+    const c = e.target.dataset.pg;
+    if (!li || !c) return;
+    const k = li.dataset.pago;
+    const atual = estado.get(k) || {};
+    if (c === 'pago') {
+      atual.pago = e.target.checked;
+      if (atual.pago && !atual.data) { atual.data = hojeISO(); li.querySelector('[data-pg=data]').value = atual.data; }
+      if (!atual.conta_id) atual.conta_id = li.querySelector('[data-pg=conta_id]').value;
+      li.querySelector('[data-pg-campos]').hidden = !atual.pago;
+    } else atual[c] = e.target.value;
+    estado.set(k, atual);
+  });
   const campo = form.cx_data_receber;
   const sugerida = () => (form.querySelector('[name=cx_modo]:checked')?.value === 'saida' && form.cx_vencimento?.value) || form.data?.value || '';
   // lançados antes deste campo ficaram com a data da compra: esses passam a acompanhar o vencimento da nota
@@ -166,7 +216,16 @@ export function lerAReceber(form, erroNoCampo) {
   if (!form.cx_receber || !form.cx_receber.checked) return { sem: true };
   if (!/^\d{4}-\d{2}-\d{2}$/.test(form.cx_data_receber.value)) { erroNoCampo(form, 'cx_data_receber', 'Escolha quando vai receber.'); return null; }
   if (!form.cx_conta_receber.value) { erroNoCampo(form, 'cx_conta_receber', 'Escolha a conta.'); return null; }
-  return { conta_id: form.cx_conta_receber.value, categoria_id: form.cx_cat_receber.value || null, vencimento: form.cx_data_receber.value };
+  const pagos = new Map();
+  for (const li of form.querySelectorAll('[data-receber-pagos]:not([hidden]) [data-pago]')) {
+    if (!li.querySelector('[data-pg=pago]').checked) continue;
+    const data = li.querySelector('[data-pg=data]');
+    const conta = li.querySelector('[data-pg=conta_id]');
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(data.value)) { erroNoCampo(form, data.name, 'Escolha a data em que ele pagou.'); data.focus(); return null; }
+    if (!conta.value) { erroNoCampo(form, conta.name, 'Escolha a conta em que entrou.'); conta.focus(); return null; }
+    pagos.set(li.dataset.pago, { data: data.value, conta_id: conta.value });
+  }
+  return { conta_id: form.cx_conta_receber.value, categoria_id: form.cx_cat_receber.value || null, vencimento: form.cx_data_receber.value, pagos };
 }
 
 /**
@@ -203,7 +262,14 @@ export async function gravarAReceber(entregaId, escolha, partes = [], comum = {}
       tipo: 'entrada', valor: p.valor, descricao: p.texto.slice(0, 120), conta_id: escolha.conta_id, categoria_id: escolha.categoria_id,
       resina_titular_id: conta(p), resina_produtor_id: p.produtor_id || null, resina_nota: comum.nota || '',
     };
-    if (l) voltar.push((await atualizarLancamento(l.id, l.pago ? valores : { ...valores, vencimento: comum.data })).desfazer);
+    if (escolha.pagos) {
+      const pg = escolha.pagos.get(chavePago(p.produtor_id, conta(p)));
+      const situacao = pg
+        ? { conta_id: pg.conta_id, pago: true, data_pagamento: pg.data, vencimento: l?.pago ? l.vencimento : comum.data }
+        : { pago: false, data_pagamento: null, vencimento: comum.data };
+      if (l) voltar.push((await atualizarLancamento(l.id, { ...valores, ...situacao })).desfazer);
+      else criar.push({ ...valores, ...situacao, pessoa_id: null, resina_receber_id: entregaId });
+    } else if (l) voltar.push((await atualizarLancamento(l.id, l.pago ? valores : { ...valores, vencimento: comum.data })).desfazer);
     else criar.push({ ...valores, vencimento: comum.data, pago: false, data_pagamento: null, pessoa_id: null, resina_receber_id: entregaId });
   }
   if (sobra.length) voltar.push(await excluirLancamentos(sobra.map((x) => x.id)));
