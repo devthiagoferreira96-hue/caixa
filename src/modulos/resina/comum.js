@@ -4,8 +4,11 @@ import { store } from '../../lib/store.js';
 import { icone } from '../../lib/ui.js';
 import { resinaAtiva } from './dados.js';
 
-export const kg = (v) => `${Math.round(v || 0).toLocaleString('pt-BR')} kg`;
+/** kg com até 2 casas: 5563,5 kg (não arredonda para 5.564, senão kg × preço não bate com o valor) */
+export const kg = (v) => `${(Math.round((v || 0) * 100) / 100).toLocaleString('pt-BR', { maximumFractionDigits: 2 })} kg`;
 export const numero = (v, casas = 0) => (v || 0).toLocaleString('pt-BR', { maximumFractionDigits: casas });
+/** Média de kg por Tb: sempre com 2 casas (198,70), para a conta média × Tbs bater */
+export const media = (v) => (v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 export const pct = (v) => `${(v || 0).toLocaleString('pt-BR', { maximumFractionDigits: 1 })}%`;
 
 export const produtor = (id) => store.resina_produtores.find((p) => p.id === id);

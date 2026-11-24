@@ -135,7 +135,7 @@ async def main():
         ok('totais: 21 Tbs e 3.085 kg', '21' in tot and '3.085 kg' in tot, tot)
         ok('valor total', 'R$ 15.733,50' in tot, tot)
         kg0 = await pg.locator('[data-item] [data-campo-item=kg_manual]').first.input_value()
-        ok('kg automático pelos Tbs', kg0 == '1763', kg0)
+        ok('kg automático pelos Tbs', kg0 == '1762.86', kg0)
         # kg manual
         await pg.locator('[data-item] [data-campo-item=kg_manual]').first.fill('2000'); await pg.wait_for_timeout(200)
         await pg.locator('#c-obs').click()
@@ -147,7 +147,7 @@ async def main():
         await pg.click('button[type=submit]'); await pg.wait_for_timeout(400)
         ok('não salva com kg maior que o peso', 'passam do peso' in await ultimo_toast(pg))
         await pg.locator('[data-item] [data-kg-auto]').first.click(); await pg.wait_for_timeout(200)
-        ok('↺ volta ao automático', await pg.locator('[data-item] [data-campo-item=kg_manual]').first.input_value() == '1763')
+        ok('↺ volta ao automático', await pg.locator('[data-item] [data-campo-item=kg_manual]').first.input_value() == '1762.86')
         # peso fazenda como base
         await pg.check('input[name=peso_base][value=fazenda]'); await pg.wait_for_timeout(200)
         ok('peso da fazenda vale', '3.130 kg' in await pg.inner_text('[data-totais]'))
@@ -196,6 +196,8 @@ async def main():
 
         # 7. editar carga
         await ir(pg, 'cargas')
+        linha = await pg.locator('a[href^="#carga/"]').filter(has_text='C-2026-0001').inner_text()
+        ok('lista de cargas mostra o nome dos produtores', all(n in linha for n in ['João', 'Pedro', 'Antônio']) and 'produtores' not in linha, linha)
         await pg.click('a[href^="#carga/"] >> text=C-2026-0001'); await pg.wait_for_timeout(2600)
         ok('abre a carga para editar', (await pg.inner_text('#titulo-pagina')) == 'Carga' and await pg.locator('[data-item]').count() == 3)
         ok('obs guardada', await pg.input_value('#c-obs') == 'Primeira carga do teste')

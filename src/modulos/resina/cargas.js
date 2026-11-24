@@ -4,7 +4,14 @@ import { store } from '../../lib/store.js';
 import { icone, estadoVazio } from '../../lib/ui.js';
 import { cargasDoMes } from './dados.js';
 import { calcularCarga, codigoCarga, resumoDasCargas } from './calculos.js';
-import { kg, numero, quadro, motorista, caminhao, titular, faixaProdutores, seDesligado } from './comum.js';
+import { kg, numero, quadro, motorista, caminhao, titular, faixaProdutores, nomeProdutor, seDesligado } from './comum.js';
+
+/** Nomes dos produtores da carga: "Marcos", "Marcos e João", "Marcos, João e Pedro" ou "Marcos, João, Pedro e mais 2" */
+function nomesDosProdutores(itens) {
+  const nomes = [...new Set(itens.map((i) => nomeProdutor(i.produtor_id)))];
+  if (nomes.length <= 3) return nomes.length > 1 ? `${nomes.slice(0, -1).join(', ')} e ${nomes.at(-1)}` : nomes[0] || '';
+  return `${nomes.slice(0, 3).join(', ')} e mais ${nomes.length - 3}`;
+}
 
 export default {
   titulo: 'Cargas',
@@ -39,7 +46,7 @@ export default {
           <div class="flex flex-wrap items-start justify-between gap-x-3 gap-y-1">
             <div class="min-w-0">
               <p class="font-semibold">${codigoCarga(c)} <span class="font-normal text-stone-600 dark:text-stone-400">· ${dataCompleta(c.data)}</span></p>
-              <p class="truncate text-sm text-stone-600 dark:text-stone-400">${[m?.nome, cam ? cam.nome : null, `${itens.length} ${itens.length === 1 ? 'produtor' : 'produtores'}`].filter(Boolean).map(esc).join(' · ')}</p>
+              <p class="truncate text-sm text-stone-600 dark:text-stone-400" title="${esc([...new Set(itens.map((i) => nomeProdutor(i.produtor_id)))].join(', '))}">${[m?.nome, cam ? cam.nome : null, nomesDosProdutores(itens)].filter(Boolean).map(esc).join(' · ')}</p>
             </div>
             <p class="sm:text-right"><span class="block font-bold tabular-nums">${brl(r.totais.valor)}</span><span class="text-sm tabular-nums text-stone-600 dark:text-stone-400">${numero(r.totais.tbs)} Tbs · ${kg(r.totais.kg)}</span></p>
           </div>

@@ -16,7 +16,7 @@ import { linhasContaCorrente, extratoContaCorrente } from './calculos.js';
 import { gerarExcelConta, descricaoDaLinha } from './exportar-conta.js';
 import { gerarPdfConta } from './exportar-conta-pdf.js';
 import { TIPOS_MOVIMENTO } from './tabelas.js';
-import { numero, pct, quadro, bolinha, nomeProdutor, corProdutor, titular, nomeTitular, seDesligado } from './comum.js';
+import { numero, media, pct, quadro, bolinha, nomeProdutor, corProdutor, titular, nomeTitular, seDesligado } from './comum.js';
 
 const SEM_CONTA = 'sem';
 const filtro = { conta: null, produtor: '' }; // continua escolhido ao trocar de mês
@@ -193,7 +193,7 @@ function linhaTabela(l) {
     <td class="${td}">${c ? numero(l.tbs) : ''}</td>
     <td class="${td}">${c ? pct(l.pct) : ''}</td>
     <td class="${td}">${c ? numero(l.kg, 2) : ins ? numero(l.quantidade, 3) : ''}</td>
-    <td class="${td}">${c && l.media != null ? numero(l.media, 2) : ''}</td>
+    <td class="${td}">${c && l.media != null ? media(l.media) : ''}</td>
     <td class="${td}">${c ? moeda(l.preco) : ins ? moeda(l.valor_unitario) : ''}</td>
     <td class="${td} text-brand-800 dark:text-brand-300">${valorOuTraco(l.credito)}</td>
     <td class="${td} text-amber-800 dark:text-amber-300">${valorOuTraco(l.debito)}</td>
@@ -208,7 +208,7 @@ function linhaCartao(l) {
       <div class="min-w-0">${descricaoHTML(l)}
         <p class="mt-0.5 text-stone-600 dark:text-stone-400">${[dataCompleta(l.data), l.nota ? `Nota ${l.nota}` : '', l.destino].filter(Boolean).map(esc).join(' · ')}</p>
         ${l.tipo === 'insumo' ? `<p class="mt-0.5 tabular-nums text-stone-600 dark:text-stone-400">Insumo · ${l.pct_produtor < 100 ? `${numero(l.pct_produtor, 2)}% de ${brl(l.total)} cobrado do produtor` : 'descontado do produtor'} · ${brl(l.valor_unitario)} cada</p>` : ''}
-        ${c ? `<p class="mt-0.5 tabular-nums text-stone-600 dark:text-stone-400">${numero(l.tbs)} Tbs · ${pct(l.pct)} · ${numero(l.kg, 2)} kg${l.media != null ? ` · média ${numero(l.media, 2)}` : ''} · ${brl(l.preco)}/kg</p>` : ''}
+        ${c ? `<p class="mt-0.5 tabular-nums text-stone-600 dark:text-stone-400">${numero(l.tbs)} Tbs · ${pct(l.pct)} · ${numero(l.kg, 2)} kg${l.media != null ? ` · média ${media(l.media)}` : ''} · ${brl(l.preco)}/kg</p>` : ''}
       </div>
       <p class="shrink-0 text-right tabular-nums">
         ${l.credito ? `<span class="block font-semibold text-brand-800 dark:text-brand-300">+${brl(l.credito)}</span>` : ''}

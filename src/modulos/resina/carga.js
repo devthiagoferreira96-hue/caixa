@@ -10,7 +10,7 @@ import { criarCarreta } from './carreta.js';
 import { CAPACIDADE_PADRAO } from './tabelas.js';
 import { proximaCor } from './cadastros.js';
 import { chave } from '../../lib/importar-planilha.js';
-import { kg, numero, bolinha, produtor, nomeProdutor, corProdutor, caminhao, quadro, seDesligado, nomeTitular } from './comum.js';
+import { kg, numero, media, bolinha, produtor, nomeProdutor, corProdutor, caminhao, quadro, seDesligado, nomeTitular } from './comum.js';
 
 let est = null; // a carga sendo preenchida
 let carreta = null;
@@ -346,7 +346,7 @@ function atualizar(form) {
     const manual = item.kg_manual != null;
     kgCampo.classList.toggle('kg-manual', manual);
     li.querySelector('[data-kg-auto]').hidden = !manual;
-    if (!manual && document.activeElement !== kgCampo) kgCampo.value = l && item.tbs ? Math.round(l.kg) : '';
+    if (!manual && document.activeElement !== kgCampo) kgCampo.value = l && item.tbs ? Math.round(l.kg * 100) / 100 : '';
     li.querySelector('[data-valores]').innerHTML = l && (l.valor || item.tbs)
       ? `Valor <strong class="text-stone-900 dark:text-stone-100">${brl(l.valor)}</strong> · Produtor <strong class="text-stone-900 dark:text-stone-100">${brl(l.produtor)}</strong> · Arrendamento <strong class="text-stone-900 dark:text-stone-100">${brl(l.arrendamento)}</strong>`
       : '';
@@ -384,7 +384,7 @@ function atualizar(form) {
     `<li class="flex items-start gap-2 rounded-xl bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:bg-amber-950/50 dark:text-amber-200">${icone('alerta', 'mt-0.5 size-4')}<span>${esc(a)}</span></li>`).join('');
 
   form.querySelector('[data-totais]').innerHTML = [
-    ['Tbs', numero(r.totais.tbs)], ['Resina', kg(r.totais.kg)], ['kg por Tb', r.totais.tbs ? numero(r.kgPorTb, 1) : '—'],
+    ['Tbs', numero(r.totais.tbs)], ['Resina', kg(r.totais.kg)], ['kg por Tb', r.totais.tbs ? media(r.kgPorTb) : '—'],
     ['Valor da carga', brl(r.totais.valor)], ['Produtores', brl(r.totais.produtor)], ['Arrendamento', brl(r.totais.arrendamento)],
   ].map(([t, v]) => quadro(t, v)).join('');
   return r;

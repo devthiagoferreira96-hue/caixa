@@ -7,6 +7,7 @@ import { descricaoDaLinha, textoInsumoPadrao } from './exportar-conta.js';
 /** Valor sem o "R$" (a tabela avisa que os valores são em reais, como na planilha) */
 const moeda = (v) => reais(v || 0).replace('R$ ', '');
 const numero = (v, casas = 0) => (v || 0).toLocaleString('pt-BR', { maximumFractionDigits: casas });
+const media = (v) => (v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const pct = (v) => `${numero(v, 1)}%`;
 const situacao = (v) => (v < -0.004 ? 'Falta receber' : v > 0.004 ? 'Recebido a mais' : 'Em dia');
 const corSaldo = (v) => (v < -0.004 ? COR.ambar : COR.marca);
@@ -64,7 +65,7 @@ export function gerarPdfConta({ conta, periodo, produtor = '', inicio, extrato, 
         dataCompleta(l.data), descricaoDaLinha(l, nomeProdutor, textoInsumo) + parte, l.nota || '', l.destino || '',
         c ? numero(l.tbs) : '', c ? pct(l.pct) : '',
         c ? numero(l.kg, 2) : ins ? numero(l.quantidade, 3) : '',
-        c && l.media != null ? numero(l.media, 2) : '',
+        c && l.media != null ? media(l.media) : '',
         c ? moeda(l.preco) : ins ? moeda(l.valor_unitario) : '',
         l.credito ? moeda(l.credito) : '', l.debito ? moeda(l.debito) : '', moeda(l.saldo),
       ];

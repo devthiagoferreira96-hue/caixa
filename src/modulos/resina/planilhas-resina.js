@@ -89,7 +89,7 @@ function abaSafras(entregas) {
       const [ini, fim] = [topo + 5, topo + 4 + altura];
       por(rTotal, c, T('TOTAL', E.negrito));
       por(rTotal, c + 1, F(`SUM(${coluna(c + 1)}${ini}:${coluna(c + 1)}${fim})`, meio(porProdutor[k].reduce((t, e) => t + e.tbs, 0)), E.negrito));
-      por(rTotal, c + 2, F(`SUM(${coluna(c + 2)}${ini}:${coluna(c + 2)}${fim})`, Math.round(porProdutor[k].reduce((t, e) => t + (e.kg || 0), 0)), E.kg));
+      por(rTotal, c + 2, F(`SUM(${coluna(c + 2)}${ini}:${coluna(c + 2)}${fim})`, Math.round(porProdutor[k].reduce((t, e) => t + (e.kg || 0), 0) * 100) / 100, E.kg));
     });
     topo += 4 + altura + 3; // título, nome, colunas, linhas, TOTAL e 2 linhas de espaço até a próxima safra
   }
