@@ -223,7 +223,7 @@ export async function importarConta(contaAtual, aoTerminar, lido = null) {
 
 /** Como o sistema entendeu a linha, em palavras */
 function entendido(l) {
-  if (l.tipo === 'carga') return `${numero(l.tbs)} Tbs · ${numero(l.kg, 2)} kg${l.media ? ` (média ${media(l.media)})` : ''} · ${brl(l.preco)}/kg · ${pct(l.pct)}`;
+  if (l.tipo === 'carga') return `${numero(l.tbs, 1)} Tbs · ${numero(l.kg, 2)} kg${l.media ? ` (média ${media(l.media)})` : ''} · ${brl(l.preco)}/kg · ${pct(l.pct)}`;
   if (l.tipo === 'insumo') return `${numero(l.quantidade, 3)} ${l.unidade} de ${l.produto}${l.valor ? ` · ${brl(l.valor)}` : ''}${l.obs ? ` · ${l.obs}` : ''}`;
   if (l.tipo === 'movimento') return l.valor ? `${l.tipoMov === 'credito' ? 'Crédito' : l.tipoMov === 'debito' ? 'Débito' : 'Valor'} de ${brl(l.valor)}` : 'Sem valor na planilha';
   return `Fica só como anotação: ${l.motivo}.`;

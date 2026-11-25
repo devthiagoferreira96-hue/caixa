@@ -1,8 +1,8 @@
 // Registrar ou mudar uma carga de resina: dados, pesagem, Tbs de cada produtor e a carreta animada
-import { brl, esc, hojeISO, lerValor, valorParaCampo, dataCompleta, parseISO, inicioMes, VALOR_MAXIMO, valorMaximoTexto } from '../../lib/format.js';
+import { brl, esc, hojeISO, lerValor, valorParaCampo, dataCompleta, parseISO, inicioMes, VALOR_MAXIMO, valorMaximoTexto, lerNumero, numeroParaCampo } from '../../lib/format.js';
 import { store } from '../../lib/store.js';
 import { salvarItem } from '../../lib/api.js';
-import { icone, toast, confirmar, dialogo, mascaraDinheiro, erroNoCampo, limparErros, semRepetir } from '../../lib/ui.js';
+import { icone, toast, confirmar, dialogo, mascaraDinheiro, erroNoCampo, limparErros, semRepetir, NUMERO, lerCampoNumero, numeroComProblema } from '../../lib/ui.js';
 import { desfazendo } from '../../components/lancamento.js';
 import { lerCarga, ultimaCarga, numeroPara, salvarCarga, excluirCarga, destinosUsados } from './dados.js';
 import { calcularCarga, precoNaData, codigoCarga } from './calculos.js';
@@ -29,6 +29,8 @@ export default {
     <p><strong>1. Dados</strong>: data, motorista, caminhão e o preço do kg. O preço vem do cadastro (o que vale na data da carga), mas dá para mudar.</p>
     <p><strong>Conta, nota e destino</strong>: em qual conta corrente a carga entra (CNPJ ou CPF da proprietária), o número da nota fiscal e para onde a carga foi. O campo de destino sugere os que você já usou.</p>
     <p><strong>2. Pesagem</strong>: preencha o peso da fazenda, o da chegada ou os dois, e marque qual vale para o pagamento. Com os dois, aparece a <strong>diferença</strong> em kg, % e reais.</p>
+    <p><strong>Peso na nota fiscal</strong> (opcional): se a nota já foi emitida, digite o peso dela. O sistema avisa se os kg da carga não baterem com a nota. Dá para salvar mesmo assim: na lista de cargas ela fica com o selo <strong>Não bate com a nota</strong>.</p>
+    <p>Nos pesos e kg, digite do jeito que preferir: <strong>5230,5</strong>, <strong>5.230,5</strong> ou <strong>5230.5</strong>. Ao sair do campo, o número aparece como o sistema entendeu.</p>
     <p><strong>3. Produtores</strong>: para cada produtor, informe os <strong>Tbs</strong> (tambores) e a <strong>% de arrendamento</strong> desta carga. Os tambores vão caindo na carreta: a parte de baixo tem a cor do produtor e a de cima, preta, é o arrendamento.</p>
     <p>O <strong>kg</strong> de cada produtor é calculado pelos Tbs. Se souber o kg exato de alguém, digite: ele fica amarelo e o resto do peso é dividido entre os outros. O botão ↺ volta para o cálculo automático.</p>
     <p>A carreta para de andar no botão <strong>Parar</strong>. Se o aparelho pede menos movimento (ou você desligou as animações em Ajustes), ela aparece parada.</p>`,
@@ -47,7 +49,7 @@ export default {
           <p class="mt-1 text-sm text-stone-600 dark:text-stone-400">Ela pode ter sido excluída.</p><a href="#cargas" class="btn-sec mt-4">Ver as cargas</a></div>`;
         return;
       }
-      est = { nota: '', destino: '', titular_id: null, ...original.carga, precoManual: true, itens: original.itens.map((i) => novoItem({ produtor_id: i.produtor_id, tbs: i.tbs, arrendamento: i.arrendamento, kg_manual: i.kg_manual ?? null })) };
+      est = { nota: '', destino: '', titular_id: null, kg_nota: null, ...original.carga, precoManual: true, itens: original.itens.map((i) => novoItem({ produtor_id: i.produtor_id, tbs: i.tbs, arrendamento: i.arrendamento, kg_manual: i.kg_manual ?? null })) };
     } else {
       ultima = await ultimaCarga();
       if (!ctx.aindaAtual()) return;
@@ -63,7 +65,7 @@ export default {
         fazenda_id: valido('resina_fazendas', u?.fazenda_id),
         motorista_id: valido('resina_motoristas', u?.motorista_id), caminhao_id: valido('resina_caminhoes', u?.caminhao_id),
         preco_kg: precoNaData(store.resina_precos, data)?.valor_kg || 0, precoManual: false,
-        peso_fazenda: null, peso_chegada: null, peso_base: u?.peso_base || 'chegada', obs: '', itens: [],
+        peso_fazenda: null, peso_chegada: null, kg_nota: null, peso_base: u?.peso_base || 'chegada', obs: '', itens: [],
         titular_id: valido('resina_titulares', u?.titular_id), nota: '', destino: '',
       };
     }
@@ -115,11 +117,17 @@ export default {
             ${['fazenda', 'chegada'].map((onde) => `<div class="opcao-peso" data-campo>
               <label class="flex cursor-pointer items-center gap-2 font-semibold"><input type="radio" name="peso_base" value="${onde}" class="size-5 accent-brand-600" ${est.peso_base === onde ? 'checked' : ''}> Pesado na ${onde}</label>
               <label class="sr-only" for="c-peso-${onde}">Peso na ${onde} em kg</label>
-              <div class="relative mt-2"><input id="c-peso-${onde}" name="peso_${onde}" type="number" min="0" step="any" inputmode="decimal" class="campo pr-10 tabular-nums" value="${est[`peso_${onde}`] ?? ''}" placeholder="0"><span class="pointer-events-none absolute inset-y-0 right-3 flex items-center text-stone-600 dark:text-stone-400" aria-hidden="true">kg</span></div>
+              <div class="relative mt-2"><input id="c-peso-${onde}" name="peso_${onde}" ${NUMERO} class="campo pr-10 tabular-nums" value="${numeroParaCampo(est[`peso_${onde}`])}" placeholder="0"><span class="pointer-events-none absolute inset-y-0 right-3 flex items-center text-stone-600 dark:text-stone-400" aria-hidden="true">kg</span></div>
             </div>`).join('')}
           </div>
         </fieldset>
         <div class="mt-3 rounded-xl px-3 py-2 text-sm" data-diferenca aria-live="polite"></div>
+        <div class="mt-3 grid items-start gap-3 sm:grid-cols-2">
+          <div data-campo><label class="rotulo" for="c-kg-nota">Peso na nota fiscal <span class="font-normal text-stone-600 dark:text-stone-400">(opcional)</span></label>
+            <div class="relative"><input id="c-kg-nota" name="kg_nota" ${NUMERO} class="campo pr-10 tabular-nums" value="${numeroParaCampo(est.kg_nota)}" placeholder="0" aria-describedby="c-kg-nota-dica"><span class="pointer-events-none absolute inset-y-0 right-3 flex items-center text-stone-600 dark:text-stone-400" aria-hidden="true">kg</span></div>
+            <p id="c-kg-nota-dica" class="dica">Se a nota já foi emitida, digite o peso dela: o sistema avisa se a carga não bater.</p></div>
+          <div class="rounded-xl px-3 py-2 text-sm sm:mt-6" data-dif-nota aria-live="polite" hidden></div>
+        </div>
       </section>
 
       <section class="card" aria-labelledby="t-prod">
@@ -177,16 +185,22 @@ export default {
       if (li) {
         const item = est.itens.find((i) => i.chave === +li.dataset.item);
         const campo = t.dataset.campoItem;
-        if (campo === 'tbs') item.tbs = Math.max(0, Math.round((Number(String(t.value).replace(',', '.')) || 0) * 2) / 2); // aceita meio tambor (28,5)
-        else if (campo === 'arrendamento') item.arrendamento = Math.min(100, Math.max(0, Number(t.value) || 0));
-        else if (campo === 'kg_manual') item.kg_manual = t.value === '' ? null : Math.max(0, Number(t.value) || 0);
+        if (campo === 'tbs' || campo === 'arrendamento' || campo === 'kg_manual') {
+          const n = lerCampoNumero(t); // "5.230,5", "5230,5" ou "5230.5"; o que não der para entender fica marcado
+          if (Number.isNaN(n)) return;
+          if (campo === 'tbs') item.tbs = n || 0; // aceita meio tambor (28,5): o campo arredonda de 0,5 em 0,5
+          else if (campo === 'arrendamento') item.arrendamento = n ?? 0;
+          else item.kg_manual = n;
+        }
         t.removeAttribute('aria-invalid');
       } else if (t.name === 'preco_kg') {
         est.preco_kg = lerValor(t.value) || 0;
         est.precoManual = true;
         dicaPreco(form);
-      } else if (t.name === 'peso_fazenda' || t.name === 'peso_chegada') {
-        est[t.name] = t.value === '' ? null : Math.max(0, Number(t.value) || 0);
+      } else if (t.name === 'peso_fazenda' || t.name === 'peso_chegada' || t.name === 'kg_nota') {
+        const n = lerCampoNumero(t);
+        if (Number.isNaN(n)) return;
+        est[t.name] = n;
         erroNoCampo(form, t.name, '');
       } else if (t.name === 'obs' || t.name === 'nota' || t.name === 'destino') {
         est[t.name] = t.value;
@@ -322,10 +336,10 @@ function desenharLinhas(form) {
     return `<li data-item="${k}" class="grid grid-cols-2 items-end gap-2 rounded-xl border border-stone-200 p-3 sm:grid-cols-[minmax(0,2.2fr)_repeat(3,minmax(0,1fr))_auto] dark:border-stone-800">
       <div class="col-span-2 sm:col-span-1"><label class="rotulo text-xs" for="i-prod-${k}">Produtor ${n + 1}</label>
         <div class="flex items-center gap-2">${bolinha(cor, 'size-4')}<select id="i-prod-${k}" class="campo" data-campo-item="produtor_id">${opcoesProdutor(item)}</select></div></div>
-      <div><label class="rotulo text-xs" for="i-tbs-${k}">Tbs</label><input id="i-tbs-${k}" type="number" min="0" step="0.5" inputmode="decimal" class="campo tabular-nums" data-campo-item="tbs" value="${item.tbs || ''}" placeholder="0"></div>
-      <div><label class="rotulo text-xs" for="i-arr-${k}">Arrendamento</label><div class="relative"><input id="i-arr-${k}" type="number" min="0" max="100" step="0.5" inputmode="decimal" class="campo pr-8 tabular-nums" data-campo-item="arrendamento" value="${item.arrendamento}"><span class="pointer-events-none absolute inset-y-0 right-3 flex items-center text-stone-600 dark:text-stone-400" aria-hidden="true">%</span></div></div>
+      <div><label class="rotulo text-xs" for="i-tbs-${k}">Tbs</label><input id="i-tbs-${k}" ${NUMERO} data-passo="0.5" class="campo tabular-nums" data-campo-item="tbs" value="${item.tbs ? numeroParaCampo(item.tbs) : ''}" placeholder="0"></div>
+      <div><label class="rotulo text-xs" for="i-arr-${k}">Arrendamento</label><div class="relative"><input id="i-arr-${k}" ${NUMERO} data-max="100" class="campo pr-8 tabular-nums" data-campo-item="arrendamento" value="${numeroParaCampo(item.arrendamento)}"><span class="pointer-events-none absolute inset-y-0 right-3 flex items-center text-stone-600 dark:text-stone-400" aria-hidden="true">%</span></div></div>
       <div><label class="rotulo flex items-center justify-between text-xs" for="i-kg-${k}">kg <button type="button" class="cursor-pointer rounded px-1 text-amber-800 hover:bg-amber-100 dark:text-amber-300 dark:hover:bg-amber-900/50" data-kg-auto hidden aria-label="Voltar o kg ao cálculo automático" title="Voltar ao automático">↺</button></label>
-        <input id="i-kg-${k}" type="number" min="0" step="any" inputmode="decimal" class="campo tabular-nums" data-campo-item="kg_manual" value="${item.kg_manual ?? ''}"></div>
+        <input id="i-kg-${k}" ${NUMERO} class="campo tabular-nums" data-campo-item="kg_manual" value="${numeroParaCampo(item.kg_manual)}"></div>
       <div class="flex justify-end"><button type="button" class="btn-icone hover:text-red-700" data-remover aria-label="Tirar ${esc(item.produtor_id ? nomeProdutor(item.produtor_id) : `o produtor ${n + 1}`)} da carga" title="Tirar da carga">${icone('x')}</button></div>
       <p class="col-span-2 text-sm tabular-nums text-stone-600 sm:col-span-5 dark:text-stone-400" data-valores></p>
     </li>`;
@@ -346,7 +360,7 @@ function atualizar(form) {
     const manual = item.kg_manual != null;
     kgCampo.classList.toggle('kg-manual', manual);
     li.querySelector('[data-kg-auto]').hidden = !manual;
-    if (!manual && document.activeElement !== kgCampo) kgCampo.value = l && item.tbs ? Math.round(l.kg * 100) / 100 : '';
+    if (!manual && document.activeElement !== kgCampo) kgCampo.value = l && item.tbs ? numeroParaCampo(l.kg, 2) : '';
     li.querySelector('[data-valores]').innerHTML = l && (l.valor || item.tbs)
       ? `Valor <strong class="text-stone-900 dark:text-stone-100">${brl(l.valor)}</strong> · Produtor <strong class="text-stone-900 dark:text-stone-100">${brl(l.produtor)}</strong> · Arrendamento <strong class="text-stone-900 dark:text-stone-100">${brl(l.arrendamento)}</strong>`
       : '';
@@ -362,29 +376,40 @@ function atualizar(form) {
     : Math.abs(d.kg) < 0.5 ? '<strong>Sem diferença:</strong> o peso na chegada é igual ao da fazenda.'
     : `<strong>Diferença: ${d.kg < 0 ? '−' : '+'}${kg(Math.abs(d.kg))} (${d.kg < 0 ? '−' : '+'}${numero(Math.abs(d.pct), 1)}%)</strong> · chegou ${d.kg < 0 ? 'menos' : 'mais'} do que foi pesado na fazenda · equivale a ${brl(d.valor)}`;
 
+  // peso da nota fiscal × kg da carga
+  const caixaNota = form.querySelector('[data-dif-nota]');
+  const n = r.nota;
+  caixaNota.hidden = !n;
+  if (n) {
+    caixaNota.className = 'rounded-xl px-3 py-2 text-sm sm:mt-6 ' + (n.bate ? 'bg-brand-50 text-brand-900 dark:bg-brand-950 dark:text-brand-200' : 'bg-amber-50 text-amber-900 dark:bg-amber-950/50 dark:text-amber-200');
+    caixaNota.innerHTML = n.bate ? `<strong>Bate com a nota:</strong> a carga tem ${kg(r.totais.kg)}, igual à nota fiscal.`
+      : `<strong>Não bate com a nota:</strong> a carga tem ${kg(r.totais.kg)} e a nota ${kg(n.nota)} (${kg(Math.abs(n.kg))} a ${n.kg > 0 ? 'mais' : 'menos'}, ${brl(n.valor)}). Ajuste o peso ou o kg dos produtores, ou salve assim mesmo.`;
+  }
+
   // carreta: um tambor por Tb, na ordem dos produtores
   const fila = [];
   for (const i of validos) for (let k = 0; k < i.tbs; k++) fila.push({ cor: corProdutor(i.produtor_id), arrendamento: i.arrendamento, nome: nomeProdutor(i.produtor_id) });
   carreta?.carregar(fila);
   const cap = capacidade();
   form.querySelector('[data-legenda]').innerHTML = validos.filter((i) => i.tbs).map((i) =>
-    `<span class="flex items-center gap-1.5">${bolinha(corProdutor(i.produtor_id))}${esc(nomeProdutor(i.produtor_id))} · ${numero(i.tbs)} Tbs</span>`).join('')
-    + `<span class="flex items-center gap-1.5">${bolinha('#000')}Arrendamento (proprietário)</span><span class="ml-auto tabular-nums">${numero(Math.min(r.totais.tbs, cap))} de ${numero(cap)} lugares</span>`;
+    `<span class="flex items-center gap-1.5">${bolinha(corProdutor(i.produtor_id))}${esc(nomeProdutor(i.produtor_id))} · ${numero(i.tbs, 1)} Tbs</span>`).join('')
+    + `<span class="flex items-center gap-1.5">${bolinha('#000')}Arrendamento (proprietário)</span><span class="ml-auto tabular-nums">${numero(Math.min(r.totais.tbs, cap), 1)} de ${numero(cap)} lugares</span>`;
 
   // avisos
   const avisos = [];
-  if (r.totais.tbs > cap) avisos.push(`A carroceria comporta ${numero(cap)} Tbs. Ficaram ${numero(r.totais.tbs - cap)} Tbs a mais.`);
+  if (r.totais.tbs > cap) avisos.push(`A carroceria comporta ${numero(cap)} Tbs. Ficaram ${numero(r.totais.tbs - cap, 1)} Tbs a mais.`);
   for (const a of r.avisos) {
     if (a.tipo === 'sem-peso' && r.totais.tbs) avisos.push(`Informe o peso ${est.peso_base === 'fazenda' ? 'na fazenda' : 'na chegada'} (é o que está marcado para o pagamento).`);
     if (a.tipo === 'manual-passa') avisos.push(`Os kg digitados à mão (${kg(a.manual)}) passam do peso da carga (${kg(a.peso)}).`);
     if (a.tipo === 'soma-diferente') avisos.push(`A soma dos kg (${kg(a.manual)}) não bate com o peso da carga (${kg(a.peso)}): diferença de ${kg(Math.abs(a.peso - a.manual))}.`);
   }
   if (!est.preco_kg && r.totais.tbs) avisos.push('Informe o preço do kg para calcular os valores.');
+  if (n && !n.bate && r.totais.kg) avisos.push(`Os kg da carga (${kg(r.totais.kg)}) não batem com o peso da nota fiscal (${kg(n.nota)}).`);
   form.querySelector('[data-avisos]').innerHTML = avisos.map((a) =>
     `<li class="flex items-start gap-2 rounded-xl bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:bg-amber-950/50 dark:text-amber-200">${icone('alerta', 'mt-0.5 size-4')}<span>${esc(a)}</span></li>`).join('');
 
   form.querySelector('[data-totais]').innerHTML = [
-    ['Tbs', numero(r.totais.tbs)], ['Resina', kg(r.totais.kg)], ['kg por Tb', r.totais.tbs ? media(r.kgPorTb) : '—'],
+    ['Tbs', numero(r.totais.tbs, 1)], ['Resina', kg(r.totais.kg)], ['kg por Tb', r.totais.tbs ? media(r.kgPorTb) : '—'],
     ['Valor da carga', brl(r.totais.valor)], ['Produtores', brl(r.totais.produtor)], ['Arrendamento', brl(r.totais.arrendamento)],
   ].map(([t, v]) => quadro(t, v)).join('');
   return r;
@@ -417,7 +442,7 @@ function cadastrarProdutor() {
         <div data-campo><label class="rotulo" for="np-nome">Nome</label><input id="np-nome" name="nome" class="campo" maxlength="60" autocomplete="off"></div>
         <div class="grid grid-cols-2 gap-3">
           <div data-campo><label class="rotulo" for="np-cor">Cor dos tambores</label><input id="np-cor" name="cor" type="color" class="block h-11 w-full cursor-pointer rounded-xl border border-stone-300 bg-white p-1 dark:border-stone-700 dark:bg-stone-950" value="${proximaCor()}"></div>
-          <div data-campo><label class="rotulo" for="np-arr">Arrendamento</label><div class="relative"><input id="np-arr" name="arrendamento" type="number" min="0" max="100" step="0.5" class="campo pr-8" value="0"><span class="pointer-events-none absolute inset-y-0 right-3 flex items-center text-stone-600 dark:text-stone-400" aria-hidden="true">%</span></div></div>
+          <div data-campo><label class="rotulo" for="np-arr">Arrendamento</label><div class="relative"><input id="np-arr" name="arrendamento" ${NUMERO} data-max="100" class="campo pr-8" value="0"><span class="pointer-events-none absolute inset-y-0 right-3 flex items-center text-stone-600 dark:text-stone-400" aria-hidden="true">%</span></div></div>
         </div>
         <button type="submit" class="btn-primario">${icone('check')} Cadastrar</button></form>`,
     });
@@ -427,11 +452,11 @@ function cadastrarProdutor() {
       e.preventDefault();
       limparErros(f);
       const nome = f.nome.value.trim();
-      const arr = Number(f.arrendamento.value);
+      const arr = lerNumero(f.arrendamento.value);
       if (!nome) return erroNoCampo(f, 'nome', 'Escreva o nome do produtor.');
       const igual = store.resina_produtores.find((p) => chave(p.nome) === chave(nome));
       if (igual) return erroNoCampo(f, 'nome', `Já existe um produtor chamado "${igual.nome}".`);
-      if (f.arrendamento.value === '' || !(arr >= 0 && arr <= 100)) return erroNoCampo(f, 'arrendamento', 'Use um número de 0 a 100.');
+      if (arr == null || !(arr >= 0 && arr <= 100)) return erroNoCampo(f, 'arrendamento', 'Use um número de 0 a 100.');
       criado = await salvarItem('resina_produtores', { nome, cor: f.cor.value, arrendamento: arr, ativo: true });
       toast(`${nome} cadastrado`);
       d.close();
@@ -442,6 +467,7 @@ function cadastrarProdutor() {
 
 /** Confere tudo antes de salvar. Retorna os itens prontos ou null (e mostra o problema). */
 async function conferir(form) {
+  if (numeroComProblema(form)) return null;
   if (!/^\d{4}-\d{2}-\d{2}$/.test(est.data)) { erroNoCampo(form, 'data', 'Escolha a data da coleta.'); form.data.focus(); return null; }
   if (store.resina_fazendas.length > 1 && !est.fazenda_id) { erroNoCampo(form, 'fazenda_id', 'Escolha a fazenda.'); form.fazenda_id.focus(); return null; }
   if (store.resina_titulares.some((t) => t.ativo !== false) && !est.titular_id) { erroNoCampo(form, 'titular_id', 'Escolha em qual conta (CNPJ ou CPF) a carga entra.'); form.titular_id.focus(); return null; }
@@ -473,7 +499,8 @@ async function conferir(form) {
   const perguntas = [];
   const soma = r.avisos.find((a) => a.tipo === 'soma-diferente');
   if (soma) perguntas.push(`A soma dos kg (${kg(soma.manual)}) não bate com o peso da carga (${kg(soma.peso)}).`);
-  if (r.totais.tbs > capacidade()) perguntas.push(`A carga tem ${numero(r.totais.tbs)} Tbs, mas o caminhão comporta ${numero(capacidade())}.`);
+  if (r.nota && !r.nota.bate) perguntas.push(`A carga tem ${kg(r.totais.kg)} e a nota fiscal ${kg(r.nota.nota)} (${kg(Math.abs(r.nota.kg))} a ${r.nota.kg > 0 ? 'mais' : 'menos'}).`);
+  if (r.totais.tbs > capacidade()) perguntas.push(`A carga tem ${numero(r.totais.tbs, 1)} Tbs, mas o caminhão comporta ${numero(capacidade())}.`);
   if (perguntas.length && !(await confirmar(`${perguntas.join(' ')} Salvar mesmo assim?`, { titulo: 'Conferir antes de salvar', botao: 'Salvar mesmo assim' }))) return null;
   return { itens: est.itens };
 }

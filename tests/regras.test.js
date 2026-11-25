@@ -1,7 +1,7 @@
 // Testes das regras de negócio (faturas, parcelas, datas, valores e somas).
 // Rode com: npm test
 import { faturaDe, vencimentoFatura, dividirParcelas, parcelasDaCompra } from '../src/lib/faturas.js';
-import { somarMeses, lerValor, valorParaCampo, brl, esc, diasAte, quandoVence, somarDias, nomeMes } from '../src/lib/format.js';
+import { somarMeses, lerValor, valorParaCampo, brl, esc, diasAte, quandoVence, somarDias, nomeMes, lerNumero, numeroParaCampo } from '../src/lib/format.js';
 import { PALETAS, calcularTema, contraste, oklch, hexDe, coresDasPreferencias } from '../src/lib/temas.js';
 import { calcularCarga, diferencaDePeso, precoNaData, proximoNumero, codigoCarga, resumoDasCargas, linhasContaCorrente, extratoContaCorrente, comparativoInsumos, totalDoInsumo, pctDoProdutor, parteDoProdutor, divisaoDaEntrega, divisaoPorConta, creditosDoCaixa, aReceberPorConta } from '../src/modulos/resina/calculos.js';
 import { numeroBR, dataDaCelula, lerPlanilhaConta, entenderLinha, produtorDaLinha, produtoParecido, montarImportacao } from '../src/modulos/resina/importar-conta.js';
@@ -458,6 +458,34 @@ t('preferência inválida volta ao padrão',coresDasPreferencias({paleta:'person
   t('transferência: sem filtro de conta, nenhuma conta nos totais', transferenciasDeFora(todos, []).length, 0);
   t('transferência: filtrando a origem, conta a saída', transferenciasDeFora(todos, ['cc']).map((l) => l.id), ['s']);
   t('transferência: filtrando as duas contas, uma anula a outra', transferenciasDeFora(todos, ['cc', 'esp']).length, 0);
+}
+
+// ---------- números digitados (peso, kg, Tbs, %): do jeito brasileiro ou não, nunca vira outro número
+{
+  for (const [txt, n] of [['5230,5', 5230.5], ['5.230,5', 5230.5], ['5230.5', 5230.5], ['5.230', 5230], ['12.500', 12500], ['1.234.567,8', 1234567.8],
+    ['5,230.5', 5230.5], ['28,5', 28.5], ['28.5', 28.5], ['45', 45], [' 45 ', 45], ['0,5', 0.5], [',5', 0.5], ['5,', 5], ['1762.86', 1762.86], ['0', 0]]) {
+    t(`lerNumero "${txt}"`, lerNumero(txt), n);
+  }
+  t('lerNumero vazio', lerNumero(''), null);
+  t('lerNumero null', lerNumero(null), null);
+  for (const txt of ['abc', '5,2,3', '5.23.0', '5..2', '-5', '5kg', '1,234,5']) t(`lerNumero inválido "${txt}"`, Number.isNaN(lerNumero(txt)), true);
+  t('numeroParaCampo com vírgula e sem milhar', numeroParaCampo(5230.5), '5230,5');
+  t('numeroParaCampo 2 casas', numeroParaCampo(1762.857142, 2), '1762,86');
+  t('numeroParaCampo vazio', [numeroParaCampo(null), numeroParaCampo(undefined), numeroParaCampo(NaN)], ['', '', '']);
+  t('numeroParaCampo e lerNumero voltam ao mesmo número', lerNumero(numeroParaCampo(5230.125)), 5230.125);
+}
+
+// ---------- peso da nota fiscal × kg da carga
+{
+  const base = { preco_kg: 5, peso_chegada: 6800, peso_base: 'chegada' };
+  const itens = [{ produtor_id: 'a', tbs: 26, arrendamento: 45 }, { produtor_id: 'b', tbs: 8, arrendamento: 45 }];
+  t('nota: sem peso da nota, nada a comparar', calcularCarga(base, itens).nota, null);
+  t('nota: igual bate', calcularCarga({ ...base, kg_nota: 6800 }, itens).nota, { nota: 6800, kg: 0, bate: true, valor: 0 });
+  t('nota: carga com mais kg que a nota', calcularCarga({ ...base, kg_nota: 6750 }, itens).nota, { nota: 6750, kg: 50, bate: false, valor: 250 });
+  t('nota: carga com menos kg que a nota', calcularCarga({ ...base, kg_nota: 6900.5 }, itens).nota, { nota: 6900.5, kg: -100.5, bate: false, valor: 502.5 });
+  t('nota: kg à mão que fecha com a nota', calcularCarga({ ...base, kg_nota: 6900 }, itens.map((i) => ({ ...i, kg_manual: i.produtor_id === 'a' ? 5300 : 1600 }))).nota.bate, true);
+  t('nota: diferença menor que meio kg bate', calcularCarga({ ...base, kg_nota: 6800.4 }, itens).nota.bate, true);
+  t('nota: não entra nos avisos de peso da carga', calcularCarga({ ...base, kg_nota: 6750 }, itens).avisos, []);
 }
 
 console.log(`${ok} passaram, ${falhas.length} falharam`); falhas.forEach(f=>console.log(' FALHA',f));

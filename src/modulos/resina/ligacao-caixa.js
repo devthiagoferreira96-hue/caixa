@@ -334,7 +334,9 @@ export function lerPagamentoInsumos(form, erroNoCampo, dataEntrega) {
     if (!form.cx_conta.value) { erroNoCampo(form, 'cx_conta', 'Escolha a conta.'); return null; }
     return { modo, categoria_id: form.cx_categoria.value, conta_id: form.cx_conta.value, vencimento: form.cx_vencimento.value || dataEntrega, pago: form.cx_pago.checked };
   }
-  return { modo, categoria_id: form.cx_categoria.value, cartao_id: form.cx_cartao.value, parcelas: Math.min(420, Math.max(1, Math.round(Number(form.cx_parcelas.value)) || 1)) };
+  const parcelas = Number(form.cx_parcelas.value);
+  if (!Number.isInteger(parcelas) || parcelas < 1 || parcelas > 420) { erroNoCampo(form, 'cx_parcelas', 'Digite a quantidade de parcelas: um número inteiro de 1 a 420.'); form.cx_parcelas.focus(); return null; }
+  return { modo, categoria_id: form.cx_categoria.value, cartao_id: form.cx_cartao.value, parcelas };
 }
 
 /** Grava (ou atualiza) no Caixa o pagamento da entrega de insumos. Retorna `desfazer()`. */

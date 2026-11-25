@@ -113,7 +113,7 @@ export function secaoComparativo(comp, periodo) {
               `<th scope="col" class="px-2 py-1.5 font-semibold ${i ? 'text-right' : ''} ${INICIO_GRUPO.has(i) ? 'grupo' : ''}">${c}</th>`).join('')}</tr></thead>
           <tbody>${linhas.map((l) => `<tr>
             <td class="px-2 py-2">${rotuloProdutor(l.produtor_id)}</td>
-            <td class="grupo px-2 py-2 text-right">${numero(l.cargas)}</td><td class="px-2 py-2 text-right">${numero(l.tbs)}</td>
+            <td class="grupo px-2 py-2 text-right">${numero(l.cargas)}</td><td class="px-2 py-2 text-right">${numero(l.tbs, 1)}</td>
             <td class="whitespace-nowrap px-2 py-2 text-right">${kg(l.kg)}</td><td class="grupo whitespace-nowrap px-2 py-2 text-right">${brl(l.valor)}</td>
             <td class="whitespace-nowrap px-2 py-2 text-right">${brl(l.arrendamento)}</td><td class="whitespace-nowrap px-2 py-2 text-right">${brl(l.produtor)}</td><td class="grupo whitespace-nowrap px-2 py-2 text-right"><span class="font-semibold">${brl(l.gasto)}</span>${l.gasto && Math.abs(l.descontado - l.gasto) > 0.004 ? `<span class="block text-xs text-stone-600 dark:text-stone-400">${brl(l.descontado)} do produtor</span>` : ''}</td>
             <td class="whitespace-nowrap px-2 py-2 text-right">${l.alerta ? icone('alerta', 'mr-1 inline size-3.5 align-[-2px] text-amber-700 dark:text-amber-300') : ''}${porKg(l.custoPorKg)}</td>

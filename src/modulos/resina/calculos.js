@@ -57,7 +57,18 @@ export function calcularCarga(carga, itens) {
   if (peso && somaManual > peso + 0.5) avisos.push({ tipo: 'manual-passa', manual: somaManual, peso });
   if (peso && temManual && !tbsAuto && Math.abs(somaManual - peso) >= 1) avisos.push({ tipo: 'soma-diferente', manual: somaManual, peso });
 
-  return { peso, kgPorTb: totais.tbs ? totais.kg / totais.tbs : 0, diferenca: diferencaDePeso(carga), itens: linhas, totais, avisos };
+  return { peso, kgPorTb: totais.tbs ? totais.kg / totais.tbs : 0, diferenca: diferencaDePeso(carga), nota: comparaNota(carga, totais.kg), itens: linhas, totais, avisos };
+}
+
+/**
+ * Peso da nota fiscal × kg da carga (opcional: só quando a nota tem peso).
+ * kg > 0: a carga tem mais do que a nota. `bate` quando a diferença é menor que meio kg.
+ */
+export function comparaNota(carga, kgCarga) {
+  const nota = Number(carga.kg_nota);
+  if (carga.kg_nota == null || !(nota > 0)) return null;
+  const kg = kgCarga - nota;
+  return { nota, kg, bate: Math.abs(kg) < 0.5, valor: centavos(Math.abs(kg) * (carga.preco_kg || 0)) };
 }
 
 /** Preço do kg que vale numa data (o último cadastrado com início até aquela data) */

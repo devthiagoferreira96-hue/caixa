@@ -38,17 +38,17 @@ async def main():
             await pg.locator('[data-item] [data-campo-item=tbs]').last.fill(str(tbs))
         await pg.locator(KG).first.fill('5230.5'); await pg.wait_for_timeout(200)
         await pg.locator('#c-obs').click()
-        ok('kg do outro produtor é o resto', await pg.locator(KG).nth(1).input_value() == '1569.5', await pg.locator(KG).nth(1).input_value())
+        ok('kg do outro produtor é o resto', await pg.locator(KG).nth(1).input_value() == '1569,5', await pg.locator(KG).nth(1).input_value())
         await limpar_toasts(pg); await pg.click('button[type=submit]'); await pg.wait_for_timeout(1000)
         ok('salvou', (await pg.inner_text('#titulo-pagina')) == 'Cargas')
 
         # abrir de novo
         await pg.locator('#conteudo a[href^="#carga/"]').first.click(); await pg.wait_for_timeout(1500)
         v = await pg.locator(KG).first.input_value()
-        ok('ao abrir de novo, o kg digitado aparece no campo', v == '5230.5', v)
+        ok('ao abrir de novo, o kg digitado aparece no campo', v == '5230,5', v)
         ok('campo continua amarelo com ↺', await pg.locator('[data-item]').first.locator('.kg-manual').count() == 1
            and await pg.locator('[data-item]').first.locator('[data-kg-auto]:not([hidden])').count() == 1)
-        ok('o outro produtor segue com o resto', await pg.locator(KG).nth(1).input_value() == '1569.5', await pg.locator(KG).nth(1).input_value())
+        ok('o outro produtor segue com o resto', await pg.locator(KG).nth(1).input_value() == '1569,5', await pg.locator(KG).nth(1).input_value())
         tot = await pg.inner_text('[data-totais]')
         ok('total da carga continua 6.800 kg', '6.800 kg' in tot, tot)
         await pg.screenshot(path=os.path.join(SAIDA, 'kg-manual-reaberto.png'))
@@ -56,9 +56,9 @@ async def main():
         # adicionar e tirar um produtor não apaga o kg digitado
         await pg.click('[data-adicionar]'); await pg.wait_for_timeout(200)
         await pg.locator('[data-item] select').last.select_option(label='Carlos'); await pg.wait_for_timeout(200)
-        ok('adicionar produtor não apaga o kg', await pg.locator(KG).first.input_value() == '5230.5', await pg.locator(KG).first.input_value())
+        ok('adicionar produtor não apaga o kg', await pg.locator(KG).first.input_value() == '5230,5', await pg.locator(KG).first.input_value())
         await pg.locator('[data-item]').last.locator('[data-remover]').click(); await pg.wait_for_timeout(200)
-        ok('tirar produtor não apaga o kg', await pg.locator(KG).first.input_value() == '5230.5', await pg.locator(KG).first.input_value())
+        ok('tirar produtor não apaga o kg', await pg.locator(KG).first.input_value() == '5230,5', await pg.locator(KG).first.input_value())
 
         # mudar o kg e salvar de novo: fica o novo valor
         await pg.locator(KG).first.fill('5300'); await pg.wait_for_timeout(200)

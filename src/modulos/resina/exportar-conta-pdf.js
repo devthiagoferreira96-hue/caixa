@@ -63,7 +63,7 @@ export function gerarPdfConta({ conta, periodo, produtor = '', inicio, extrato, 
       const parte = ins && l.pct_produtor < 100 ? ` (${numero(l.pct_produtor, 2)}% de ${reais(l.total)})` : '';
       return [
         dataCompleta(l.data), descricaoDaLinha(l, nomeProdutor, textoInsumo) + parte, l.nota || '', l.destino || '',
-        c ? numero(l.tbs) : '', c ? pct(l.pct) : '',
+        c ? numero(l.tbs, 1) : '', c ? pct(l.pct) : '',
         c ? numero(l.kg, 2) : ins ? numero(l.quantidade, 3) : '',
         c && l.media != null ? media(l.media) : '',
         c ? moeda(l.preco) : ins ? moeda(l.valor_unitario) : '',

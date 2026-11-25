@@ -57,7 +57,7 @@ export default {
         </div>
         ${cargas.length ? `<div class="grid grid-cols-2 gap-2 sm:grid-cols-3">
           ${quadro('Cargas', numero(total.cargas))}
-          ${quadro('Tbs', numero(total.tbs))}
+          ${quadro('Tbs', numero(total.tbs, 1))}
           ${quadro('Resina', kg(total.kg))}
           ${quadro('Valor das cargas', brl(total.valor))}
           ${quadro('Arrendamento', brl(total.arrendamento))}
@@ -74,7 +74,7 @@ export default {
           <li class="rounded-xl border border-stone-200 p-3 dark:border-stone-800">
             <div class="flex flex-wrap items-center gap-x-3 gap-y-1">
               <p class="flex min-w-0 flex-1 items-center gap-2 font-semibold">${bolinha(corProdutor(p.produtor_id))}<span class="truncate">${esc(nomeProdutor(p.produtor_id))}</span></p>
-              <p class="text-sm tabular-nums text-stone-600 dark:text-stone-400">${numero(p.tbs)} Tbs · ${kg(p.kg)} · ${pct((p.tbs / total.tbs) * 100)} do total</p>
+              <p class="text-sm tabular-nums text-stone-600 dark:text-stone-400">${numero(p.tbs, 1)} Tbs · ${kg(p.kg)} · ${pct((p.tbs / total.tbs) * 100)} do total</p>
             </div>
             <div class="mt-2 h-2.5 overflow-hidden rounded-full bg-stone-100 dark:bg-stone-800" aria-hidden="true"><span class="block h-full rounded-full" style="width:${(p.tbs / maiorTbs) * 100}%;background:${esc(corProdutor(p.produtor_id))}"></span></div>
             <dl class="mt-2 grid grid-cols-3 gap-2 text-sm">

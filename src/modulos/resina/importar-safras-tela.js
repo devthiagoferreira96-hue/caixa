@@ -1,9 +1,9 @@
 // Importar a planilha de produção (CONTROLE ANUAL / SAFRAS): conferir produtores e cargas e gravar.
 // As regras ficam em importar-safras.js.
 import { desfazendo } from '../../components/lancamento.js';
-import { esc } from '../../lib/format.js';
+import { esc, lerNumero } from '../../lib/format.js';
 import { store } from '../../lib/store.js';
-import { dialogo, toast, icone } from '../../lib/ui.js';
+import { dialogo, toast, icone, NUMERO, numeroComProblema } from '../../lib/ui.js';
 import { lerSafras, montarImportacaoSafras, safraDe } from './importar-safras.js';
 import { todasAsCargas, gravarImportacaoSafras } from './dados.js';
 import { CORES_PRODUTOR } from './tabelas.js';
@@ -99,7 +99,7 @@ export async function importarSafras({ arquivo, abas }, aoTerminar) {
     });
     form.addEventListener('input', (e) => {
       if (!e.target.matches('[data-pct]')) return;
-      const v = Number(String(e.target.value).replace(',', '.'));
+      const v = lerNumero(e.target.value);
       decisoes.arrendamento[e.target.dataset.pct] = v >= 0 && v <= 100 ? v : 0;
       atualizar();
     });
@@ -107,7 +107,7 @@ export async function importarSafras({ arquivo, abas }, aoTerminar) {
 
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
-      if (!plano?.total) return;
+      if (!plano?.total || numeroComProblema(form)) return;
       const botao = d.querySelector('[data-confirmar]');
       botao.disabled = true;
       botao.setAttribute('aria-busy', 'true');
@@ -143,6 +143,6 @@ function linhaProdutor(p, i, decisoes) {
         ${store.resina_produtores.map((x) => `<option value="${x.id}" ${x.id === escolha ? 'selected' : ''}>${esc(x.nome)}</option>`).join('')}
       </select></div>
     <div data-pct-bloco="${esc(p.chave)}" ${escolha === 'criar' ? '' : 'hidden'}><label class="rotulo text-xs" for="is-pct-${i}">% arrendamento</label>
-      <input id="is-pct-${i}" class="campo tabular-nums" type="number" min="0" max="100" step="1" inputmode="decimal" data-pct="${esc(p.chave)}" placeholder="0"></div>
+      <input id="is-pct-${i}" class="campo tabular-nums" ${NUMERO} data-max="100" data-pct="${esc(p.chave)}" placeholder="0"></div>
   </div>`;
 }

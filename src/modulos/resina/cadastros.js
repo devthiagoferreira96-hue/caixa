@@ -3,7 +3,7 @@ import { store } from '../../lib/store.js';
 import { salvarItem, excluirItem } from '../../lib/api.js';
 import { dataCompleta, brl } from '../../lib/format.js';
 import { desfazendo } from '../../components/lancamento.js';
-import { secao, linha, lerLinha } from '../../components/lista-editavel.js';
+import { secao, linha, lerLinha, guardarRascunhos, devolverRascunhos } from '../../components/lista-editavel.js';
 import { chave } from '../../lib/importar-planilha.js';
 import { toast, confirmar, mascaraDinheiro, semRepetir } from '../../lib/ui.js';
 import { CORES_PRODUTOR, CAPACIDADE_MAXIMA, CAPACIDADE_PADRAO, UNIDADES } from './tabelas.js';
@@ -142,7 +142,9 @@ export default {
         const salvo = await salvarItem(tabela, item);
         const nome = nomeDoItem(tabela, item);
         toast(item.id ? `${nome} atualizado` : `${nome} adicionado`, { acao: desfazendo(salvo.desfazer, ctx.atualizar) });
-        ctx.atualizar();
+        const rascunhos = guardarRascunhos(el, form); // o que está digitado nas outras linhas não se perde
+        await ctx.atualizar();
+        devolverRascunhos(el, rascunhos);
       } catch (err) {
         toast(err.message, { tipo: 'erro' });
       } finally {
@@ -160,7 +162,9 @@ export default {
       try {
         const desfazer = await excluirItem(tabela, item.id);
         toast(`${nome} excluído`, { acao: desfazendo(desfazer, ctx.atualizar) });
-        ctx.atualizar();
+        const rascunhos = guardarRascunhos(el);
+        await ctx.atualizar();
+        devolverRascunhos(el, rascunhos);
       } catch (err) { toast(err.message, { tipo: 'erro' }); }
     };
   },

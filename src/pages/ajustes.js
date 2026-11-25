@@ -13,7 +13,7 @@ import { abrirTour } from '../components/tour.js';
 import { mostrarCodigoRecuperacao } from '../components/recuperacao.js';
 import { resinaAtiva } from '../modulos/resina/dados.js';
 import { salvarPreferencias } from '../lib/preferencias.js';
-import { secao as secaoBase, linha, lerLinha as lerLinhaGenerica } from '../components/lista-editavel.js';
+import { secao as secaoBase, linha, lerLinha as lerLinhaGenerica, guardarRascunhos, devolverRascunhos } from '../components/lista-editavel.js';
 
 // Definição de cada lista editável: quais campos aparecem e como são lidos
 const LISTAS = {
@@ -172,7 +172,9 @@ export default {
         if (igual) throw new Error(`Já existe ${NOME_ITEM[tabela]} "${igual.nome}". Use outro nome.`);
         const salvo = await salvarItem(tabela, item);
         toast(item.id ? `${item.nome} atualizado` : `${item.nome} adicionado`, { acao: desfazendo(salvo.desfazer, ctx.atualizar) });
-        ctx.atualizar();
+        const rascunhos = guardarRascunhos(el, form); // o que está digitado nas outras linhas não se perde
+        await ctx.atualizar();
+        devolverRascunhos(el, rascunhos);
       } catch (err) {
         toast(err.message, { tipo: 'erro' });
       } finally {
@@ -190,7 +192,9 @@ export default {
         try {
           const desfazer = await excluirItem(tabela, item.id);
           toast(`${item.nome} excluído`, { acao: desfazendo(desfazer, ctx.atualizar) });
-          ctx.atualizar();
+          const rascunhos = guardarRascunhos(el);
+          await ctx.atualizar();
+          devolverRascunhos(el, rascunhos);
         } catch (err) { toast(err.message, { tipo: 'erro' }); }
       } else if (e.target.closest('[data-backup]')) {
         if (await abrirOpcoesBackup()) ctx.atualizar();

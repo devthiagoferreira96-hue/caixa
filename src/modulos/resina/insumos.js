@@ -1,7 +1,7 @@
 // Insumos: os produtos que cada produtor usou para coletar a resina (quantidade, valor unitário e total)
-import { brl, esc, dataCompleta, nomeMes, mesISO, hojeISO, lerValor, valorParaCampo, VALOR_MAXIMO, valorMaximoTexto } from '../../lib/format.js';
+import { brl, esc, dataCompleta, nomeMes, mesISO, hojeISO, lerValor, valorParaCampo, VALOR_MAXIMO, valorMaximoTexto, lerNumero, numeroParaCampo } from '../../lib/format.js';
 import { store } from '../../lib/store.js';
-import { icone, estadoVazio, toast, confirmar, dialogo, mascaraDinheiro, erroNoCampo, limparErros, semRepetir } from '../../lib/ui.js';
+import { icone, estadoVazio, toast, confirmar, dialogo, mascaraDinheiro, erroNoCampo, limparErros, semRepetir, NUMERO, lerCampoNumero, numeroComProblema } from '../../lib/ui.js';
 import { desfazendo } from '../../components/lancamento.js';
 import { insumosEntre, salvarInsumos, excluirInsumos } from './dados.js';
 import { totalDoInsumo, pctDoProdutor, parteDoProdutor, divisaoDaEntrega, divisaoPorConta } from './calculos.js';
@@ -129,7 +129,7 @@ export default {
 
 // ---------- lançar ou mudar uma entrega (uma nota; cada produto com o seu produtor e a sua %)
 let seq = 0;
-const lerPct = (v) => { const t = String(v ?? '').trim().replace(',', '.'); const n = Number(t); return t !== '' && Number.isFinite(n) && n >= 0 && n <= 100 ? n : null; };
+const lerPct = (v) => { const n = lerNumero(v); return n != null && Number.isFinite(n) && n >= 0 && n <= 100 ? n : null; };
 
 async function editarEntrega(entrega, ctx) {
   const ligacao = entrega ? await lerLigacao('resina_entrega_id', entrega.id) : { lancamentos: [], compras: [], receber: [] };
@@ -204,10 +204,10 @@ async function editarEntrega(entrega, ctx) {
         ${titulares.length ? `<div><label class="rotulo text-xs" for="li-c-${l.chave}">Conta (CNPJ ou CPF)</label><select id="li-c-${l.chave}" class="campo" data-c="titular_id">${opcoesConta(l)}</select></div>` : ''}
       </div>
       <div class="grid grid-cols-2 items-end gap-2 sm:grid-cols-[repeat(4,minmax(0,1fr))_auto]">
-        <div><label class="rotulo text-xs" for="li-q-${l.chave}">Quantidade${l.produto_id ? ` (${esc(unidade(l.produto_id))})` : ''}</label><input id="li-q-${l.chave}" type="number" min="0" step="any" inputmode="decimal" class="campo tabular-nums" data-c="quantidade" value="${l.quantidade}"></div>
+        <div><label class="rotulo text-xs" for="li-q-${l.chave}">Quantidade${l.produto_id ? ` (${esc(unidade(l.produto_id))})` : ''}</label><input id="li-q-${l.chave}" ${NUMERO} class="campo tabular-nums" data-c="quantidade" value="${numeroParaCampo(l.quantidade)}"></div>
         <div><label class="rotulo text-xs" for="li-u-${l.chave}">Valor unitário</label><input id="li-u-${l.chave}" class="campo tabular-nums" inputmode="numeric" data-dinheiro data-c="valor_unitario" value="${l.valor_unitario ? valorParaCampo(l.valor_unitario) : ''}" placeholder="0,00"></div>
         <div><label class="rotulo text-xs" for="li-t-${l.chave}">Valor total</label><input id="li-t-${l.chave}" class="campo tabular-nums" inputmode="numeric" data-dinheiro data-c="valor_total" value="${l.valor_total ? valorParaCampo(l.valor_total) : ''}" placeholder="0,00"></div>
-        <div><label class="rotulo text-xs" for="li-pct-${l.chave}">Parte do produtor (%)</label><input id="li-pct-${l.chave}" type="number" min="0" max="100" step="any" inputmode="decimal" class="campo tabular-nums" data-c="pct" value="${esc(l.pct)}" aria-describedby="li-parte-${l.chave}"></div>
+        <div><label class="rotulo text-xs" for="li-pct-${l.chave}">Parte do produtor (%)</label><input id="li-pct-${l.chave}" ${NUMERO} data-max="100" class="campo tabular-nums" data-c="pct" value="${esc(Number.isFinite(lerNumero(l.pct)) ? numeroParaCampo(lerNumero(l.pct)) : l.pct ?? '')}" aria-describedby="li-parte-${l.chave}"></div>
         <div class="col-span-2 flex justify-end sm:col-span-1"><button type="button" class="btn-icone hover:text-red-700" data-tirar aria-label="Tirar o produto ${n + 1}" title="Tirar" ${linhas.length === 1 ? 'disabled' : ''}>${icone('x')}</button></div>
       </div>
       <p id="li-parte-${l.chave}" class="dica tabular-nums" data-parte></p>
@@ -249,7 +249,9 @@ async function editarEntrega(entrega, ctx) {
     if (c === 'pct') {
       l.pct = e.target.value;
     } else if (c === 'quantidade') {
-      l.quantidade = e.target.value === '' ? '' : Math.max(0, Number(e.target.value) || 0);
+      const q = lerCampoNumero(e.target); // "2,5", "2.5" ou "1.000"
+      if (Number.isNaN(q)) return;
+      l.quantidade = q ?? '';
       l.valor_total = arred((+l.quantidade || 0) * l.valor_unitario);
       campoDe(l, 'valor_total').value = l.valor_total ? valorParaCampo(l.valor_total) : '';
     } else if (c === 'valor_unitario') {
@@ -314,6 +316,7 @@ async function editarEntrega(entrega, ctx) {
   f.onsubmit = semRepetir(async (e) => {
     e.preventDefault();
     limparErros(f);
+    if (numeroComProblema(f)) return;
     if (!/^\d{4}-\d{2}-\d{2}$/.test(f.data.value)) { erroNoCampo(f, 'data', 'Escolha a data.'); return f.data.focus(); }
     const problema = (l, c, msg) => { const x = campoDe(l, c); x.setAttribute('aria-invalid', 'true'); x.focus(); toast(msg, { tipo: 'erro' }); };
     const usados = new Set();

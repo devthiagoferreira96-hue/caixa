@@ -1,7 +1,7 @@
 // Listas editáveis (usadas em Ajustes e nos Cadastros da resina): cada item é uma linha
 // com os campos e os botões Salvar e Excluir; a última linha serve para adicionar.
-import { esc, valorParaCampo, lerValor, VALOR_MAXIMO, valorMaximoTexto, dataCompleta } from '../lib/format.js';
-import { icone } from '../lib/ui.js';
+import { esc, valorParaCampo, lerValor, VALOR_MAXIMO, valorMaximoTexto, dataCompleta, lerNumero, numeroParaCampo } from '../lib/format.js';
+import { icone, NUMERO } from '../lib/ui.js';
 
 /** Seção que abre e fecha (o estado aberto é guardado por quem chama) */
 export const secao = (id, titulo, ic, conteudo, aberta = false) => `
@@ -38,7 +38,7 @@ export function linha(tabela, def, item) {
       else if (c.tipo === 'preco') campo = `<input id="${id}" name="${c.nome}" class="campo tabular-nums" inputmode="numeric" data-dinheiro value="${valor ? valorParaCampo(valor) : ''}" placeholder="0,00">`;
       else if (c.tipo === 'dia') campo = `<input id="${id}" name="${c.nome}" type="number" min="1" max="31" class="campo" value="${valor}">`;
       else if (c.tipo === 'inteiro') campo = `<input id="${id}" name="${c.nome}" type="number" inputmode="numeric" min="${c.min ?? 0}" max="${c.max ?? ''}" step="1" class="campo tabular-nums" value="${valor ?? ''}">`;
-      else if (c.tipo === 'porcentagem') campo = `<div class="relative"><input id="${id}" name="${c.nome}" type="number" inputmode="decimal" min="0" max="100" step="0.5" class="campo pr-8 tabular-nums" value="${valor ?? 0}"><span class="pointer-events-none absolute inset-y-0 right-3 flex items-center text-stone-600 dark:text-stone-400" aria-hidden="true">%</span></div>`;
+      else if (c.tipo === 'porcentagem') campo = `<div class="relative"><input id="${id}" name="${c.nome}" ${NUMERO} data-max="100" class="campo pr-8 tabular-nums" value="${numeroParaCampo(valor ?? 0)}"><span class="pointer-events-none absolute inset-y-0 right-3 flex items-center text-stone-600 dark:text-stone-400" aria-hidden="true">%</span></div>`;
       else if (c.tipo === 'data') campo = `<input id="${id}" name="${c.nome}" type="date" class="campo" value="${esc(valor || '')}">`;
       else if (c.tipo === 'cor') campo = `<input id="${id}" name="${c.nome}" type="color" class="block h-11 w-full min-w-14 cursor-pointer rounded-xl border border-stone-300 bg-white p-1 dark:border-stone-700 dark:bg-stone-950" value="${esc(valor || '#2E9E6B')}">`;
       else if (c.tipo === 'opcoes') campo = `<select id="${id}" name="${c.nome}" class="campo">${c.opcoes.map((o) => {
@@ -78,8 +78,8 @@ export function lerLinha(form, def) {
       if (!Number.isInteger(n) || n < min || n > max) throw new Error(`${c.rotulo} precisa ser um número inteiro de ${min} a ${max}.`);
       item[c.nome] = n;
     } else if (c.tipo === 'porcentagem') {
-      const n = Number(String(campo.value).replace(',', '.'));
-      if (campo.value === '' || !Number.isFinite(n) || n < 0 || n > 100) throw new Error(`${c.rotulo} precisa ser de 0 a 100.`);
+      const n = lerNumero(campo.value); // 45,5 ou 45.5
+      if (n == null || !Number.isFinite(n) || n < 0 || n > 100) throw new Error(`${c.rotulo} precisa ser de 0 a 100.`);
       item[c.nome] = n;
     } else if (c.tipo === 'data') {
       if (!/^\d{4}-\d{2}-\d{2}$/.test(campo.value)) throw new Error(`Preencha ${c.rotulo.toLowerCase()}.`);
@@ -90,4 +90,36 @@ export function lerLinha(form, def) {
   }
   if ('grupo' in item && !item.grupo) item.grupo = 'Outros';
   return item;
+}
+
+// ---------- Rascunhos: ao salvar uma linha a tela é redesenhada; o que estava digitado (e não salvo)
+// nas outras linhas volta depois, em vez de sumir sem aviso.
+if (typeof document !== 'undefined') {
+  const marcar = (e) => e.target.closest?.('form[data-tabela]')?.setAttribute('data-mexido', '');
+  document.addEventListener('input', marcar);
+  document.addEventListener('change', marcar);
+}
+const chaveForm = (f) => `${f.dataset.tabela}|${f.dataset.id}`;
+
+/** O que foi mexido e não salvo nas linhas (menos a que está sendo salva) */
+export function guardarRascunhos(raiz, exceto) {
+  return [...raiz.querySelectorAll('form[data-tabela][data-mexido]')].filter((f) => f !== exceto).map((f) => ({
+    chave: chaveForm(f),
+    valores: [...f.elements].filter((c) => c.name).map((c) => [c.name, c.type === 'checkbox' ? c.checked : c.value]),
+  }));
+}
+
+/** Devolve os rascunhos às linhas depois de redesenhar */
+export function devolverRascunhos(raiz, rascunhos) {
+  for (const r of rascunhos) {
+    const f = [...raiz.querySelectorAll('form[data-tabela]')].find((x) => chaveForm(x) === r.chave);
+    if (!f) continue;
+    for (const [nome, v] of r.valores) {
+      const c = f.elements[nome];
+      if (!c || !('value' in c) || c.type === 'radio') continue;
+      if (c.type === 'checkbox') c.checked = v; else c.value = v;
+    }
+    f.setAttribute('data-mexido', '');
+    f.closest('details')?.setAttribute('open', '');
+  }
 }

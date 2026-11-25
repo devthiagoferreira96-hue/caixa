@@ -94,6 +94,7 @@ export function conferirResina(entrada, saida, comId, { numero, dataValida, text
       preco_kg: Math.max(0, numero(l.preco_kg) ?? 0),
       peso_fazenda: peso(l.peso_fazenda),
       peso_chegada: peso(l.peso_chegada),
+      kg_nota: peso(l.kg_nota),
       peso_base: l.peso_base === 'fazenda' ? 'fazenda' : 'chegada',
       obs: texto(l.obs, 300),
       nota: texto(l.nota, 80),

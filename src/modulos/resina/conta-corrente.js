@@ -190,7 +190,7 @@ function linhaTabela(l) {
     <td class="min-w-40 px-1.5 py-2">${descricaoHTML(l)}${ins && l.pct_produtor < 100 ? `<span class="mt-0.5 block text-xs text-stone-600 dark:text-stone-400">${numero(l.pct_produtor, 2)}% de ${brl(l.total)} cobrado do produtor</span>` : ''}</td>
     <td class="min-w-28 px-1.5 py-2">${esc(l.nota || '')}</td>
     <td class="px-1.5 py-2">${esc(l.destino || '')}</td>
-    <td class="${td}">${c ? numero(l.tbs) : ''}</td>
+    <td class="${td}">${c ? numero(l.tbs, 1) : ''}</td>
     <td class="${td}">${c ? pct(l.pct) : ''}</td>
     <td class="${td}">${c ? numero(l.kg, 2) : ins ? numero(l.quantidade, 3) : ''}</td>
     <td class="${td}">${c && l.media != null ? media(l.media) : ''}</td>
@@ -208,7 +208,7 @@ function linhaCartao(l) {
       <div class="min-w-0">${descricaoHTML(l)}
         <p class="mt-0.5 text-stone-600 dark:text-stone-400">${[dataCompleta(l.data), l.nota ? `Nota ${l.nota}` : '', l.destino].filter(Boolean).map(esc).join(' · ')}</p>
         ${l.tipo === 'insumo' ? `<p class="mt-0.5 tabular-nums text-stone-600 dark:text-stone-400">Insumo · ${l.pct_produtor < 100 ? `${numero(l.pct_produtor, 2)}% de ${brl(l.total)} cobrado do produtor` : 'descontado do produtor'} · ${brl(l.valor_unitario)} cada</p>` : ''}
-        ${c ? `<p class="mt-0.5 tabular-nums text-stone-600 dark:text-stone-400">${numero(l.tbs)} Tbs · ${pct(l.pct)} · ${numero(l.kg, 2)} kg${l.media != null ? ` · média ${media(l.media)}` : ''} · ${brl(l.preco)}/kg</p>` : ''}
+        ${c ? `<p class="mt-0.5 tabular-nums text-stone-600 dark:text-stone-400">${numero(l.tbs, 1)} Tbs · ${pct(l.pct)} · ${numero(l.kg, 2)} kg${l.media != null ? ` · média ${media(l.media)}` : ''} · ${brl(l.preco)}/kg</p>` : ''}
       </div>
       <p class="shrink-0 text-right tabular-nums">
         ${l.credito ? `<span class="block font-semibold text-brand-800 dark:text-brand-300">+${brl(l.credito)}</span>` : ''}

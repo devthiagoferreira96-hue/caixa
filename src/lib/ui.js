@@ -1,5 +1,5 @@
 // Peças de interface reutilizáveis: ícones, avisos (toast), janelas (dialog) e campo de valor
-import { esc, brl, valorParaCampo, DIGITOS_VALOR, VALOR_MAXIMO, valorMaximoTexto } from './format.js';
+import { esc, brl, valorParaCampo, DIGITOS_VALOR, VALOR_MAXIMO, valorMaximoTexto, lerNumero, numeroParaCampo } from './format.js';
 import { ehFormula, tentarFormula, OPERADORES } from './formula.js';
 
 const ICONES = {
@@ -236,6 +236,68 @@ export function mascaraDinheiro(input) {
   input.addEventListener('blur', () => {
     if (ehFormula(input.value)) resolverFormula();
     else mostrarAviso(false);
+  });
+}
+
+// ---------- Campo de número (peso, kg, Tbs, %)
+// O campo "number" do navegador lê "5.230,5" como 5,2305 e "5.230" como 5,23 sem avisar.
+// Estes campos são texto: o sistema lê do jeito brasileiro (lerNumero), avisa quando não entende
+// e, ao sair do campo, mostra o número como foi entendido.
+// Uso: <input ${NUMERO} data-max="100" data-passo="0.5">  (data-max e data-passo são opcionais)
+export const NUMERO = 'type="text" inputmode="decimal" autocomplete="off" data-numero';
+
+function avisoNumero(input, texto) {
+  const id = `${input.id || 'num'}-aviso`;
+  const ancora = input.closest('.relative') || input;
+  ancora.parentElement?.querySelector(`[data-aviso-numero="${id}"]`)?.remove();
+  if (!texto) {
+    if (input.dataset.numeroInvalido !== undefined) input.removeAttribute('aria-invalid');
+    delete input.dataset.numeroInvalido;
+    return;
+  }
+  input.dataset.numeroInvalido = '';
+  input.setAttribute('aria-invalid', 'true');
+  const p = document.createElement('p');
+  p.className = 'erro-campo';
+  p.dataset.avisoNumero = id;
+  p.id = id;
+  p.setAttribute('aria-live', 'polite');
+  p.textContent = texto;
+  if (!(input.getAttribute('aria-describedby') || '').split(' ').includes(id)) {
+    input.setAttribute('aria-describedby', [input.getAttribute('aria-describedby'), id].filter(Boolean).join(' '));
+  }
+  ancora.after(p);
+}
+
+/** Lê o campo de número: null se vazio, NaN se não deu para entender (e mostra o aviso embaixo do campo). */
+export function lerCampoNumero(input) {
+  let n = lerNumero(input.value);
+  const max = input.dataset.max != null ? Number(input.dataset.max) : Infinity;
+  const msg = Number.isNaN(n) ? 'Não deu para entender este número. Use só números e vírgula nas casas decimais (ex.: 5230,5).'
+    : n != null && n > max ? `O máximo é ${max.toLocaleString('pt-BR')}.` : '';
+  avisoNumero(input, msg);
+  if (msg) return NaN;
+  const passo = Number(input.dataset.passo);
+  if (n != null && passo > 0) n = Math.round(n / passo) * passo;
+  return n;
+}
+
+/** Se algum campo de número estiver com problema, leva até ele, avisa e retorna true (não salvar). */
+export function numeroComProblema(raiz) {
+  raiz.querySelectorAll('[data-numero]').forEach(lerCampoNumero); // mostra de novo os avisos (limparErros tira)
+  const c = raiz.querySelector('[data-numero-invalido]');
+  if (!c) return false;
+  c.focus();
+  toast('Tem um número que não deu para entender. Corrija o campo marcado.', { tipo: 'erro' });
+  return true;
+}
+
+if (typeof document !== 'undefined') {
+  document.addEventListener('input', (e) => { if (e.target.matches?.('[data-numero]')) lerCampoNumero(e.target); });
+  document.addEventListener('focusout', (e) => {
+    if (!e.target.matches?.('[data-numero]')) return;
+    const n = lerCampoNumero(e.target);
+    if (Number.isFinite(n)) e.target.value = numeroParaCampo(n);
   });
 }
 

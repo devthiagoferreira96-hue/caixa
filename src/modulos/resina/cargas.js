@@ -19,7 +19,8 @@ export default {
   ajuda: `
     <p>As cargas do mês escolhido no topo, da mais nova para a mais antiga. Toque numa carga para ver, mudar ou excluir.</p>
     <p>A faixa colorida mostra a parte de cada produtor na carga (pela cor dele).</p>
-    <p>O selo de <strong>diferença</strong> aparece quando a carga foi pesada na fazenda e na chegada.</p>`,
+    <p>O selo de <strong>diferença</strong> aparece quando a carga foi pesada na fazenda e na chegada.</p>
+    <p>O selo <strong>Não bate com a nota</strong> aparece quando a carga tem o peso da nota fiscal e os kg da carga são diferentes dele.</p>`,
 
   async render(el, ctx) {
     if (seDesligado(el)) return;
@@ -35,7 +36,7 @@ export default {
       </div>
       ${cargas.length ? `
       <div class="grid grid-cols-2 gap-2 sm:grid-cols-4">
-        ${quadro('Tbs', numero(total.tbs))}${quadro('Resina', kg(total.kg))}${quadro('Valor', brl(total.valor))}${quadro('Arrendamento', brl(total.arrendamento))}
+        ${quadro('Tbs', numero(total.tbs, 1))}${quadro('Resina', kg(total.kg))}${quadro('Valor', brl(total.valor))}${quadro('Arrendamento', brl(total.arrendamento))}
       </div>
       <ul class="grid gap-3">${lista.map((c) => {
         const itens = itensPorCarga.get(c.id) || [];
@@ -48,7 +49,7 @@ export default {
               <p class="font-semibold">${codigoCarga(c)} <span class="font-normal text-stone-600 dark:text-stone-400">· ${dataCompleta(c.data)}</span></p>
               <p class="truncate text-sm text-stone-600 dark:text-stone-400" title="${esc([...new Set(itens.map((i) => nomeProdutor(i.produtor_id)))].join(', '))}">${[m?.nome, cam ? cam.nome : null, nomesDosProdutores(itens)].filter(Boolean).map(esc).join(' · ')}</p>
             </div>
-            <p class="sm:text-right"><span class="block font-bold tabular-nums">${brl(r.totais.valor)}</span><span class="text-sm tabular-nums text-stone-600 dark:text-stone-400">${numero(r.totais.tbs)} Tbs · ${kg(r.totais.kg)}</span></p>
+            <p class="sm:text-right"><span class="block font-bold tabular-nums">${brl(r.totais.valor)}</span><span class="text-sm tabular-nums text-stone-600 dark:text-stone-400">${numero(r.totais.tbs, 1)} Tbs · ${kg(r.totais.kg)}</span></p>
           </div>
           <div class="mt-3">${faixaProdutores(itens)}</div>
           <div class="mt-2 flex flex-wrap gap-2">
@@ -57,6 +58,7 @@ export default {
             ${c.destino ? `<span class="selo selo-neutro">Destino: ${esc(c.destino)}</span>` : ''}
             ${c.titular_id ? `<span class="selo selo-neutro">${esc(titular(c.titular_id)?.nome ?? 'Conta excluída')}</span>` : ''}
             ${dif ? `<span class="selo ${dif.kg < 0 ? 'selo-aberto' : 'selo-ok'}">Diferença ${dif.kg < 0 ? '−' : '+'}${kg(Math.abs(dif.kg))}</span>` : ''}
+            ${r.nota && !r.nota.bate ? `<span class="selo selo-aberto" title="A carga tem ${kg(r.totais.kg)} e a nota fiscal ${kg(r.nota.nota)}">Não bate com a nota: ${r.nota.kg < 0 ? '−' : '+'}${kg(Math.abs(r.nota.kg))}</span>` : ''}
             ${r.avisos.length ? '<span class="selo selo-atraso">Conferir pesos</span>' : ''}
           </div>
         </a></li>`;

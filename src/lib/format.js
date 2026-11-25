@@ -79,6 +79,28 @@ export const lerValor = (s) => {
 export const valorParaCampo = (v) =>
   v ? Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '';
 
+/**
+ * Número digitado (peso, kg, Tbs, %), do jeito brasileiro ou não:
+ * "5230,5", "5.230,5" e "5230.5" → 5230.5; "5.230" e "12.500" → milhar (5230, 12500); "5,230.5" → 5230.5.
+ * Vazio → null. O que não dá para entender → NaN (para avisar, nunca virar outro número).
+ */
+export function lerNumero(s) {
+  let t = String(s ?? '').replace(/\s/g, '');
+  if (!t) return null;
+  t = t.replace(/[.,]$/, ''); // "5," ou "5." enquanto digita
+  if (/^[.,]\d/.test(t)) t = `0${t}`; // ",5"
+  let n;
+  if (/^\d{1,3}(\.\d{3})+(,\d+)?$/.test(t)) n = t.replace(/\./g, '').replace(',', '.'); // 5.230 · 5.230,5
+  else if (/^\d+(,\d+)?$/.test(t)) n = t.replace(',', '.'); // 5230,5
+  else if (/^\d+(\.\d+)?$/.test(t)) n = t; // 5230.5
+  else if (/^\d{1,3}(,\d{3})+(\.\d+)?$/.test(t)) n = t.replace(/,/g, ''); // 5,230.5
+  else return NaN;
+  return Number(n);
+}
+/** Número para o campo, no jeito brasileiro e sem ponto de milhar: 5230,5 */
+export const numeroParaCampo = (v, casas = 3) =>
+  v == null || v === '' || !Number.isFinite(+v) ? '' : (+v).toLocaleString('pt-BR', { useGrouping: false, maximumFractionDigits: casas });
+
 // ---------- Limite dos campos de valor em R$
 export const DIGITOS_VALOR = 10; // até 10 dígitos: R$ 99.999.999,99
 export const VALOR_MAXIMO = 99_999_999.99;
